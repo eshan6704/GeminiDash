@@ -7,9 +7,11 @@ import {
   Activity,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { useSheetsSync } from '../hooks/useSheetsSync';
 
 export const Navbar: React.FC = () => {
-  const { isLight, toggleTheme } = useTheme();
+  const { isLight, theme, setTheme } = useTheme();
+  const { performSync } = useSheetsSync();
 
   return (
     <header
@@ -78,28 +80,42 @@ export const Navbar: React.FC = () => {
             <ExternalLink className="w-3 h-3 opacity-60" />
           </a>
 
-          {/* White / Dark Theme Toggle Button */}
-          <button
-            onClick={toggleTheme}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
-              isLight
-                ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
-                : 'bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200'
-            }`}
-            title={isLight ? 'Switch to Dark Theme' : 'Switch to White Theme'}
-          >
-            {isLight ? (
-              <>
-                <Sun className="w-3.5 h-3.5 text-amber-600" />
-                <span className="font-mono text-[11px]">White Theme</span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-3.5 h-3.5 text-indigo-400" />
-                <span className="font-mono text-[11px]">Dark Theme</span>
-              </>
-            )}
-          </button>
+          {/* Multi-Theme Selector Dropdown */}
+          <div className="relative flex items-center gap-2">
+            <button
+              onClick={performSync}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
+                isLight
+                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
+                  : 'bg-emerald-950/20 hover:bg-emerald-900/40 text-emerald-400 border-emerald-500/20'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              <span>Manual Sync to Sheets</span>
+            </button>
+            <select
+              value={theme}
+              onChange={(e) => setTheme(e.target.value as any)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all border outline-none cursor-pointer appearance-none pr-8 ${
+                isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
+                  : 'bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-neutral-200'
+              }`}
+              title="Select Color Theme"
+            >
+              <option value="dark">🌌 Classic Dark</option>
+              <option value="light">☀️ Classic Light</option>
+              <option value="cyberpunk">👾 Cyberpunk Neon</option>
+              <option value="emerald">🌲 Emerald Forest</option>
+              <option value="ocean">🌊 Ocean Deep</option>
+              <option value="dracula">🧛 Dracula Gothic</option>
+            </select>
+            <div className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400">
+              <svg className="fill-current h-3 w-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20">
+                <path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/>
+              </svg>
+            </div>
+          </div>
         </div>
       </div>
     </header>

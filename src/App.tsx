@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTradeSimulator } from './hooks/useTradeSimulator';
 import { useTheme } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
@@ -27,13 +27,21 @@ import { ForexMarketView } from './components/Markets/ForexMarketView';
 import { CommoditiesMarketView } from './components/Markets/CommoditiesMarketView';
 import { NiftyIndicesView } from './components/Markets/NiftyIndicesView';
 import { StockConstituentsView } from './components/Markets/StockConstituentsView';
-import { ShieldCheck, Flame, Info, ExternalLink, BarChart3, Zap, Coins, Activity, Waves, Globe, DollarSign, Building2, Building, Box } from 'lucide-react';
+import { IndianStockPortfolioView } from './components/Markets/IndianStockPortfolioView';
+import { IndianStockWatchlistView } from './components/Markets/IndianStockWatchlistView';
+import { useSheetsSync } from './hooks/useSheetsSync';
+import { ShieldCheck, Flame, Info, ExternalLink, BarChart3, Zap, Coins, Activity, Waves, Globe, DollarSign, Building2, Building, Box, Briefcase, Star } from 'lucide-react';
 
 export default function App() {
   const { isLight } = useTheme();
-  const [mainMarketTab, setMainMarketTab] = useState<'CRYPTO' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES' | 'NIFTY_INDICES' | 'STOCK_CONSTITUENTS'>('CRYPTO');
+  const { enableAutoSync } = useSheetsSync();
+  const [mainMarketTab, setMainMarketTab] = useState<'CRYPTO' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES' | 'NIFTY_INDICES' | 'STOCK_CONSTITUENTS' | 'INDIAN_PORTFOLIO' | 'INDIAN_WATCHLIST'>('CRYPTO');
   const [show30DayBacktest, setShow30DayBacktest] = useState<boolean>(false);
   const [analysisTab, setAnalysisTab] = useState<'OPTIONS' | 'MARKETCAP' | 'ANALYTICS' | 'WHALES' | 'BACKTEST'>('OPTIONS');
+
+  useEffect(() => {
+    enableAutoSync();
+  }, [enableAutoSync]);
 
   const {
     assets,
@@ -175,6 +183,36 @@ export default function App() {
 
             <button
               type="button"
+              onClick={() => setMainMarketTab('INDIAN_PORTFOLIO')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                mainMarketTab === 'INDIAN_PORTFOLIO'
+                  ? 'bg-orange-500 text-neutral-950 font-black shadow-md ring-2 ring-orange-400/50'
+                  : isLight
+                  ? 'text-slate-700 hover:bg-slate-100'
+                  : 'text-neutral-300 hover:bg-neutral-800'
+              }`}
+            >
+              <Briefcase className="w-4 h-4 text-orange-500" />
+              <span>💼 Indian Stock Portfolio</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainMarketTab('INDIAN_WATCHLIST')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                mainMarketTab === 'INDIAN_WATCHLIST'
+                  ? 'bg-orange-500 text-neutral-950 font-black shadow-md ring-2 ring-orange-400/50'
+                  : isLight
+                  ? 'text-slate-700 hover:bg-slate-100'
+                  : 'text-neutral-300 hover:bg-neutral-800'
+              }`}
+            >
+              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <span>🏷️ Indian Stock Watchlist</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setMainMarketTab('STOCK_CONSTITUENTS')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'STOCK_CONSTITUENTS'
@@ -196,6 +234,8 @@ export default function App() {
         {mainMarketTab === 'COMMODITIES' && <CommoditiesMarketView />}
         {mainMarketTab === 'NIFTY_INDICES' && <NiftyIndicesView />}
         {mainMarketTab === 'STOCK_CONSTITUENTS' && <StockConstituentsView />}
+        {mainMarketTab === 'INDIAN_PORTFOLIO' && <IndianStockPortfolioView />}
+        {mainMarketTab === 'INDIAN_WATCHLIST' && <IndianStockWatchlistView />}
 
         {mainMarketTab === 'CRYPTO' && (
           <>

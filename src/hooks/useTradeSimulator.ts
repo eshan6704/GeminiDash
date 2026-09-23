@@ -30,7 +30,18 @@ const STORAGE_KEYS = {
   LIMIT_ORDERS: 'aurumx_limits_v2',
   HISTORY: 'aurumx_history_v2',
   SPOT: 'aurumx_spot_v2',
+  ALERTS: 'aurumx_alerts_v2',
 };
+
+export interface PriceAlert {
+  id: string;
+  assetSymbol: string;
+  targetPrice: number;
+  condition: 'ABOVE' | 'BELOW';
+  createdAt: number;
+  isActive: boolean;
+  isTriggered: boolean;
+}
 
 export interface AlertNotification {
   id: string;
@@ -102,11 +113,22 @@ export function useTradeSimulator() {
     }
   });
 
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.ALERTS);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
+
   // Keep references to avoid stale closures in market poll intervals
   const positionsRef = useRef(positions);
   positionsRef.current = positions;
   const limitOrdersRef = useRef(limitOrders);
   limitOrdersRef.current = limitOrders;
+  const priceAlertsRef = useRef(priceAlerts);
+  priceAlertsRef.current = priceAlerts;
   const cashRef = useRef(cashBalance);
   cashRef.current = cashBalance;
   const assetsRef = useRef(assets);
@@ -132,10 +154,11 @@ export function useTradeSimulator() {
       localStorage.setItem(STORAGE_KEYS.LIMIT_ORDERS, JSON.stringify(limitOrders));
       localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(tradeHistory));
       localStorage.setItem(STORAGE_KEYS.SPOT, JSON.stringify(spotHoldings));
+      localStorage.setItem(STORAGE_KEYS.ALERTS, JSON.stringify(priceAlerts));
     } catch (e) {
       console.warn('Storage save failed', e);
     }
-  }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings]);
+  }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts]);
 
   // Push notification helper
   const addNotification = useCallback((type: AlertNotification['type'], title: string, message: string) => {
@@ -432,6 +455,41 @@ export function useTradeSimulator() {
 
       if (remainingLimits.length !== currentLimits.length) {
         setLimitOrders(remainingLimits);
+      }
+    }
+
+    // 3. Check Price Alerts
+    const currentAlerts = priceAlertsRef.current;
+    if (currentAlerts.length > 0) {
+      const activeAlerts = currentAlerts.filter(a => a.isActive && !a.isTriggered);
+      if (activeAlerts.length > 0) {
+        let alertsUpdated = false;
+        const nextAlerts = currentAlerts.map(alert => {
+          if (!alert.isActive || alert.isTriggered) return alert;
+
+          const asset = currentAssets[alert.assetSymbol];
+          if (!asset) return alert;
+
+          const currentPrice = asset.price;
+          const isTriggered = alert.condition === 'ABOVE' 
+            ? currentPrice >= alert.targetPrice 
+            : currentPrice <= alert.targetPrice;
+
+          if (isTriggered) {
+            alertsUpdated = true;
+            addNotification(
+              'warning',
+              `🚨 Alert: ${alert.assetSymbol} target hit!`,
+              `Price is now ${alert.condition.toLowerCase()} $${alert.targetPrice.toLocaleString()} (Current: $${currentPrice.toLocaleString()})`
+            );
+            return { ...alert, isTriggered: true, isActive: false };
+          }
+          return alert;
+        });
+
+        if (alertsUpdated) {
+          setPriceAlerts(nextAlerts);
+        }
       }
     }
   };
@@ -800,6 +858,39 @@ export function useTradeSimulator() {
     [addNotification]
   );
 
+  const addPriceAlert = useCallback((symbol: string, targetPrice: number, condition: 'ABOVE' | 'BELOW') => {
+    const newAlert: PriceAlert = {
+      id: Math.random().toString(36).substring(2, 9),
+      assetSymbol: symbol,
+      targetPrice,
+      condition,
+      createdAt: Date.now(),
+      isActive: true,
+      isTriggered: false,
+    };
+    setPriceAlerts((prev) => [newAlert, ...prev]);
+    addNotification(
+      'success',
+      `Alert Set: ${symbol}`,
+      `You will be notified when price goes ${condition.toLowerCase()} $${targetPrice.toLocaleString()}`
+    );
+  }, [addNotification]);
+
+  const removePriceAlert = useCallback((id: string) => {
+    setPriceAlerts((prev) => prev.filter((a) => a.id !== id));
+  }, []);
+
+  const togglePriceAlert = useCallback((id: string) => {
+    setPriceAlerts((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, isActive: !a.isActive } : a))
+    );
+  }, []);
+
+  const clearPriceAlerts = useCallback(() => {
+    setPriceAlerts([]);
+    addNotification('info', 'Alerts Cleared', 'All price alerts have been cleared.');
+  }, [addNotification]);
+
   // Portfolio aggregates
   const totalSpotValue = spotHoldings.reduce((acc, h) => {
     const p = assets[h.symbol]?.price || h.avgCostPrice;
@@ -867,6 +958,7 @@ export function useTradeSimulator() {
     limitOrders,
     tradeHistory,
     spotHoldings,
+    priceAlerts,
     config,
     setConfig,
     // Actions
@@ -877,5 +969,9 @@ export function useTradeSimulator() {
     resetSimulation,
     adjustCashBalance,
     addNotification,
+    addPriceAlert,
+    removePriceAlert,
+    togglePriceAlert,
+    clearPriceAlerts,
   };
 }

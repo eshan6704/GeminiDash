@@ -179,6 +179,25 @@ async function fetchYahooQuote(rawSymbol: string) {
   return null;
 }
 
+// Proxy for Google Sheets API to avoid CORS and handle Auth
+app.post('/api/sheets/sync', async (req, res) => {
+  const token = req.headers.authorization;
+  if (!token) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  const { spreadsheetId, range, values } = req.body;
+  try {
+    const sheetRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}/values/${range}?valueInputOption=USER_ENTERED`, {
+      method: 'PUT',
+      headers: { Authorization: token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ values }),
+    });
+    return res.json(await sheetRes.json());
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Batch quote fetching endpoint
 app.post('/api/quotes/batch', async (req, res) => {
   const { symbols } = req.body as { symbols: string[] };
@@ -240,7 +259,7 @@ Provide a concise, crisp 3-bullet live market analysis explaining:
 3. ACTIONABLE INSTITUTIONAL STRATEGY (Target Price, Entry Zone, Stop-Loss, and Risk/Reward).
 Keep the tone professional, direct, and under 150 words total.`;
 
-      const modelsToTry = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.5-pro'];
+      const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
       let text = '';
       let usedModel = '';
 
