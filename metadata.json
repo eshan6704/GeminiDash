@@ -1,0 +1,6 @@
+{
+  "name": "AurumX - Crypto & Gold Trade Simulator",
+  "description": "Real-time paper trading simulator for Tether Gold (XAUT) and cryptocurrencies with live market feeds, leverage, and realistic fee execution.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
