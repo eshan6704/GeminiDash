@@ -250,6 +250,36 @@ export function useTradeSimulator() {
 
         const price = asset.price;
         const isLong = pos.side === 'LONG';
+        
+        // --- Smart Trailing Stop Logic ---
+        let peakPrice = pos.peakPrice || pos.entryPrice;
+        let stopLossPrice = pos.stopLossPrice;
+
+        if (isLong) {
+          if (price > peakPrice) {
+            peakPrice = price;
+            if (pos.trailingStopPercent) {
+              const newSL = price * (1 - pos.trailingStopPercent / 100);
+              // Trailing stop only moves UP for longs
+              if (stopLossPrice === undefined || newSL > stopLossPrice) {
+                stopLossPrice = newSL;
+              }
+            }
+          }
+        } else {
+          if (price < peakPrice) {
+            peakPrice = price;
+            if (pos.trailingStopPercent) {
+              const newSL = price * (1 + pos.trailingStopPercent / 100);
+              // Trailing stop only moves DOWN for shorts
+              if (stopLossPrice === undefined || newSL < stopLossPrice) {
+                stopLossPrice = newSL;
+              }
+            }
+          }
+        }
+        // ---------------------------------
+
         const priceDiff = isLong ? price - pos.entryPrice : pos.entryPrice - price;
         const unrealizedPnL = pos.amount * priceDiff;
         const unrealizedPnLPercent = (unrealizedPnL / pos.margin) * 100;
@@ -260,7 +290,7 @@ export function useTradeSimulator() {
           : price >= pos.liquidationPrice;
 
         if (isLiquidated) {
-          // Liquidation triggers full margin loss
+          // ... (existing liquidation logic)
           closedRecords.push({
             id: Math.random().toString(36).substring(2, 9),
             assetSymbol: pos.assetSymbol,
@@ -320,12 +350,12 @@ export function useTradeSimulator() {
           continue;
         }
 
-        // Check Stop Loss
-        const isSL = pos.stopLossPrice && (
-          isLong ? price <= pos.stopLossPrice : price >= pos.stopLossPrice
+        // Check Stop Loss (including Trailing SL)
+        const isSL = stopLossPrice && (
+          isLong ? price <= stopLossPrice : price >= stopLossPrice
         );
-        if (isSL && pos.stopLossPrice) {
-          const exitPrice = pos.stopLossPrice;
+        if (isSL && stopLossPrice) {
+          const exitPrice = stopLossPrice;
           const exitDiff = isLong ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice;
           const pnl = pos.amount * exitDiff;
           const pnlPct = (pnl / pos.margin) * 100;
@@ -355,9 +385,11 @@ export function useTradeSimulator() {
           continue;
         }
 
-        // Keep position active with live mark PnL
+        // Keep position active with live mark PnL and updated SL/Peak
         remainingPositions.push({
           ...pos,
+          peakPrice,
+          stopLossPrice,
           unrealizedPnL,
           unrealizedPnLPercent,
         });
@@ -435,6 +467,8 @@ export function useTradeSimulator() {
               liquidationPrice: liqPrice,
               takeProfitPrice: order.takeProfitPrice,
               stopLossPrice: order.stopLossPrice,
+              trailingStopPercent: order.trailingStopPercent,
+              peakPrice: order.targetPrice,
               openTime: Date.now(),
               unrealizedPnL: 0,
               unrealizedPnLPercent: 0,
@@ -506,6 +540,7 @@ export function useTradeSimulator() {
       targetPrice?: number;
       takeProfitPrice?: number;
       stopLossPrice?: number;
+      trailingStopPercent?: number;
     }) => {
       const {
         symbol,
@@ -517,6 +552,7 @@ export function useTradeSimulator() {
         targetPrice,
         takeProfitPrice,
         stopLossPrice,
+        trailingStopPercent,
       } = params;
 
       const currentAssets = assetsRef.current;
@@ -597,6 +633,7 @@ export function useTradeSimulator() {
           leverage: mode === 'SPOT' ? 1 : leverage,
           takeProfitPrice,
           stopLossPrice,
+          trailingStopPercent,
           createdAt: Date.now(),
         };
 
@@ -699,6 +736,8 @@ export function useTradeSimulator() {
         liquidationPrice: Math.max(0, liqPrice),
         takeProfitPrice,
         stopLossPrice,
+        trailingStopPercent,
+        peakPrice: execPrice,
         openTime: Date.now(),
         unrealizedPnL: 0,
         unrealizedPnLPercent: 0,
@@ -813,15 +852,15 @@ export function useTradeSimulator() {
 
   // Update SL/TP of an active position
   const updatePositionSLTP = useCallback(
-    (positionId: string, stopLoss?: number, takeProfit?: number) => {
+    (positionId: string, stopLoss?: number, takeProfit?: number, trailingStopPercent?: number) => {
       setPositions((prev) =>
         prev.map((p) =>
           p.id === positionId
-            ? { ...p, stopLossPrice: stopLoss, takeProfitPrice: takeProfit }
+            ? { ...p, stopLossPrice: stopLoss, takeProfitPrice: takeProfit, trailingStopPercent }
             : p
         )
       );
-      addNotification('success', 'Risk Levels Updated', 'Stop-Loss / Take-Profit parameters updated.');
+      addNotification('success', 'Risk Levels Updated', 'Risk parameters updated.');
     },
     [addNotification]
   );

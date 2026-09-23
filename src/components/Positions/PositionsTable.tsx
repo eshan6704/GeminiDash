@@ -30,7 +30,7 @@ interface PositionsTableProps {
   assets: Record<string, MarketAsset>;
   onClosePosition: (positionId: string, percentage: number) => void;
   onCancelLimitOrder: (orderId: string) => void;
-  onUpdateSLTP: (positionId: string, stopLoss?: number, takeProfit?: number) => void;
+  onUpdateSLTP: (positionId: string, stopLoss?: number, takeProfit?: number, trailingStopPercent?: number) => void;
   onSelectSymbol: (symbol: string) => void;
 }
 
@@ -50,11 +50,13 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
   const [modalTP, setModalTP] = useState<string>('');
   const [modalSL, setModalSL] = useState<string>('');
+  const [modalTrailing, setModalTrailing] = useState<string>('');
 
   const openEditModal = (pos: Position) => {
     setEditingPosition(pos);
     setModalTP(pos.takeProfitPrice ? pos.takeProfitPrice.toString() : '');
     setModalSL(pos.stopLossPrice ? pos.stopLossPrice.toString() : '');
+    setModalTrailing(pos.trailingStopPercent ? pos.trailingStopPercent.toString() : '');
   };
 
   const handleSaveSLTP = (e: React.FormEvent) => {
@@ -63,7 +65,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
 
     const tp = modalTP ? parseFloat(modalTP) : undefined;
     const sl = modalSL ? parseFloat(modalSL) : undefined;
-    onUpdateSLTP(editingPosition.id, sl, tp);
+    const trailing = modalTrailing ? parseFloat(modalTrailing) : undefined;
+    onUpdateSLTP(editingPosition.id, sl, tp, trailing);
     setEditingPosition(null);
   };
 
@@ -294,6 +297,12 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                           <div className={`text-[10px] ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
                             <div>TP: <span className="text-emerald-600 font-medium">{pos.takeProfitPrice ? `$${pos.takeProfitPrice.toFixed(1)}` : '--'}</span></div>
                             <div>SL: <span className="text-rose-600 font-medium">{pos.stopLossPrice ? `$${pos.stopLossPrice.toFixed(1)}` : '--'}</span></div>
+                            {pos.trailingStopPercent && (
+                              <div className="text-[9px] text-amber-500 font-bold flex items-center gap-0.5 mt-0.5">
+                                <Shield className="w-2.5 h-2.5" />
+                                Trailing: {pos.trailingStopPercent}%
+                              </div>
+                            )}
                           </div>
                           <button
                             onClick={() => openEditModal(pos)}
@@ -646,6 +655,24 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                     isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-neutral-950 border-neutral-800 text-neutral-100'
                   }`}
                 />
+              </div>
+
+              <div>
+                <label className="block text-amber-500 font-semibold mb-1 flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  Trailing Stop (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={modalTrailing}
+                  onChange={(e) => setModalTrailing(e.target.value)}
+                  placeholder="e.g. 2.5"
+                  className={`w-full border rounded-xl px-3 py-2 font-mono text-sm focus:outline-none focus:border-amber-500 ${
+                    isLight ? 'bg-slate-50 border-slate-300 text-slate-900' : 'bg-neutral-950 border-neutral-800 text-neutral-100'
+                  }`}
+                />
+                <p className="text-[10px] text-neutral-500 mt-1">Leave empty to disable trailing.</p>
               </div>
 
               <div className="flex gap-2 pt-2">

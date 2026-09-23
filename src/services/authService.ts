@@ -1,9 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
+export const auth = getAuth(app);
 
 let cachedAccessToken: string | null = null;
 let provider = new GoogleAuthProvider();
@@ -14,7 +17,6 @@ provider.addScope('https://www.googleapis.com/auth/spreadsheets');
 export const getAccessToken = async (): Promise<string | null> => {
   if (cachedAccessToken) return cachedAccessToken;
 
-  const auth = getAuth();
   if (!auth.currentUser) {
     try {
       const result = await signInWithPopup(auth, provider);

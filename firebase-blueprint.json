@@ -1,0 +1,36 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile with authentication details",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "email": { "type": "string", "description": "User email address" },
+        "displayName": { "type": "string", "description": "User display name" }
+      },
+      "required": ["uid", "email"]
+    },
+    "PortfolioSnapshot": {
+      "title": "PortfolioSnapshot",
+      "description": "A snapshot of user portfolio data",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Owner UID" },
+        "data": { "type": "object", "description": "Portfolio data" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Snapshot time" }
+      },
+      "required": ["userId", "data", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User profile data"
+    },
+    "/users/{userId}/snapshots/{snapshotId}": {
+      "schema": "PortfolioSnapshot",
+      "description": "Stored portfolio snapshots"
+    }
+  }
+}

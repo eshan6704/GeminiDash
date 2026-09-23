@@ -7,6 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { useTradeSimulator } from './hooks/useTradeSimulator';
 import { useTheme } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
+import { MarketNewsTicker } from './components/MarketNewsTicker';
+import { AccountPulseWidget } from './components/AccountPulseWidget';
 import { CryptoHeaderBar } from './components/CryptoHeaderBar';
 import { TickerBar } from './components/TickerBar';
 import { TradingChart } from './components/Chart/TradingChart';
@@ -96,9 +98,15 @@ export default function App() {
     >
       {/* Top Navigation */}
       <Navbar />
+      
+      {/* Real-time News Ticker */}
+      <MarketNewsTicker />
 
       {/* Main Trading Terminal Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 lg:p-5 space-y-4">
+        {/* Account Pulse Widget */}
+        <AccountPulseWidget totalPnL={totalRealizedPnL + totalUnrealizedPnL} winRate={winRate} />
+        
         {/* PRIMARY MULTI-ASSET MARKET CATEGORY SELECTION BAR */}
         <div
           className={`p-2 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-xl transition-colors ${

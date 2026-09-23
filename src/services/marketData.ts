@@ -58,19 +58,19 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     lastUpdated: Date.now(),
     description: 'High-throughput, ultra-low fee proof-of-stake layer 1 blockchain.',
   },
-  BNB: {
-    id: 'binancecoin',
-    symbol: 'BNB',
-    name: 'BNB',
+  ZEC: {
+    id: 'zcash',
+    symbol: 'ZEC',
+    name: 'Zcash',
     category: 'crypto',
-    price: 792.00,
-    change24h: 0.55,
-    high24h: 805.00,
-    low24h: 780.00,
-    volume24h: 1200000000,
-    marketCap: 105000000000,
+    price: 45.50,
+    change24h: -0.5,
+    high24h: 47.0,
+    low24h: 44.0,
+    volume24h: 50000000,
+    marketCap: 700000000,
     lastUpdated: Date.now(),
-    description: 'Utility and governance token powering the BNB Chain ecosystem.',
+    description: 'Privacy-focused cryptocurrency based on zk-SNARKs technology.',
   },
   XRP: {
     id: 'ripple',
@@ -107,9 +107,9 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   ETH: 'ETHUSDT',
   SOL: 'SOLUSDT',
   PAXG: 'PAXGUSDT',
-  BNB: 'BNBUSDT',
   XRP: 'XRPUSDT',
   DOGE: 'DOGEUSDT',
+  ZEC: 'ZECUSDT',
 };
 
 // Fetch live market data for all supported assets
@@ -158,7 +158,7 @@ export async function fetchLiveMarketData(): Promise<Record<string, MarketAsset>
     const needsGecko = Object.values(updatedAssets).some((a) => now - a.lastUpdated > 15000);
     if (needsGecko) {
       try {
-        const geckoIds = 'tether-gold,pax-gold,bitcoin,ethereum,solana,binancecoin,ripple,dogecoin';
+        const geckoIds = 'tether-gold,pax-gold,bitcoin,ethereum,solana,binancecoin,ripple,dogecoin,zcash';
         const geckoRes = await fetch(
           `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`
         );

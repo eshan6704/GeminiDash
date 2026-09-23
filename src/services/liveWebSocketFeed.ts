@@ -43,6 +43,7 @@ class LiveWebSocketFeedManager {
     BNBUSDT: 'BNB',
     XRPUSDT: 'XRP',
     DOGEUSDT: 'DOGE',
+    ZECUSDT: 'ZEC',
   };
 
   public subscribe(cb: PriceUpdateCallback): () => void {
@@ -131,6 +132,7 @@ class LiveWebSocketFeedManager {
         'bnbusdt@ticker',
         'xrpusdt@ticker',
         'dogeusdt@ticker',
+        'zecusdt@ticker',
         // Real-time mini tickers for instant sub-second price updates
         'paxgusdt@miniTicker',
         'btcusdt@miniTicker',
@@ -139,9 +141,11 @@ class LiveWebSocketFeedManager {
         'bnbusdt@miniTicker',
         'xrpusdt@miniTicker',
         'dogeusdt@miniTicker',
+        'zecusdt@miniTicker',
         // Real-time aggregate trade stream for Gold (PAXG) and BTC
         'paxgusdt@aggTrade',
         'btcusdt@aggTrade',
+        'zecusdt@aggTrade',
       ].join('/');
 
       const url = `wss://stream.binance.com:9443/stream?streams=${streams}`;

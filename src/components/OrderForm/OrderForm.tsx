@@ -44,7 +44,7 @@ interface OrderFormProps {
   positions?: Position[];
   onOpenWhatIf?: () => void;
   onClosePosition?: (positionId: string, percentage?: number) => void;
-  onUpdateSLTP?: (positionId: string, stopLoss?: number, takeProfit?: number) => void;
+  onUpdateSLTP?: (positionId: string, stopLoss?: number, takeProfit?: number, trailingStopPercent?: number) => void;
   onNotify?: (type: 'success' | 'info' | 'warning' | 'danger', title: string, message: string) => void;
   onPlaceOrder: (params: {
     symbol: string;
@@ -56,6 +56,7 @@ interface OrderFormProps {
     targetPrice?: number;
     takeProfitPrice?: number;
     stopLossPrice?: number;
+    trailingStopPercent?: number;
   }) => boolean;
 }
 
@@ -109,6 +110,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [tpPriceInput, setTpPriceInput] = useState<string>('');
   const [enableSL, setEnableSL] = useState<boolean>(false);
   const [slPriceInput, setSlPriceInput] = useState<string>('');
+  const [trailingStopInput, setTrailingStopInput] = useState<string>('');
 
   const currentPrice = asset.price;
 
@@ -281,6 +283,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       targetPrice: orderType === 'LIMIT' ? parseFloat(targetPriceInput) : undefined,
       takeProfitPrice: enableTP && tpPriceInput ? parseFloat(tpPriceInput) : undefined,
       stopLossPrice: enableSL && slPriceInput ? parseFloat(slPriceInput) : undefined,
+      trailingStopPercent: trailingStopInput ? parseFloat(trailingStopInput) : undefined,
     });
   };
 
@@ -882,6 +885,29 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                           isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-neutral-900 border-neutral-800 text-neutral-200'
                         }`}
                       />
+                    </div>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-neutral-800/30">
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-[10px] text-amber-500 font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Sparkles className="w-2.5 h-2.5" />
+                        Smart Trailing SL
+                      </label>
+                      <span className="text-[9px] text-neutral-500 font-medium">Automatic Adjustment</span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="2.0"
+                        value={trailingStopInput}
+                        onChange={(e) => setTrailingStopInput(e.target.value)}
+                        className={`w-full border rounded-lg pl-2 pr-6 py-1 font-mono text-xs focus:outline-none focus:border-amber-500 ${
+                          isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-neutral-900 border-neutral-800 text-neutral-200'
+                        }`}
+                      />
+                      <span className="absolute right-2 top-1.5 text-[10px] font-bold text-neutral-500">%</span>
                     </div>
                   </div>
                 </div>

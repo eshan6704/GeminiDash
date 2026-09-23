@@ -41,6 +41,8 @@ export interface Position {
   liquidationPrice: number;
   takeProfitPrice?: number;
   stopLossPrice?: number;
+  trailingStopPercent?: number; // e.g. 2 for 2%
+  peakPrice?: number; // Highest price reached for LONG, lowest for SHORT
   openTime: number;
   unrealizedPnL: number;
   unrealizedPnLPercent: number;
@@ -58,6 +60,7 @@ export interface LimitOrder {
   leverage: number;
   takeProfitPrice?: number;
   stopLossPrice?: number;
+  trailingStopPercent?: number;
   createdAt: number;
 }
 
