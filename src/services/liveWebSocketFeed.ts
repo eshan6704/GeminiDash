@@ -103,12 +103,18 @@ class LiveWebSocketFeedManager {
 
     if (this.binanceWs) {
       this.binanceWs.onclose = null;
-      this.binanceWs.close();
+      this.binanceWs.onerror = null;
+      if (this.binanceWs.readyState === WebSocket.CONNECTING || this.binanceWs.readyState === WebSocket.OPEN) {
+        this.binanceWs.close();
+      }
       this.binanceWs = null;
     }
     if (this.bitfinexWs) {
       this.bitfinexWs.onclose = null;
-      this.bitfinexWs.close();
+      this.bitfinexWs.onerror = null;
+      if (this.bitfinexWs.readyState === WebSocket.CONNECTING || this.bitfinexWs.readyState === WebSocket.OPEN) {
+        this.bitfinexWs.close();
+      }
       this.bitfinexWs = null;
     }
     this.status.binanceConnected = false;

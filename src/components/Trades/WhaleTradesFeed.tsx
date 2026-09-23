@@ -140,7 +140,11 @@ export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
 
     try {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        if (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.close();
+        }
       }
 
       const ws = new WebSocket(streamUrl);
@@ -197,7 +201,11 @@ export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
 
     return () => {
       if (wsRef.current) {
-        wsRef.current.close();
+        wsRef.current.onclose = null;
+        wsRef.current.onerror = null;
+        if (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.close();
+        }
       }
     };
   }, [selectedSymbol, whaleThreshold]);
