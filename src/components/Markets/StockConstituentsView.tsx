@@ -18,6 +18,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { NiftyStockAnalysisModal } from './NiftyStockAnalysisModal';
+import { AiFundamentalAnalystPanel } from './AiFundamentalAnalystPanel';
 import { fetchBatchLiveQuotes, fetchLiveQuote } from '../../services/liveMarketService';
 
 export interface StockConstituentItem {
@@ -50,6 +51,7 @@ export const StockConstituentsView: React.FC = () => {
   const [sortAsc, setSortAsc] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selectedStockForAnalysis, setSelectedStockForAnalysis] = useState<StockConstituentItem | null>(null);
+  const [activeAnalystStock, setActiveAnalystStock] = useState<StockConstituentItem | null>(null);
   const [isLoadingLive, setIsLoadingLive] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   const itemsPerPage = 25;
@@ -340,6 +342,14 @@ export const StockConstituentsView: React.FC = () => {
         </div>
       </div>
 
+      {/* AI FUNDAMENTAL ANALYST PANEL */}
+      <AiFundamentalAnalystPanel
+        stock={activeAnalystStock || stocks[0]}
+        stocksList={stocks}
+        onSelectStock={setActiveAnalystStock}
+        onOpenFullModal={setSelectedStockForAnalysis}
+      />
+
       {/* CONSTITUENTS TABLE */}
       <div className="overflow-x-auto max-h-[480px] overflow-y-auto pr-1">
         <table className="w-full text-left border-collapse text-xs font-mono">
@@ -370,9 +380,18 @@ export const StockConstituentsView: React.FC = () => {
           <tbody className="divide-y divide-neutral-800/40">
             {paginatedStocks.map((st) => {
               const isUp = st.change1d >= 0;
+              const isSelectedForAnalyst = activeAnalystStock?.symbol === st.symbol;
 
               return (
-                <tr key={st.id} className="transition-colors hover:bg-neutral-800/30">
+                <tr
+                  key={st.id}
+                  onClick={() => setActiveAnalystStock(st)}
+                  className={`transition-colors cursor-pointer ${
+                    isSelectedForAnalyst
+                      ? 'bg-amber-500/15 border-l-4 border-l-amber-500 font-bold'
+                      : 'hover:bg-neutral-800/30'
+                  }`}
+                >
                   <td className="py-2.5 px-3 text-neutral-400 font-bold">{st.rank}</td>
 
                   <td className="py-2.5 px-3">
@@ -412,7 +431,11 @@ export const StockConstituentsView: React.FC = () => {
 
                   <td className="py-2.5 px-3 text-center">
                     <button
-                      onClick={() => setSelectedStockForAnalysis(st)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveAnalystStock(st);
+                        setSelectedStockForAnalysis(st);
+                      }}
                       className="px-2.5 py-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/40 text-orange-300 border border-orange-500/40 font-bold text-[11px] flex items-center gap-1 mx-auto transition-all"
                     >
                       <Eye className="w-3.5 h-3.5" />

@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Sparkles,
 } from 'lucide-react';
+import { VolatilityHeatmapWidget } from './VolatilityHeatmapWidget';
 
 interface AnalyticsDashboardProps {
   currentBtcPrice?: number;
@@ -190,6 +191,9 @@ export const MarketAnalyticsDashboard: React.FC<AnalyticsDashboardProps> = ({
           </p>
         </div>
       </div>
+
+      {/* VOLATILITY HEATMAP WIDGET */}
+      <VolatilityHeatmapWidget />
     </div>
   );
 };
