@@ -13,6 +13,7 @@ import {
 import { INITIAL_ASSETS, fetchLiveMarketData } from '../services/marketData';
 import { liveWebSocketFeed } from '../services/liveWebSocketFeed';
 import { usePersistentSymbols } from '../services/symbolPersistenceService';
+import { updateRememberedPrice, getHydratedPrice } from '../services/priceMemoryStore';
 import {
   saveSimulatorStateToFirestore,
   loadSimulatorStateFromFirestore,
@@ -61,11 +62,31 @@ export interface AlertNotification {
 }
 
 export function useTradeSimulator() {
-  const [assets, setAssets] = useState<Record<string, MarketAsset>>(INITIAL_ASSETS);
+  const [assets, setAssets] = useState<Record<string, MarketAsset>>(() => {
+    const hydrated: Record<string, MarketAsset> = {};
+    Object.entries(INITIAL_ASSETS).forEach(([sym, asset]) => {
+      hydrated[sym] = getHydratedPrice(asset);
+    });
+    return hydrated;
+  });
   const [selectedSymbol, setSelectedSymbol] = useState<string>('PAXG');
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
   const [lastTickTime, setLastTickTime] = useState<number>(Date.now());
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);
+
+  // Local stablePrice ref to maintain last recorded price and timestamp per asset
+  // Prevents price bouncing caused by network latency or race conditions between live feeds
+  const stablePriceRef = useRef<Record<string, { price: number; dataTimestamp: number }>>({});
+
+  // Keep ref synchronized on initial render
+  if (Object.keys(stablePriceRef.current).length === 0 && Object.keys(assets).length > 0) {
+    Object.entries(assets).forEach(([sym, asset]) => {
+      stablePriceRef.current[sym.toUpperCase()] = {
+        price: asset.price,
+        dataTimestamp: asset.dataTimestamp || asset.lastUpdated || 0,
+      };
+    });
+  }
 
   // Simulator state
   const [config, setConfig] = useState<SimulatorConfig>(() => {
@@ -290,12 +311,25 @@ export function useTradeSimulator() {
         const cleanSym = sym.toUpperCase();
         if (next[cleanSym] && p.price && typeof p.price === 'number') {
           const existing = next[cleanSym];
-          const incomingTimestamp = p.updatedAtMs || (p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now());
-          const existingStoredTimestamp = existing.dataTimestamp || existing.lastUpdated || 0;
+          const incomingTimestamp = p.dataTimestamp || p.updatedAtMs || (p.updatedAt ? new Date(p.updatedAt).getTime() : 0);
+          
+          const stable = stablePriceRef.current[cleanSym] || {
+            price: existing.price,
+            dataTimestamp: existing.dataTimestamp || existing.lastUpdated || 0,
+          };
 
-          // Monotonic Timestamp Check: process & update only if incoming timestamp > existing stored timestamp
-          if (incomingTimestamp > existingStoredTimestamp) {
+          // Stable Price Ref Mechanism:
+          // Update ONLY if incoming Firestore data is newer (based on dataTimestamp) AND differs from last recorded price
+          const isNewer = incomingTimestamp > stable.dataTimestamp;
+          const isPriceDifferent = p.price !== stable.price;
+
+          if (incomingTimestamp > 0 && isNewer && isPriceDifferent) {
             changed = true;
+            stablePriceRef.current[cleanSym] = {
+              price: p.price,
+              dataTimestamp: incomingTimestamp,
+            };
+
             next[cleanSym] = {
               ...existing,
               price: p.price,
@@ -305,6 +339,11 @@ export function useTradeSimulator() {
               lastUpdated: incomingTimestamp,
               dataTimestamp: incomingTimestamp,
             };
+            updateRememberedPrice(cleanSym, p.price, incomingTimestamp, {
+              change24h: p.changePct,
+              high24h: p.high,
+              low24h: p.low,
+            });
           }
         }
       });
@@ -328,12 +367,22 @@ export function useTradeSimulator() {
         Object.entries(updated).forEach(([sym, newAsset]) => {
           if (newAsset && typeof newAsset.price === 'number' && !isNaN(newAsset.price) && newAsset.price > 0) {
             const existing = next[sym];
-            const incomingTimestamp = newAsset.dataTimestamp || newAsset.lastUpdated || Date.now();
-            const existingStoredTimestamp = existing?.dataTimestamp || existing?.lastUpdated || 0;
+            const incomingTimestamp = newAsset.dataTimestamp || newAsset.lastUpdated || 0;
+            const stable = stablePriceRef.current[sym] || {
+              price: existing?.price || 0,
+              dataTimestamp: existing?.dataTimestamp || existing?.lastUpdated || 0,
+            };
 
-            // Monotonic Timestamp Check: process & update only if incoming timestamp > existing stored timestamp
-            if (!existing || incomingTimestamp > existingStoredTimestamp) {
+            const isNewer = !existing || incomingTimestamp > stable.dataTimestamp;
+            const isPriceDifferent = newAsset.price !== stable.price;
+
+            if (incomingTimestamp > 0 && isNewer && isPriceDifferent) {
               changed = true;
+              stablePriceRef.current[sym] = {
+                price: newAsset.price,
+                dataTimestamp: incomingTimestamp,
+              };
+
               next[sym] = {
                 ...existing,
                 ...newAsset,
@@ -341,6 +390,11 @@ export function useTradeSimulator() {
                 lastUpdated: incomingTimestamp,
                 dataTimestamp: incomingTimestamp,
               };
+              updateRememberedPrice(sym, newAsset.price, incomingTimestamp, {
+                change24h: newAsset.change24h,
+                high24h: newAsset.high24h,
+                low24h: newAsset.low24h,
+              });
             }
           }
         });
@@ -364,7 +418,6 @@ export function useTradeSimulator() {
   }, [refreshPrices]);
 
   // Real-time Exchange WebSocket Stream (Binance & Bitfinex)
-  // Replaces all simulated random price jitter with 100% genuine live orderbook ticks!
   useEffect(() => {
     const unsubscribe = liveWebSocketFeed.subscribe((updates) => {
       setAssets((prev) => {
@@ -375,19 +428,35 @@ export function useTradeSimulator() {
           const update = updates[sym];
           if (update && next[sym]) {
             const existing = next[sym];
-            const incomingTimestamp = update.dataTimestamp || update.lastUpdated || Date.now();
-            const existingStoredTimestamp = existing.dataTimestamp || existing.lastUpdated || 0;
+            const incomingTimestamp = update.dataTimestamp || update.lastUpdated || 0;
+            const newPrice = update.price !== undefined ? update.price : existing.price;
+            const stable = stablePriceRef.current[sym] || {
+              price: existing.price,
+              dataTimestamp: existing.dataTimestamp || existing.lastUpdated || 0,
+            };
 
-            // Monotonic Timestamp Check: process & update only if incoming timestamp > existing stored timestamp
-            if (incomingTimestamp > existingStoredTimestamp) {
+            const isNewer = incomingTimestamp > stable.dataTimestamp;
+            const isPriceDifferent = newPrice !== stable.price;
+
+            if (incomingTimestamp > 0 && isNewer && isPriceDifferent) {
               changed = true;
+              stablePriceRef.current[sym] = {
+                price: newPrice,
+                dataTimestamp: incomingTimestamp,
+              };
+
               next[sym] = {
                 ...existing,
                 ...update,
-                price: update.price !== undefined ? update.price : existing.price,
+                price: newPrice,
                 lastUpdated: incomingTimestamp,
                 dataTimestamp: incomingTimestamp,
               };
+              updateRememberedPrice(sym, newPrice, incomingTimestamp, {
+                change24h: update.change24h,
+                high24h: update.high24h,
+                low24h: update.low24h,
+              });
             }
           }
         });

@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
 import { subscribeMarketTable, fetchMarketTable, MASTER_GLOBAL_INDICES, MASTER_FUTURES } from '../../services/marketDataTables';
+import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
+import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
 
 export interface IndexItem {
@@ -98,36 +100,42 @@ export const GlobalIndicesView: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
   const [indices, setIndices] = useState<IndexItem[]>(() => [
-    ...MASTER_GLOBAL_INDICES.map((m) => ({
-      id: m.id,
-      name: m.name,
-      symbol: m.symbol,
-      yahooSymbol: GLOBAL_YAHOO_MAP[m.symbol] || GLOBAL_YAHOO_MAP[m.id] || m.symbol,
-      region: (m.sector as any) || 'US & Americas',
-      category: (m.category as any) || 'Cash Index',
-      price: m.price,
-      change1d: m.change1d,
-      change1dPts: m.change1dPts || 0,
-      high24h: m.high24h || m.price,
-      low24h: m.low24h || m.price,
-      status: (m.status as any) || 'OPEN',
-      currency: m.currency || 'USD',
-    })),
-    ...MASTER_FUTURES.map((m) => ({
-      id: m.id,
-      name: m.name,
-      symbol: m.symbol,
-      yahooSymbol: GLOBAL_YAHOO_MAP[m.symbol] || GLOBAL_YAHOO_MAP[m.id] || m.symbol,
-      region: 'US & Americas' as const,
-      category: 'Futures' as const,
-      price: m.price,
-      change1d: m.change1d,
-      change1dPts: m.change1dPts || 0,
-      high24h: m.high24h || m.price,
-      low24h: m.low24h || m.price,
-      status: (m.status as any) || 'OPEN',
-      currency: m.currency || 'USD',
-    })),
+    ...MASTER_GLOBAL_INDICES.map((m) => {
+      const hydrated = getHydratedPrice({ ...m, price: m.price });
+      return {
+        id: m.id,
+        name: m.name,
+        symbol: m.symbol,
+        yahooSymbol: GLOBAL_YAHOO_MAP[m.symbol] || GLOBAL_YAHOO_MAP[m.id] || m.symbol,
+        region: (m.sector as any) || 'US & Americas',
+        category: (m.category as any) || 'Cash Index',
+        price: hydrated.price,
+        change1d: hydrated.change1d ?? m.change1d,
+        change1dPts: m.change1dPts || 0,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
+        status: (m.status as any) || 'OPEN',
+        currency: m.currency || 'USD',
+      };
+    }),
+    ...MASTER_FUTURES.map((m) => {
+      const hydrated = getHydratedPrice({ ...m, price: m.price });
+      return {
+        id: m.id,
+        name: m.name,
+        symbol: m.symbol,
+        yahooSymbol: GLOBAL_YAHOO_MAP[m.symbol] || GLOBAL_YAHOO_MAP[m.id] || m.symbol,
+        region: 'US & Americas' as const,
+        category: 'Futures' as const,
+        price: hydrated.price,
+        change1d: hydrated.change1d ?? m.change1d,
+        change1dPts: m.change1dPts || 0,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
+        status: (m.status as any) || 'OPEN',
+        currency: m.currency || 'USD',
+      };
+    }),
   ]);
 
   // Subscribe to grouped Global Indices and Futures tables in Firestore (batch format)
@@ -139,14 +147,17 @@ export const GlobalIndicesView: React.FC = () => {
           const existingMap = new Map(prev.map((i) => [i.id, i]));
           const updated = table.data.map((m) => {
             const existing = existingMap.get(m.id);
-            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
 
             if (existing && existingMs > 0 && incomingMs <= existingMs) {
               return existing;
             }
 
-            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : (existing?.price || m.price);
+            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
+            if (validPrice > 0) {
+              updateRememberedPrice(m.symbol || m.id, validPrice, incomingMs, { change1d: m.change1d });
+            }
             return {
               id: m.id,
               name: m.name,
@@ -167,7 +178,8 @@ export const GlobalIndicesView: React.FC = () => {
           });
           return [...updated, ...nonIndices];
         });
-        setLastRefreshed(new Date(table.updatedAt || Date.now()).toLocaleTimeString());
+        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
+        setLastRefreshed(formatIndianTime(sourceTime));
       }
     });
 
@@ -178,14 +190,17 @@ export const GlobalIndicesView: React.FC = () => {
           const existingMap = new Map(prev.map((i) => [i.id, i]));
           const updatedFutures = table.data.map((m) => {
             const existing = existingMap.get(m.id);
-            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
 
             if (existing && existingMs > 0 && incomingMs <= existingMs) {
               return existing;
             }
 
-            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : (existing?.price || m.price);
+            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
+            if (validPrice > 0) {
+              updateRememberedPrice(m.symbol || m.id, validPrice, incomingMs, { change1d: m.change1d });
+            }
             return {
               id: m.id,
               name: m.name,

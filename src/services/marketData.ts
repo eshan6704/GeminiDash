@@ -1,4 +1,5 @@
 import { MarketAsset, Candle } from '../types/trading';
+import { getHydratedPrice, updateRememberedPrice } from './priceMemoryStore';
 
 export const INITIAL_ASSETS: Record<string, MarketAsset> = {
   PAXG: {
@@ -126,7 +127,8 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
   Object.keys(INITIAL_ASSETS).forEach((symbol) => {
     const existing = existingAssets?.[symbol];
     const initial = INITIAL_ASSETS[symbol];
-    updatedAssets[symbol] = existing ? { ...existing } : { ...initial };
+    const baseAsset = existing ? { ...existing } : { ...initial };
+    updatedAssets[symbol] = getHydratedPrice(baseAsset);
   });
 
   try {
@@ -148,18 +150,21 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
               const high = parseFloat(item.highPrice);
               const low = parseFloat(item.lowPrice);
               const volume = parseFloat(item.quoteVolume);
+              const sourceTime = item.closeTime || item.eventTime || Date.now();
 
-              const nowMs = Date.now();
-              updatedAssets[sym] = {
-                ...updatedAssets[sym],
-                price: isNaN(price) ? updatedAssets[sym].price : price,
-                change24h: isNaN(change) ? updatedAssets[sym].change24h : change,
-                high24h: isNaN(high) ? updatedAssets[sym].high24h : high,
-                low24h: isNaN(low) ? updatedAssets[sym].low24h : low,
-                volume24h: isNaN(volume) ? updatedAssets[sym].volume24h : volume,
-                lastUpdated: nowMs,
-                dataTimestamp: nowMs,
-              };
+              if (!isNaN(price) && price > 0) {
+                updatedAssets[sym] = {
+                  ...updatedAssets[sym],
+                  price,
+                  change24h: isNaN(change) ? updatedAssets[sym].change24h : change,
+                  high24h: isNaN(high) ? updatedAssets[sym].high24h : high,
+                  low24h: isNaN(low) ? updatedAssets[sym].low24h : low,
+                  volume24h: isNaN(volume) ? updatedAssets[sym].volume24h : volume,
+                  lastUpdated: sourceTime,
+                  dataTimestamp: sourceTime,
+                };
+                updateRememberedPrice(sym, price, sourceTime, { change24h: change, high24h: high, low24h: low });
+              }
             }
           });
         }

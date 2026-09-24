@@ -17,6 +17,8 @@ import {
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
 import { usePersistentSymbols } from '../../services/symbolPersistenceService';
 import { subscribeMarketTable, fetchMarketTable, MASTER_INDIAN_INDICES } from '../../services/marketDataTables';
+import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
+import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
 
 export interface NiftyIndexItem {
@@ -67,20 +69,23 @@ export const NiftyIndicesView: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
   const [indices, setIndices] = useState<NiftyIndexItem[]>(() =>
-    MASTER_INDIAN_INDICES.map((m) => ({
-      id: m.id.toLowerCase(),
-      name: m.name,
-      symbol: m.symbol,
-      yahooSymbol: NIFTY_YAHOO_MAP[m.symbol] || NIFTY_YAHOO_MAP[m.id] || m.symbol,
-      category: (m.category as any) || 'Benchmark',
-      price: m.price,
-      change1d: m.change1d,
-      change1dPts: m.change1dPts || 0,
-      high24h: m.high24h || m.price,
-      low24h: m.low24h || m.price,
-      peRatio: m.peRatio || 22.5,
-      currency: 'INR',
-    }))
+    MASTER_INDIAN_INDICES.map((m) => {
+      const hydrated = getHydratedPrice({ ...m, price: m.price });
+      return {
+        id: m.id.toLowerCase(),
+        name: m.name,
+        symbol: m.symbol,
+        yahooSymbol: NIFTY_YAHOO_MAP[m.symbol] || NIFTY_YAHOO_MAP[m.id] || m.symbol,
+        category: (m.category as any) || 'Benchmark',
+        price: hydrated.price,
+        change1d: hydrated.change1d ?? m.change1d,
+        change1dPts: m.change1dPts || 0,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
+        peRatio: m.peRatio || 22.5,
+        currency: 'INR',
+      };
+    })
   );
 
   // Subscribe to grouped Indian Indices table in Firestore (batch format)
@@ -91,14 +96,17 @@ export const NiftyIndicesView: React.FC = () => {
           const existingMap = new Map(prev.map((i) => [i.symbol, i]));
           return table.data.map((m) => {
             const existing = existingMap.get(m.symbol);
-            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
 
             if (existing && existingMs > 0 && incomingMs <= existingMs) {
               return existing;
             }
 
-            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : (existing?.price || m.price);
+            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
+            if (validPrice > 0) {
+              updateRememberedPrice(m.symbol, validPrice, incomingMs, { change1d: m.change1d });
+            }
             return {
               id: m.id.toLowerCase(),
               name: m.name,
@@ -117,7 +125,8 @@ export const NiftyIndicesView: React.FC = () => {
             } as any;
           });
         });
-        setLastRefreshed(new Date(table.updatedAt || Date.now()).toLocaleTimeString('en-IN'));
+        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
+        setLastRefreshed(formatIndianTime(sourceTime));
       }
     });
 

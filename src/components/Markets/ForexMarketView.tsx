@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
 import { subscribeMarketTable, fetchMarketTable, MASTER_FOREX } from '../../services/marketDataTables';
+import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
+import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
 
 export interface ForexPair {
@@ -46,6 +48,7 @@ export const ForexMarketView: React.FC = () => {
 
   const [pairs, setPairs] = useState<ForexPair[]>(() =>
     MASTER_FOREX.map((m) => {
+      const hydrated = getHydratedPrice({ ...m, price: m.price });
       const spreadPips = m.symbol.includes('INR') ? 2.5 : 1.0;
       const halfSpread = (spreadPips * (m.symbol.includes('JPY') ? 0.01 : 0.0001)) / 2;
       return {
@@ -53,12 +56,12 @@ export const ForexMarketView: React.FC = () => {
         pair: m.symbol,
         yahooSymbol: `${m.symbol.replace('/', '')}=X`,
         category: (m.category as any) || 'Major',
-        bid: Number((m.price - halfSpread).toFixed(4)),
-        ask: Number((m.price + halfSpread).toFixed(4)),
+        bid: Number((hydrated.price - halfSpread).toFixed(4)),
+        ask: Number((hydrated.price + halfSpread).toFixed(4)),
         spreadPips,
-        change1d: m.change1d,
-        high24h: m.high24h || m.price,
-        low24h: m.low24h || m.price,
+        change1d: hydrated.change1d ?? m.change1d,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
         currency: m.symbol.split('/')[1] || 'USD',
       };
     })
@@ -72,7 +75,7 @@ export const ForexMarketView: React.FC = () => {
           const existingMap = new Map(prev.map((p) => [p.pair, p]));
           return table.data.map((m) => {
             const existing = existingMap.get(m.symbol);
-            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
 
             if (existing && existingMs > 0 && incomingMs <= existingMs) {
@@ -81,7 +84,10 @@ export const ForexMarketView: React.FC = () => {
 
             const spreadPips = m.symbol.includes('INR') ? 2.5 : 1.0;
             const halfSpread = (spreadPips * (m.symbol.includes('JPY') ? 0.01 : 0.0001)) / 2;
-            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : ((existing?.bid || m.price) + halfSpread);
+            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing ? existing.bid + halfSpread : undefined);
+            if (validPrice > 0) {
+              updateRememberedPrice(m.symbol, validPrice, incomingMs, { change1d: m.change1d });
+            }
             return {
               id: m.id.toLowerCase(),
               pair: m.symbol,
@@ -99,7 +105,8 @@ export const ForexMarketView: React.FC = () => {
             } as any;
           });
         });
-        setLastRefreshed(new Date(table.updatedAt || Date.now()).toLocaleTimeString());
+        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
+        setLastRefreshed(formatIndianTime(sourceTime));
       }
     });
 

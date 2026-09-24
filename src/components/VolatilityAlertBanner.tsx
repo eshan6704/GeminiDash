@@ -14,10 +14,10 @@ import {
   ArrowDownRight,
   Clock,
 } from 'lucide-react';
-import { Asset } from '../types';
+import { MarketAsset } from '../types/trading';
 
 interface Props {
-  activeAsset: Asset;
+  activeAsset: MarketAsset;
 }
 
 export const VolatilityAlertBanner: React.FC<Props> = ({ activeAsset }) => {

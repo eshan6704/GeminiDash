@@ -396,6 +396,7 @@ async function fetchCryptoQuote(symbol: string, pair: string) {
       const low = parseFloat(data.lowPrice);
       const volume = parseFloat(data.volume);
 
+      const sourceTime = data.closeTime || data.eventTime || Date.now();
       const quote = {
         symbol,
         name: symbol === 'PAXG' ? 'PAX Gold' : symbol,
@@ -411,7 +412,9 @@ async function fetchCryptoQuote(symbol: string, pair: string) {
         volume: Math.round(volume),
         category: symbol === 'PAXG' ? 'gold' : 'crypto',
         source: 'Live Spot Ticker',
-        updatedAt: new Date().toISOString(),
+        updatedAt: new Date(sourceTime).toISOString(),
+        updatedAtMs: sourceTime,
+        dataTimestamp: sourceTime,
       };
 
       quoteCache.set(symbol, { data: quote, timestamp: Date.now() });
@@ -531,6 +534,7 @@ async function fetchYahooQuote(rawSymbol: string) {
           const change = regularMarketPrice - previousClose;
           const changePct = previousClose !== 0 ? (change / previousClose) * 100 : 0;
 
+          const sourceTime = meta.regularMarketTime ? meta.regularMarketTime * 1000 : Date.now();
           const data = {
             symbol: rawSymbol,
             name: mapped?.name || meta.shortName || meta.symbol || rawSymbol,
@@ -546,7 +550,9 @@ async function fetchYahooQuote(rawSymbol: string) {
             volume: meta.regularMarketVolume || (quote?.volume ? quote.volume[quote.volume.length - 1] : 0),
             category: currency === 'INR' ? 'equity' : 'index',
             source: 'Yahoo Finance Live',
-            updatedAt: new Date().toISOString(),
+            updatedAt: new Date(sourceTime).toISOString(),
+            updatedAtMs: sourceTime,
+            dataTimestamp: sourceTime,
           };
 
           quoteCache.set(rawSymbol, { data, timestamp: Date.now() });

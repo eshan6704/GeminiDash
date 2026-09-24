@@ -180,6 +180,7 @@ class LiveWebSocketFeedManager {
               const high24h = parseFloat(data.h);
               const low24h = parseFloat(data.l);
               const volume24h = parseFloat(data.q); // quote volume (USDT)
+              const sourceTime = data.C || data.E || Date.now();
 
               if (!isNaN(price) && price > 0) {
                 const updates: Partial<Record<string, Partial<MarketAsset>>> = {
@@ -189,7 +190,8 @@ class LiveWebSocketFeedManager {
                     high24h: isNaN(high24h) ? undefined : high24h,
                     low24h: isNaN(low24h) ? undefined : low24h,
                     volume24h: isNaN(volume24h) ? undefined : volume24h,
-                    lastUpdated: Date.now(),
+                    lastUpdated: sourceTime,
+                    dataTimestamp: sourceTime,
                   },
                 };
 
@@ -200,7 +202,8 @@ class LiveWebSocketFeedManager {
                     change24h: isNaN(change24h) ? undefined : change24h,
                     high24h: isNaN(high24h) ? undefined : high24h,
                     low24h: isNaN(low24h) ? undefined : low24h,
-                    lastUpdated: Date.now(),
+                    lastUpdated: sourceTime,
+                    dataTimestamp: sourceTime,
                   };
                 }
 
@@ -215,21 +218,21 @@ class LiveWebSocketFeedManager {
               const high24h = parseFloat(data.h);
               const low24h = parseFloat(data.l);
               const volume24h = parseFloat(data.q);
+              const sourceTime = data.E || Date.now();
 
               if (!isNaN(price) && price > 0) {
-                const nowMs = Date.now();
                 const updates: Partial<Record<string, Partial<MarketAsset>>> = {
                   [sym]: {
                     price,
                     high24h: isNaN(high24h) ? undefined : high24h,
                     low24h: isNaN(low24h) ? undefined : low24h,
                     volume24h: isNaN(volume24h) ? undefined : volume24h,
-                    lastUpdated: nowMs,
-                    dataTimestamp: nowMs,
+                    lastUpdated: sourceTime,
+                    dataTimestamp: sourceTime,
                   },
                 };
                 if (sym === 'PAXG' && !this.status.bitfinexConnected) {
-                  updates.XAUT = { price, lastUpdated: nowMs, dataTimestamp: nowMs };
+                  updates.XAUT = { price, lastUpdated: sourceTime, dataTimestamp: sourceTime };
                 }
                 this.notify(updates);
               }
@@ -239,17 +242,17 @@ class LiveWebSocketFeedManager {
             const sym = this.binanceSymbolMap[data.s];
             if (sym) {
               const tradePrice = parseFloat(data.p);
+              const sourceTime = data.T || data.E || Date.now();
               if (!isNaN(tradePrice) && tradePrice > 0) {
-                const nowMs = Date.now();
                 const updates: Partial<Record<string, Partial<MarketAsset>>> = {
                   [sym]: {
                     price: tradePrice,
-                    lastUpdated: nowMs,
-                    dataTimestamp: nowMs,
+                    lastUpdated: sourceTime,
+                    dataTimestamp: sourceTime,
                   },
                 };
                 if (sym === 'PAXG' && !this.status.bitfinexConnected) {
-                  updates.XAUT = { price: tradePrice, lastUpdated: nowMs, dataTimestamp: nowMs };
+                  updates.XAUT = { price: tradePrice, lastUpdated: sourceTime, dataTimestamp: sourceTime };
                 }
                 this.notify(updates);
               }

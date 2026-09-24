@@ -14,6 +14,8 @@ import {
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
 import { subscribeMarketTable, fetchMarketTable, MASTER_COMMODITIES } from '../../services/marketDataTables';
+import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
+import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
 
 export interface CommodityItem {
@@ -43,19 +45,22 @@ export const CommoditiesMarketView: React.FC = () => {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState<boolean>(false);
 
   const [commodities, setCommodities] = useState<CommodityItem[]>(() =>
-    MASTER_COMMODITIES.map((m) => ({
-      id: m.id.toLowerCase(),
-      name: m.name,
-      symbol: m.symbol,
-      yahooSymbol: `${m.symbol}=F`,
-      unit: m.category === 'Energy' ? 'USD / Barrel' : m.category === 'Precious Metals' ? 'USD / Troy Oz' : 'USD / Unit',
-      category: (m.category as any) || 'Energy',
-      price: m.price,
-      change1d: m.change1d,
-      high24h: m.high24h || m.price,
-      low24h: m.low24h || m.price,
-      contractExpiry: 'DEC 2026',
-    }))
+    MASTER_COMMODITIES.map((m) => {
+      const hydrated = getHydratedPrice({ ...m, price: m.price });
+      return {
+        id: m.id.toLowerCase(),
+        name: m.name,
+        symbol: m.symbol,
+        yahooSymbol: `${m.symbol}=F`,
+        unit: m.category === 'Energy' ? 'USD / Barrel' : m.category === 'Precious Metals' ? 'USD / Troy Oz' : 'USD / Unit',
+        category: (m.category as any) || 'Energy',
+        price: hydrated.price,
+        change1d: hydrated.change1d ?? m.change1d,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
+        contractExpiry: 'DEC 2026',
+      };
+    })
   );
 
   // Subscribe to grouped Commodities table in Firestore (batch format)
@@ -66,14 +71,17 @@ export const CommoditiesMarketView: React.FC = () => {
           const existingMap = new Map(prev.map((c) => [c.symbol, c]));
           return table.data.map((m) => {
             const existing = existingMap.get(m.symbol);
-            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
 
             if (existing && existingMs > 0 && incomingMs <= existingMs) {
               return existing;
             }
 
-            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : (existing?.price || m.price);
+            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
+            if (validPrice > 0) {
+              updateRememberedPrice(m.symbol, validPrice, incomingMs, { change1d: m.change1d });
+            }
             return {
               id: m.id.toLowerCase(),
               name: m.name,
@@ -91,7 +99,8 @@ export const CommoditiesMarketView: React.FC = () => {
             } as any;
           });
         });
-        setLastRefreshed(new Date(table.updatedAt || Date.now()).toLocaleTimeString());
+        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
+        setLastRefreshed(formatIndianTime(sourceTime));
       }
     });
 

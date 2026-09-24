@@ -21,6 +21,8 @@ import { NiftyStockAnalysisModal } from './NiftyStockAnalysisModal';
 import { AiFundamentalAnalystPanel } from './AiFundamentalAnalystPanel';
 import { fetchBatchLiveQuotes, fetchLiveQuote } from '../../services/liveMarketService';
 import { subscribeMarketTable, fetchMarketTable, MASTER_NIFTY_500, MarketTableRow } from '../../services/marketDataTables';
+import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
+import { formatIndianTime } from '../../utils/indianTime';
 
 export interface StockConstituentItem {
   rank: number;
@@ -58,24 +60,27 @@ export const StockConstituentsView: React.FC = () => {
   const itemsPerPage = 25;
 
   const [stocks, setStocks] = useState<StockConstituentItem[]>(() =>
-    MASTER_NIFTY_500.map((m) => ({
-      rank: m.rank || 1,
-      id: m.id,
-      name: m.name,
-      symbol: m.symbol,
-      yahooSymbol: `${m.symbol}.NS`,
-      exchange: (m.exchange as any) || 'NSE',
-      sector: (m.sector as any) || 'Banking & Finance',
-      tier: (m.tier as any) || 'Nifty 50',
-      price: m.price,
-      currency: (m.currency as any) || 'INR',
-      weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
-      change1d: m.change1d,
-      high52w: m.high24h || Math.round(m.price * 1.1),
-      low52w: m.low24h || Math.round(m.price * 0.9),
-      peRatio: m.peRatio || 25,
-      marketCap: String(m.marketCap || '₹10,000 Cr'),
-    }))
+    MASTER_NIFTY_500.map((m) => {
+      const hydrated = getHydratedPrice({ ...m, price: m.price });
+      return {
+        rank: m.rank || 1,
+        id: m.id,
+        name: m.name,
+        symbol: m.symbol,
+        yahooSymbol: `${m.symbol}.NS`,
+        exchange: (m.exchange as any) || 'NSE',
+        sector: (m.sector as any) || 'Banking & Finance',
+        tier: (m.tier as any) || 'Nifty 50',
+        price: hydrated.price,
+        currency: (m.currency as any) || 'INR',
+        weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
+        change1d: hydrated.change1d ?? m.change1d,
+        high52w: m.high24h || Math.round(hydrated.price * 1.1),
+        low52w: m.low24h || Math.round(hydrated.price * 0.9),
+        peRatio: m.peRatio || 25,
+        marketCap: String(m.marketCap || '₹10,000 Cr'),
+      };
+    })
   );
 
   // Subscribe to grouped Nifty 500 table in Firestore (single document batch read)
@@ -86,14 +91,18 @@ export const StockConstituentsView: React.FC = () => {
           const existingMap = new Map(prev.map((s) => [s.symbol, s]));
           return table.data.map((m) => {
             const existing = existingMap.get(m.symbol);
-            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
 
             if (existing && existingMs > 0 && incomingMs <= existingMs) {
               return existing;
             }
 
-            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : (existing?.price || m.price);
+            // Always resolve live price using memory store to ensure no bounce to hardcoded prices
+            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
+            if (validPrice > 0) {
+              updateRememberedPrice(m.symbol, validPrice, incomingMs, { change1d: m.change1d });
+            }
             return {
               rank: m.rank || 1,
               id: m.id,
@@ -116,7 +125,8 @@ export const StockConstituentsView: React.FC = () => {
             } as any;
           });
         });
-        setLastRefreshed(new Date(table.updatedAt || Date.now()).toLocaleTimeString('en-IN'));
+        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
+        setLastRefreshed(formatIndianTime(sourceTime));
       }
     });
 
@@ -128,28 +138,38 @@ export const StockConstituentsView: React.FC = () => {
     try {
       const table = await fetchMarketTable('nifty_500');
       if (table && table.data) {
-        setStocks(
-          table.data.map((m) => ({
-            rank: m.rank || 1,
-            id: m.id,
-            name: m.name,
-            symbol: m.symbol,
-            yahooSymbol: `${m.symbol}.NS`,
-            exchange: (m.exchange as any) || 'NSE',
-            sector: (m.sector as any) || 'Banking & Finance',
-            tier: (m.tier as any) || 'Nifty 50',
-            price: m.price,
-            currency: (m.currency as any) || 'INR',
-            weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
-            change1d: m.change1d,
-            high52w: m.high24h || Math.round(m.price * 1.1),
-            low52w: m.low24h || Math.round(m.price * 0.9),
-            peRatio: m.peRatio || 25,
-            marketCap: String(m.marketCap || '₹10,000 Cr'),
-            isRealLive: true,
-          }))
-        );
-        setLastRefreshed(new Date().toLocaleTimeString('en-IN'));
+        setStocks((prev) => {
+          const existingMap = new Map(prev.map((s) => [s.symbol, s]));
+          return table.data.map((m) => {
+            const existing = existingMap.get(m.symbol);
+            const incomingMs = m.dataTimestamp || m.updatedAtMs || (table.dataTimestamp || table.updatedAtMs || Date.now());
+            const price = resolveLivePrice({ ...m, dataTimestamp: incomingMs }, existing?.price);
+            if (price > 0) {
+              updateRememberedPrice(m.symbol, price, incomingMs, { change1d: m.change1d });
+            }
+            return {
+              rank: m.rank || 1,
+              id: m.id,
+              name: m.name,
+              symbol: m.symbol,
+              yahooSymbol: `${m.symbol}.NS`,
+              exchange: (m.exchange as any) || 'NSE',
+              sector: (m.sector as any) || 'Banking & Finance',
+              tier: (m.tier as any) || 'Nifty 50',
+              price,
+              currency: (m.currency as any) || 'INR',
+              weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
+              change1d: m.change1d,
+              high52w: m.high24h || Math.round(price * 1.1),
+              low52w: m.low24h || Math.round(price * 0.9),
+              peRatio: m.peRatio || 25,
+              marketCap: String(m.marketCap || '₹10,000 Cr'),
+              isRealLive: true,
+            };
+          });
+        });
+        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
+        setLastRefreshed(formatIndianTime(sourceTime));
       }
     } catch {
       // Keep state
