@@ -7,7 +7,8 @@ import React, { useState, useEffect } from 'react';
 import { useTradeSimulator } from './hooks/useTradeSimulator';
 import { useTheme } from './context/ThemeContext';
 import { Navbar } from './components/Navbar';
-import { MarketNewsTicker } from './components/MarketNewsTicker';
+// Top Navigation
+// Real-time News Ticker removed per user instruction to eliminate Live Feed and maximize visible workspace
 import { AccountPulseWidget } from './components/AccountPulseWidget';
 import { CryptoHeaderBar } from './components/CryptoHeaderBar';
 import { TickerBar } from './components/TickerBar';
@@ -18,6 +19,8 @@ import { PortfolioOverview } from './components/Portfolio/PortfolioOverview';
 import { WhatIfScenarioModal } from './components/Modals/WhatIfScenarioModal';
 import { AiRiskModal } from './components/Modals/AiRiskModal';
 import { SettingsModal } from './components/Modals/SettingsModal';
+import { FirestoreDataModal } from './components/Modals/FirestoreDataModal';
+import { BatchWriterModal } from './components/Modals/BatchWriterModal';
 import { NotificationToast } from './components/Notifications/NotificationToast';
 import { DailyPnLChart } from './components/Portfolio/DailyPnLChart';
 import { WhaleTradesFeed } from './components/Trades/WhaleTradesFeed';
@@ -31,19 +34,18 @@ import { NiftyIndicesView } from './components/Markets/NiftyIndicesView';
 import { StockConstituentsView } from './components/Markets/StockConstituentsView';
 import { IndianStockPortfolioView } from './components/Markets/IndianStockPortfolioView';
 import { IndianStockWatchlistView } from './components/Markets/IndianStockWatchlistView';
-import { useSheetsSync } from './hooks/useSheetsSync';
-import { ShieldCheck, Flame, Info, ExternalLink, BarChart3, Zap, Coins, Activity, Waves, Globe, DollarSign, Building2, Building, Box, Briefcase, Star } from 'lucide-react';
+import { OptionChainView } from './components/Markets/OptionChainView';
+import { StockOptionChainView } from './components/Markets/StockOptionChainView';
+import { AdvancedMarketScreenerView } from './components/Markets/AdvancedMarketScreenerView';
+import { VolatilityAlertBanner } from './components/Notifications/VolatilityAlertBanner';
+import { TrackedAsset } from './services/allTrackedAssets';
+import { ShieldCheck, Flame, Info, ExternalLink, BarChart3, Zap, Coins, Activity, Waves, Globe, DollarSign, Building2, Building, Box, Briefcase, Star, SlidersHorizontal } from 'lucide-react';
 
 export default function App() {
   const { isLight } = useTheme();
-  const { enableAutoSync } = useSheetsSync();
-  const [mainMarketTab, setMainMarketTab] = useState<'CRYPTO' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES' | 'NIFTY_INDICES' | 'STOCK_CONSTITUENTS' | 'INDIAN_PORTFOLIO' | 'INDIAN_WATCHLIST'>('CRYPTO');
+  const [mainMarketTab, setMainMarketTab] = useState<'CRYPTO' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES' | 'NIFTY_INDICES' | 'STOCK_CONSTITUENTS' | 'INDIAN_PORTFOLIO' | 'INDIAN_WATCHLIST' | 'OPTION_CHAIN' | 'STOCK_OPTION_CHAIN' | 'MARKET_SCREENER'>('CRYPTO');
   const [show30DayBacktest, setShow30DayBacktest] = useState<boolean>(false);
   const [analysisTab, setAnalysisTab] = useState<'OPTIONS' | 'MARKETCAP' | 'ANALYTICS' | 'WHALES' | 'BACKTEST'>('OPTIONS');
-
-  useEffect(() => {
-    enableAutoSync();
-  }, [enableAutoSync]);
 
   const {
     assets,
@@ -79,51 +81,111 @@ export default function App() {
     resetSimulation,
     adjustCashBalance,
     addNotification,
+    // Firestore cloud synchronization
+    cloudSyncStatus,
+    lastCloudSync,
+    syncSimulatorToCloud,
   } = useTradeSimulator();
 
   // Modal visibility states
   const [isWhatIfOpen, setIsWhatIfOpen] = useState<boolean>(false);
   const [isAiReviewOpen, setIsAiReviewOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isFirestoreOpen, setIsFirestoreOpen] = useState<boolean>(false);
+  const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
 
   const activeAsset = assets[selectedSymbol] || assets.PAXG;
   const currentSpotHolding = spotHoldings.find((h) => h.symbol === selectedSymbol);
   const currentSpotAmount = currentSpotHolding ? currentSpotHolding.amount : 0;
 
-  return (
-    <div
-      className={`min-h-screen flex flex-col font-sans transition-colors selection:bg-amber-500 selection:text-neutral-950 ${
-        isLight ? 'bg-slate-50 text-slate-900' : 'bg-neutral-950 text-neutral-100'
-      }`}
-    >
-      {/* Top Navigation */}
-      <Navbar />
-      
-      {/* Real-time News Ticker */}
-      <MarketNewsTicker />
+  // Global search asset selector handler
+  const handleGlobalAssetSelect = (asset: TrackedAsset) => {
+    if (asset.category === 'OPTION_CHAIN') {
+      setMainMarketTab('OPTION_CHAIN');
+      addNotification('info', 'Option Chain Loaded', `Opened ${asset.name} real-time F&O matrix.`);
+      return;
+    }
+    if (asset.isTerminalAsset || assets[asset.symbol as any]) {
+      setSelectedSymbol(asset.symbol as any);
+      setMainMarketTab('CRYPTO');
+      addNotification('info', 'Asset Selected in Terminal', `Loaded ${asset.name} (${asset.symbol}) into Trading Terminal.`);
+      return;
+    }
+    if (asset.category === 'INDIAN_STOCK') {
+      setMainMarketTab('STOCK_CONSTITUENTS');
+      addNotification('info', 'Stock Constituents', `Navigated to ${asset.name} (${asset.symbol}).`);
+      return;
+    }
+    if (asset.category === 'INDIAN_INDEX') {
+      setMainMarketTab('NIFTY_INDICES');
+      addNotification('info', 'Nifty & Indian Indices', `Viewing ${asset.name} (${asset.symbol}).`);
+      return;
+    }
+    if (asset.category === 'GLOBAL_INDEX') {
+      setMainMarketTab('GLOBAL_INDICES');
+      addNotification('info', 'Global Indices', `Viewing ${asset.name} (${asset.symbol}).`);
+      return;
+    }
+    if (asset.category === 'FOREX') {
+      setMainMarketTab('FOREX');
+      addNotification('info', 'Forex Exchange', `Viewing ${asset.name} (${asset.symbol}).`);
+      return;
+    }
+    if (asset.category === 'COMMODITY') {
+      setMainMarketTab('COMMODITIES');
+      addNotification('info', 'Commodities & Energy', `Viewing ${asset.name} (${asset.symbol}).`);
+      return;
+    }
+    if (asset.category === 'US_STOCK') {
+      setMainMarketTab('STOCK_CONSTITUENTS');
+      addNotification('info', 'Global Tech MegaCaps', `Viewing ${asset.name} (${asset.symbol}).`);
+      return;
+    }
+  };
 
-      {/* Main Trading Terminal Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-3 sm:p-4 lg:p-5 space-y-4">
-        {/* Account Pulse Widget */}
-        <AccountPulseWidget totalPnL={totalRealizedPnL + totalUnrealizedPnL} winRate={winRate} />
+  return (
+    <div className="min-h-screen flex flex-col font-sans transition-colors selection:bg-blue-500 selection:text-white" style={{ backgroundColor: 'var(--theme-bg-page)', color: 'var(--theme-text-primary)' }}>
+      {/* Top Navigation */}
+      <Navbar
+        onOpenFirestoreModal={() => setIsFirestoreOpen(true)}
+        onOpenBatchModal={() => setIsBatchModalOpen(true)}
+        onSelectAsset={handleGlobalAssetSelect}
+      />
+
+      {/* Volatility Alert Banner (Triggers on 24h price fluctuation threshold) */}
+      <VolatilityAlertBanner
+        symbol={selectedSymbol}
+        name={activeAsset.name}
+        change24h={activeAsset.change24h}
+        price={activeAsset.price}
+        high24h={activeAsset.high24h}
+        low24h={activeAsset.low24h}
+      />
+
+      {/* Main Trading Terminal Container - Optimized for maximum visible trading screen area */}
+      <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 space-y-3">
+        {/* Compact Account Pulse & Performance Status */}
+        <AccountPulseWidget
+          totalPnL={totalRealizedPnL + totalUnrealizedPnL}
+          winRate={winRate}
+          totalTrades={totalTrades}
+        />
         
         {/* PRIMARY MULTI-ASSET MARKET CATEGORY SELECTION BAR */}
-        <div
-          className={`p-2 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-xl transition-colors ${
-            isLight ? 'bg-white border-slate-200' : 'bg-neutral-900 border-neutral-800'
-          }`}
-        >
+        <div className="p-2 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-xs transition-colors" style={{ backgroundColor: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
           <div className="flex items-center gap-1.5 flex-wrap w-full lg:w-auto">
             <button
               type="button"
               onClick={() => setMainMarketTab('CRYPTO')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'CRYPTO'
-                  ? 'bg-amber-500 text-neutral-950 font-black shadow-md ring-2 ring-amber-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-blue-600 text-white font-black shadow-md ring-2 ring-blue-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'CRYPTO' ? 'var(--theme-accent)' : 'transparent',
+                color: mainMarketTab === 'CRYPTO' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
               <Coins className="w-4 h-4" />
               <span>🪙 Crypto & Gold Derivatives</span>
@@ -134,11 +196,13 @@ export default function App() {
               onClick={() => setMainMarketTab('GLOBAL_INDICES')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'GLOBAL_INDICES'
-                  ? 'bg-blue-500 text-white font-black shadow-md ring-2 ring-blue-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'text-white font-black shadow-md ring-2 ring-blue-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'GLOBAL_INDICES' ? 'var(--theme-accent)' : 'transparent',
+                color: mainMarketTab === 'GLOBAL_INDICES' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
               <Globe className="w-4 h-4" />
               <span>🌐 Global Indices & Futures</span>
@@ -149,11 +213,13 @@ export default function App() {
               onClick={() => setMainMarketTab('FOREX')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'FOREX'
-                  ? 'bg-emerald-500 text-neutral-950 font-black shadow-md ring-2 ring-emerald-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-emerald-600 text-white font-black shadow-md ring-2 ring-emerald-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'FOREX' ? '#059669' : 'transparent',
+                color: mainMarketTab === 'FOREX' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
               <DollarSign className="w-4 h-4" />
               <span>💱 Forex Exchange</span>
@@ -164,11 +230,13 @@ export default function App() {
               onClick={() => setMainMarketTab('COMMODITIES')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'COMMODITIES'
-                  ? 'bg-amber-500 text-neutral-950 font-black shadow-md ring-2 ring-amber-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-amber-600 text-white font-black shadow-md ring-2 ring-amber-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'COMMODITIES' ? '#d97706' : 'transparent',
+                color: mainMarketTab === 'COMMODITIES' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
               <Flame className="w-4 h-4" />
               <span>🛢️ Commodities & Energy</span>
@@ -179,11 +247,13 @@ export default function App() {
               onClick={() => setMainMarketTab('NIFTY_INDICES')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'NIFTY_INDICES'
-                  ? 'bg-orange-500 text-neutral-950 font-black shadow-md ring-2 ring-orange-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'NIFTY_INDICES' ? '#ea580c' : 'transparent',
+                color: mainMarketTab === 'NIFTY_INDICES' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
               <Building2 className="w-4 h-4" />
               <span>🇮🇳 Nifty & Indian Indices</span>
@@ -194,13 +264,15 @@ export default function App() {
               onClick={() => setMainMarketTab('INDIAN_PORTFOLIO')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'INDIAN_PORTFOLIO'
-                  ? 'bg-orange-500 text-neutral-950 font-black shadow-md ring-2 ring-orange-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'INDIAN_PORTFOLIO' ? '#ea580c' : 'transparent',
+                color: mainMarketTab === 'INDIAN_PORTFOLIO' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
-              <Briefcase className="w-4 h-4 text-orange-500" />
+              <Briefcase className="w-4 h-4 text-white" />
               <span>💼 Indian Stock Portfolio</span>
             </button>
 
@@ -209,13 +281,15 @@ export default function App() {
               onClick={() => setMainMarketTab('INDIAN_WATCHLIST')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'INDIAN_WATCHLIST'
-                  ? 'bg-orange-500 text-neutral-950 font-black shadow-md ring-2 ring-orange-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'INDIAN_WATCHLIST' ? '#ea580c' : 'transparent',
+                color: mainMarketTab === 'INDIAN_WATCHLIST' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
-              <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+              <Star className="w-4 h-4 text-amber-300 fill-amber-300" />
               <span>🏷️ Indian Stock Watchlist</span>
             </button>
 
@@ -224,14 +298,67 @@ export default function App() {
               onClick={() => setMainMarketTab('STOCK_CONSTITUENTS')}
               className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                 mainMarketTab === 'STOCK_CONSTITUENTS'
-                  ? 'bg-orange-500 text-neutral-950 font-black shadow-md ring-2 ring-orange-400/50'
-                  : isLight
-                  ? 'text-slate-700 hover:bg-slate-100'
-                  : 'text-neutral-300 hover:bg-neutral-800'
+                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
+                  : 'hover:opacity-80'
               }`}
+              style={{
+                backgroundColor: mainMarketTab === 'STOCK_CONSTITUENTS' ? '#ea580c' : 'transparent',
+                color: mainMarketTab === 'STOCK_CONSTITUENTS' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
             >
               <Building className="w-4 h-4" />
-              <span>📊 Nifty 50 & Global Stock Constituents</span>
+              <span>📊 Nifty Total & Global Stock Constituents</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainMarketTab('OPTION_CHAIN')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                mainMarketTab === 'OPTION_CHAIN'
+                  ? 'bg-purple-600 text-white font-black shadow-md ring-2 ring-purple-400/50'
+                  : 'hover:opacity-80'
+              }`}
+              style={{
+                backgroundColor: mainMarketTab === 'OPTION_CHAIN' ? '#7c3aed' : 'transparent',
+                color: mainMarketTab === 'OPTION_CHAIN' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
+            >
+              <Zap className="w-4 h-4 text-amber-300" />
+              <span>⚡ Nifty 50 & Bank Nifty Option Chain</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainMarketTab('STOCK_OPTION_CHAIN')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                mainMarketTab === 'STOCK_OPTION_CHAIN'
+                  ? 'bg-rose-600 text-white font-black shadow-md ring-2 ring-rose-400/50'
+                  : 'hover:opacity-80'
+              }`}
+              style={{
+                backgroundColor: mainMarketTab === 'STOCK_OPTION_CHAIN' ? '#e11d48' : 'transparent',
+                color: mainMarketTab === 'STOCK_OPTION_CHAIN' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
+            >
+              <Briefcase className="w-4 h-4 text-amber-300" />
+              <span>📈 Stock F&O Option Chain</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setMainMarketTab('MARKET_SCREENER')}
+              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
+                mainMarketTab === 'MARKET_SCREENER'
+                  ? 'bg-blue-600 text-white font-black shadow-md ring-2 ring-blue-400/50'
+                  : 'hover:opacity-80'
+              }`}
+              style={{
+                backgroundColor: mainMarketTab === 'MARKET_SCREENER' ? '#2563eb' : 'transparent',
+                color: mainMarketTab === 'MARKET_SCREENER' ? '#ffffff' : 'var(--theme-text-primary)'
+              }}
+            >
+              <SlidersHorizontal className="w-4 h-4 text-amber-300" />
+              <span>📊 Advanced Market Screener</span>
             </button>
           </div>
         </div>
@@ -244,6 +371,9 @@ export default function App() {
         {mainMarketTab === 'STOCK_CONSTITUENTS' && <StockConstituentsView />}
         {mainMarketTab === 'INDIAN_PORTFOLIO' && <IndianStockPortfolioView />}
         {mainMarketTab === 'INDIAN_WATCHLIST' && <IndianStockWatchlistView />}
+        {mainMarketTab === 'OPTION_CHAIN' && <OptionChainView />}
+        {mainMarketTab === 'STOCK_OPTION_CHAIN' && <StockOptionChainView />}
+        {mainMarketTab === 'MARKET_SCREENER' && <AdvancedMarketScreenerView onSelectAsset={handleGlobalAssetSelect} />}
 
         {mainMarketTab === 'CRYPTO' && (
           <>
@@ -253,6 +383,13 @@ export default function App() {
               totalEquity={totalEquity}
               isLiveConnected={isLiveConnected}
               goldHedgeRatio={goldHedgeRatio}
+              cloudSyncStatus={cloudSyncStatus}
+              lastCloudSync={lastCloudSync}
+              onManualCloudSync={() => {
+                syncSimulatorToCloud(true);
+                addNotification('success', 'Firestore Cloud Sync', 'Simulator state successfully synced to Firestore persistent store.');
+              }}
+              onOpenFirestoreModal={() => setIsFirestoreOpen(true)}
               onOpenWhatIf={() => setIsWhatIfOpen(true)}
               onOpenAiReview={() => setIsAiReviewOpen(true)}
               onOpenSettings={() => setIsSettingsOpen(true)}
@@ -286,32 +423,13 @@ export default function App() {
             />
 
         {/* Full Width Trading Stack: Chart + Order Terminal */}
-        <div className="flex flex-col space-y-4">
+        <div className="flex flex-col space-y-3">
           {/* Chart Section */}
-          <div className="w-full flex flex-col space-y-3">
+          <div className="w-full flex flex-col space-y-2">
             <TradingChart
               asset={activeAsset}
               activePositions={positions}
             />
-
-            {/* Real-world Mechanism Banner */}
-            <div
-              className={`rounded-xl p-3 flex items-start gap-3 text-xs border transition-colors ${
-                isLight
-                  ? 'bg-white border-slate-200 text-slate-700 shadow-sm'
-                  : 'bg-neutral-900/80 border-neutral-800 text-neutral-300'
-              }`}
-            >
-              <div className="p-1.5 rounded-lg bg-amber-500/10 text-amber-500 shrink-0 mt-0.5">
-                <ShieldCheck className="w-4 h-4" />
-              </div>
-              <div className="leading-relaxed">
-                <strong className={`block mb-0.5 ${isLight ? 'text-amber-800 font-bold' : 'text-amber-300 font-bold'}`}>
-                  Live Real-Time Feeds (Binance & Bitfinex WebSockets):
-                </strong>
-                Direct real-time order matching feeds for Physical Gold (PAXG) and Crypto Majors. Toggle between 1s, 1m, 5m, 15m, 1h, 4h, and 1D timeframes on the professional Chart above.
-              </div>
-            </div>
           </div>
 
           {/* Order Placement Terminal (Shark Exchange Full Width) */}
@@ -481,11 +599,7 @@ export default function App() {
   </main>
 
       {/* Footer */}
-      <footer
-        className={`py-4 px-4 text-center text-xs font-mono border-t transition-colors ${
-          isLight ? 'bg-white border-slate-200 text-slate-500' : 'bg-neutral-950 border-neutral-900 text-neutral-500'
-        }`}
-      >
+      <footer className="py-4 px-4 text-center text-xs font-mono border-t bg-white border-slate-200 text-slate-500 transition-colors">
         <p>
           AurumX Live Terminal • Real-time feeds via Binance & Bitfinex WebSockets • Sub-second Execution & Slippage Modeling
         </p>
@@ -518,6 +632,24 @@ export default function App() {
         onReset={resetSimulation}
         onAddFunds={(amount) => adjustCashBalance(amount)}
         onClose={() => setIsSettingsOpen(false)}
+      />
+
+      <FirestoreDataModal
+        isOpen={isFirestoreOpen}
+        onClose={() => setIsFirestoreOpen(false)}
+        cashBalance={cashBalance}
+        totalEquity={totalEquity}
+        positions={positions}
+        limitOrders={limitOrders}
+        tradeHistory={tradeHistory}
+        spotHoldings={spotHoldings}
+        lastCloudSync={lastCloudSync}
+        onManualSync={() => syncSimulatorToCloud(true)}
+      />
+
+      <BatchWriterModal
+        isOpen={isBatchModalOpen}
+        onClose={() => setIsBatchModalOpen(false)}
       />
 
       {/* Notifications Toast */}

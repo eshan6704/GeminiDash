@@ -33,7 +33,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
   asset,
   activePositions,
 }) => {
-  const { isLight } = useTheme();
+  const { theme, isLight } = useTheme();
 
   const [timeframe, setTimeframe] = useState<ChartInterval>('15m');
   const [chartType, setChartType] = useState<'candles' | 'line'>('candles');
@@ -95,27 +95,46 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       chartInstanceRef.current = null;
     }
 
+    const getChartThemeColors = () => {
+      switch (theme) {
+        case 'alpine':
+          return { bg: '#ffffff', text: '#0f172a', grid: '#f1f5f9', border: '#e2e8f0' };
+        case 'ivory':
+          return { bg: '#faf8f5', text: '#1c1917', grid: '#f4efe6', border: '#e8e0d5' };
+        case 'nordic':
+          return { bg: '#f4f4f7', text: '#18181b', grid: '#ebebf0', border: '#e2e2e8' };
+        case 'azure':
+          return { bg: '#f0f7ff', text: '#0c4a6e', grid: '#e0f0fe', border: '#bae6fd' };
+        case 'sage':
+          return { bg: '#f2f7f4', text: '#064e3b', grid: '#e2f1e8', border: '#a7f3d0' };
+        default:
+          return { bg: '#ffffff', text: '#0f172a', grid: '#f1f5f9', border: '#e2e8f0' };
+      }
+    };
+
+    const colors = getChartThemeColors();
+
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
       height: containerRef.current.clientHeight || 450,
       layout: {
-        background: { type: ColorType.Solid, color: isLight ? '#ffffff' : '#0a0a0a' },
-        textColor: isLight ? '#334155' : '#a3a3a3',
+        background: { type: ColorType.Solid, color: colors.bg },
+        textColor: colors.text,
       },
       grid: {
-        vertLines: { color: isLight ? '#f1f5f9' : '#171717' },
-        horzLines: { color: isLight ? '#f1f5f9' : '#171717' },
+        vertLines: { color: colors.grid },
+        horzLines: { color: colors.grid },
       },
       crosshair: {
         mode: 1,
       },
       timeScale: {
-        borderColor: isLight ? '#cbd5e1' : '#262626',
+        borderColor: colors.border,
         timeVisible: true,
         secondsVisible: timeframe === '1s',
       },
       rightPriceScale: {
-        borderColor: isLight ? '#cbd5e1' : '#262626',
+        borderColor: colors.border,
       },
     });
 
@@ -173,11 +192,15 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     return () => {
       window.removeEventListener('resize', handleResize);
       if (chartInstanceRef.current) {
-        chartInstanceRef.current.remove();
+        try {
+          chartInstanceRef.current.remove();
+        } catch (e) {
+          // Ignore if already disposed
+        }
         chartInstanceRef.current = null;
       }
     };
-  }, [isLight, chartType, showVolume, asset.category]);
+  }, [theme, isLight, chartType, showVolume, asset.category]);
 
   // Update chart data when candles change
   useEffect(() => {

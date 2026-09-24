@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
+import { subscribeMarketTable, MASTER_CRYPTO_250 } from '../../services/marketDataTables';
 
 export interface CryptoCoinItem {
   rank: number;
@@ -40,7 +41,23 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   onSelectCoinToTrade,
 }) => {
   const { isLight } = useTheme();
-  const [coins, setCoins] = useState<CryptoCoinItem[]>([]);
+  const [coins, setCoins] = useState<CryptoCoinItem[]>(() =>
+    MASTER_CRYPTO_250.map((m) => ({
+      rank: m.rank || 1,
+      id: m.id,
+      name: m.name,
+      symbol: m.symbol,
+      price: m.price,
+      change1h: 0.15,
+      change24h: m.change1d,
+      change7d: m.change1d * 2.5,
+      marketCap: Number(m.marketCap || 1000000000),
+      volume24h: Number(m.volume24h || 50000000),
+      circulatingSupply: 100000000,
+      category: (m.category as any) || 'Layer 1',
+      isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC'].includes(m.symbol),
+    }))
+  );
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [sortField, setSortField] = useState<keyof CryptoCoinItem>('rank');
@@ -48,6 +65,33 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const itemsPerPage = 50;
+
+  // Real-time Firestore subscription to grouped Top 250 table
+  useEffect(() => {
+    const unsub = subscribeMarketTable('crypto_top250', (table) => {
+      if (table && table.data && table.data.length > 0) {
+        setCoins(
+          table.data.map((m) => ({
+            rank: m.rank || 1,
+            id: m.id,
+            name: m.name,
+            symbol: m.symbol,
+            price: m.price,
+            change1h: 0.15,
+            change24h: m.change1d,
+            change7d: m.change1d * 2.2,
+            marketCap: Number(m.marketCap || 1000000000),
+            volume24h: Number(m.volume24h || 50000000),
+            circulatingSupply: 100000000,
+            category: (m.category as any) || 'Layer 1',
+            isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC'].includes(m.symbol),
+          }))
+        );
+      }
+    });
+
+    return () => unsub();
+  }, []);
 
   // Fetch or generate top 250 crypto coins
   const fetchTopCoins = async () => {

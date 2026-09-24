@@ -1,16 +1,91 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
-    function isSignedIn() { return request.auth != null; }
-    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Public Market Data Collections (Public read/write for live price ticks across preview & background feeds)
+    match /market_tables/{tableId} {
+      allow read, write: if true;
+    }
+
+    match /symbol_prices/{symbol} {
+      allow read, write: if true;
+    }
+
+    match /global_indices/{docId} {
+      allow read, write: if true;
+    }
+
+    match /futures/{docId} {
+      allow read, write: if true;
+    }
+
+    match /forex/{docId} {
+      allow read, write: if true;
+    }
+
+    match /commodities/{docId} {
+      allow read, write: if true;
+    }
+
+    // Top-Level Simulator States (Restricted to authenticated user ID or matching simulator session)
+    match /simulator_states/{simulatorId} {
+      allow read, write: if isSignedIn() && (
+        simulatorId == request.auth.uid ||
+        simulatorId == 'user_' + request.auth.uid ||
+        simulatorId.matches('^sim_.*') ||
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid)
+      );
+    }
+
+    // User-scoped document paths & subcollections (Balances, Positions, History)
     match /users/{userId} {
       allow read, write: if isOwner(userId);
-      
-      match /snapshots/{snapshotId} {
+
+      match /simulation/{docId} {
         allow read, write: if isOwner(userId);
       }
+
+      match /simulator/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /snapshots/{docId} {
+        allow read, write: if isOwner(userId);
+      }
+
+      match /{allPaths=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
+    // Collection Group Security Rules for user simulation cross-collection queries
+    match /{path=**}/simulation/{docId} {
+      allow read, write: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid)
+      );
+    }
+
+    match /{path=**}/simulator/{docId} {
+      allow read, write: if isSignedIn() && (
+        (resource != null && resource.data.userId == request.auth.uid) ||
+        (request.resource != null && request.resource.data.userId == request.auth.uid)
+      );
+    }
+
+    // Default deny for unlisted paths
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

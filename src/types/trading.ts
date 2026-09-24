@@ -12,6 +12,7 @@ export interface MarketAsset {
   volume24h: number;
   marketCap?: number;
   lastUpdated: number;
+  dataTimestamp: number;
   description: string;
   goldOunceFactor?: number; // 1 for XAUT/PAXG
 }

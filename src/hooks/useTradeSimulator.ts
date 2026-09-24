@@ -12,6 +12,15 @@ import {
 } from '../types/trading';
 import { INITIAL_ASSETS, fetchLiveMarketData } from '../services/marketData';
 import { liveWebSocketFeed } from '../services/liveWebSocketFeed';
+import { usePersistentSymbols } from '../services/symbolPersistenceService';
+import {
+  saveSimulatorStateToFirestore,
+  loadSimulatorStateFromFirestore,
+  scheduleSimulatorSync,
+  subscribeSyncStatus,
+  getSimulatorId,
+  SyncStatusInfo,
+} from '../services/simulatorSyncService';
 
 const DEFAULT_CONFIG: SimulatorConfig = {
   initialBalance: 100,
@@ -160,6 +169,97 @@ export function useTradeSimulator() {
     }
   }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts]);
 
+  // Firestore Synchronization Status & Hydration across Page Refreshes
+  const [syncInfo, setSyncInfo] = useState<SyncStatusInfo>(() => ({
+    status: 'idle',
+    lastSyncedAt: null,
+    error: null,
+    simulatorId: getSimulatorId(),
+    source: 'local',
+  }));
+  const [isHydrated, setIsHydrated] = useState<boolean>(false);
+
+  // Subscribe to status updates & hydrate simulator state from Firestore on mount
+  useEffect(() => {
+    const unsub = subscribeSyncStatus(setSyncInfo);
+
+    loadSimulatorStateFromFirestore()
+      .then((cloudState) => {
+        if (cloudState) {
+          if (typeof cloudState.cashBalance === 'number') {
+            setCashBalance(cloudState.cashBalance);
+          }
+          if (Array.isArray(cloudState.positions) && cloudState.positions.length > 0) {
+            setPositions(cloudState.positions);
+          }
+          if (Array.isArray(cloudState.limitOrders)) {
+            setLimitOrders(cloudState.limitOrders);
+          }
+          if (Array.isArray(cloudState.tradeHistory)) {
+            setTradeHistory(cloudState.tradeHistory);
+          }
+          if (Array.isArray(cloudState.spotHoldings)) {
+            setSpotHoldings(cloudState.spotHoldings);
+          }
+          if (Array.isArray(cloudState.priceAlerts)) {
+            setPriceAlerts(cloudState.priceAlerts);
+          }
+          if (cloudState.config && typeof cloudState.config.initialBalance === 'number') {
+            setConfig((prev) => ({ ...prev, ...cloudState.config }));
+          }
+          if (cloudState.assets && Object.keys(cloudState.assets).length > 0) {
+            setAssets((prev) => {
+              const merged = { ...prev };
+              Object.entries(cloudState.assets!).forEach(([sym, val]) => {
+                if (merged[sym] && val && val.price) {
+                  merged[sym] = {
+                    ...merged[sym],
+                    price: val.price,
+                    change24h: val.change24h ?? merged[sym].change24h,
+                    high24h: val.high24h ?? merged[sym].high24h,
+                    low24h: val.low24h ?? merged[sym].low24h,
+                    volume24h: val.volume24h ?? merged[sym].volume24h,
+                    lastUpdated: val.lastUpdated ?? merged[sym].lastUpdated,
+                  };
+                }
+              });
+              return merged;
+            });
+          }
+        }
+        setIsHydrated(true);
+      })
+      .catch((err) => {
+        console.warn('[Simulator] Firestore initial hydration warning:', err);
+        setIsHydrated(true);
+      });
+
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  // Synchronize state with Firestore whenever balances, positions, orders, or config change
+  useEffect(() => {
+    if (!isHydrated) return;
+
+    scheduleSimulatorSync(
+      {
+        simulatorId: getSimulatorId(),
+        cashBalance,
+        positions,
+        assets: assetsRef.current,
+        limitOrders,
+        tradeHistory,
+        spotHoldings,
+        priceAlerts,
+        config,
+        updatedAt: new Date().toISOString(),
+      },
+      false
+    );
+  }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts, config, isHydrated]);
+
   // Push notification helper
   const addNotification = useCallback((type: AlertNotification['type'], title: string, message: string) => {
     const newNotif: AlertNotification = {
@@ -176,14 +276,82 @@ export function useTradeSimulator() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   }, []);
 
-  // Initial REST fetch & periodic background refresh
+  const { prices: persistentPrices } = usePersistentSymbols();
+
+  // Instant update from Firestore persistent store
+  useEffect(() => {
+    if (!persistentPrices || Object.keys(persistentPrices).length === 0) return;
+
+    setAssets((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      Object.entries(persistentPrices).forEach(([sym, p]) => {
+        const cleanSym = sym.toUpperCase();
+        if (next[cleanSym] && p.price && typeof p.price === 'number') {
+          const existing = next[cleanSym];
+          const incomingTimestamp = p.updatedAtMs || (p.updatedAt ? new Date(p.updatedAt).getTime() : Date.now());
+          const existingStoredTimestamp = existing.dataTimestamp || existing.lastUpdated || 0;
+
+          // Monotonic Timestamp Check: process & update only if incoming timestamp > existing stored timestamp
+          if (incomingTimestamp > existingStoredTimestamp) {
+            changed = true;
+            next[cleanSym] = {
+              ...existing,
+              price: p.price,
+              change24h: p.changePct !== undefined ? p.changePct : existing.change24h,
+              high24h: p.high || existing.high24h,
+              low24h: p.low || existing.low24h,
+              lastUpdated: incomingTimestamp,
+              dataTimestamp: incomingTimestamp,
+            };
+          }
+        }
+      });
+
+      if (changed) {
+        setLastTickTime(Date.now());
+        checkTriggersAndOrders(next);
+        return next;
+      }
+      return prev;
+    });
+  }, [persistentPrices]);
+
+  // Initial REST fetch & relaxed background fallback (Firestore handles real-time persistence)
   const refreshPrices = useCallback(async () => {
     try {
-      const updated = await fetchLiveMarketData();
-      setAssets((prev) => ({ ...prev, ...updated }));
+      const updated = await fetchLiveMarketData(assetsRef.current);
+      setAssets((prev) => {
+        const next = { ...prev };
+        let changed = false;
+        Object.entries(updated).forEach(([sym, newAsset]) => {
+          if (newAsset && typeof newAsset.price === 'number' && !isNaN(newAsset.price) && newAsset.price > 0) {
+            const existing = next[sym];
+            const incomingTimestamp = newAsset.dataTimestamp || newAsset.lastUpdated || Date.now();
+            const existingStoredTimestamp = existing?.dataTimestamp || existing?.lastUpdated || 0;
+
+            // Monotonic Timestamp Check: process & update only if incoming timestamp > existing stored timestamp
+            if (!existing || incomingTimestamp > existingStoredTimestamp) {
+              changed = true;
+              next[sym] = {
+                ...existing,
+                ...newAsset,
+                price: newAsset.price,
+                lastUpdated: incomingTimestamp,
+                dataTimestamp: incomingTimestamp,
+              };
+            }
+          }
+        });
+        if (changed) {
+          checkTriggersAndOrders(next);
+          return next;
+        }
+        return prev;
+      });
       setIsLiveConnected(true);
       setLastTickTime(Date.now());
-      checkTriggersAndOrders({ ...assetsRef.current, ...updated });
     } catch (err) {
       console.error('REST market refresh fallback failed', err);
     }
@@ -191,7 +359,7 @@ export function useTradeSimulator() {
 
   useEffect(() => {
     refreshPrices();
-    const interval = setInterval(refreshPrices, 30000);
+    const interval = setInterval(refreshPrices, 60000); // 60s relaxed fallback
     return () => clearInterval(interval);
   }, [refreshPrices]);
 
@@ -206,13 +374,21 @@ export function useTradeSimulator() {
         Object.keys(updates).forEach((sym) => {
           const update = updates[sym];
           if (update && next[sym]) {
-            changed = true;
-            next[sym] = {
-              ...next[sym],
-              ...update,
-              price: update.price !== undefined ? update.price : next[sym].price,
-              lastUpdated: Date.now(),
-            };
+            const existing = next[sym];
+            const incomingTimestamp = update.dataTimestamp || update.lastUpdated || Date.now();
+            const existingStoredTimestamp = existing.dataTimestamp || existing.lastUpdated || 0;
+
+            // Monotonic Timestamp Check: process & update only if incoming timestamp > existing stored timestamp
+            if (incomingTimestamp > existingStoredTimestamp) {
+              changed = true;
+              next[sym] = {
+                ...existing,
+                ...update,
+                price: update.price !== undefined ? update.price : existing.price,
+                lastUpdated: incomingTimestamp,
+                dataTimestamp: incomingTimestamp,
+              };
+            }
           }
         });
 
@@ -971,6 +1147,44 @@ export function useTradeSimulator() {
   });
   const goldHedgeRatio = totalEquity > 0 ? (totalGoldValue / totalEquity) * 100 : 0;
 
+  // Manual Firestore Sync helper
+  const syncSimulatorToCloud = useCallback(async (immediate = true) => {
+    const data = {
+      simulatorId: getSimulatorId(),
+      cashBalance: cashRef.current,
+      positions: positionsRef.current,
+      assets: assetsRef.current,
+      limitOrders: limitOrdersRef.current,
+      tradeHistory,
+      spotHoldings: spotHoldingsRef.current,
+      priceAlerts: priceAlertsRef.current,
+      config: configRef.current,
+      totalEquity,
+      totalRealizedPnL,
+      updatedAt: new Date().toISOString(),
+    };
+    if (immediate) {
+      return await saveSimulatorStateToFirestore(data);
+    }
+    scheduleSimulatorSync(data, false);
+    return true;
+  }, [tradeHistory, totalEquity, totalRealizedPnL]);
+
+  const reloadSimulatorFromCloud = useCallback(async () => {
+    const cloudState = await loadSimulatorStateFromFirestore();
+    if (cloudState) {
+      if (typeof cloudState.cashBalance === 'number') setCashBalance(cloudState.cashBalance);
+      if (Array.isArray(cloudState.positions)) setPositions(cloudState.positions);
+      if (Array.isArray(cloudState.limitOrders)) setLimitOrders(cloudState.limitOrders);
+      if (Array.isArray(cloudState.tradeHistory)) setTradeHistory(cloudState.tradeHistory);
+      if (Array.isArray(cloudState.spotHoldings)) setSpotHoldings(cloudState.spotHoldings);
+      if (Array.isArray(cloudState.priceAlerts)) setPriceAlerts(cloudState.priceAlerts);
+      if (cloudState.config) setConfig((prev) => ({ ...prev, ...cloudState.config }));
+      return true;
+    }
+    return false;
+  }, []);
+
   return {
     assets,
     selectedSymbol,
@@ -992,6 +1206,13 @@ export function useTradeSimulator() {
     winRate,
     totalTrades,
     goldHedgeRatio,
+    // Firestore Simulator Synchronization
+    cloudSyncStatus: syncInfo.status,
+    lastCloudSync: syncInfo.lastSyncedAt,
+    syncSource: syncInfo.source,
+    simulatorId: syncInfo.simulatorId,
+    syncSimulatorToCloud,
+    reloadSimulatorFromCloud,
     // Entities
     positions,
     limitOrders,

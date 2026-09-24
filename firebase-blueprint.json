@@ -1,5 +1,26 @@
 {
   "entities": {
+    "SymbolPrice": {
+      "title": "SymbolPrice",
+      "description": "Real-time symbol price and market statistics persisted by the backend",
+      "type": "object",
+      "properties": {
+        "symbol": { "type": "string", "description": "Asset ticker symbol" },
+        "name": { "type": "string", "description": "Asset display name" },
+        "price": { "type": "number", "description": "Current price" },
+        "previousClose": { "type": "number", "description": "Previous closing price" },
+        "change": { "type": "number", "description": "Absolute price change" },
+        "changePct": { "type": "number", "description": "Percentage price change" },
+        "high": { "type": "number", "description": "Day high price" },
+        "low": { "type": "number", "description": "Day low price" },
+        "volume": { "type": "number", "description": "24h trading volume" },
+        "currency": { "type": "string", "description": "Currency code e.g. USD, INR" },
+        "category": { "type": "string", "description": "Asset class e.g. crypto, gold, equity, index" },
+        "source": { "type": "string", "description": "Data provider source" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["symbol", "price", "updatedAt"]
+    },
     "UserProfile": {
       "title": "UserProfile",
       "description": "User profile with authentication details",
@@ -21,9 +42,52 @@
         "timestamp": { "type": "string", "format": "date-time", "description": "Snapshot time" }
       },
       "required": ["userId", "data", "timestamp"]
+    },
+    "SimulatorState": {
+      "title": "SimulatorState",
+      "description": "Trading simulator state including assets, positions, orders, balances, and history",
+      "type": "object",
+      "properties": {
+        "simulatorId": { "type": "string", "description": "Unique simulator identifier or user UID" },
+        "userId": { "type": "string", "description": "Owner UID or client ID" },
+        "cashBalance": { "type": "number", "description": "Available cash balance in USDT" },
+        "positions": { "type": "array", "description": "List of active leveraged trading positions" },
+        "assets": { "type": "object", "description": "Map of tracked market asset prices and statistics" },
+        "limitOrders": { "type": "array", "description": "List of active limit orders" },
+        "tradeHistory": { "type": "array", "description": "Closed trades history records" },
+        "spotHoldings": { "type": "array", "description": "User spot asset holdings" },
+        "priceAlerts": { "type": "array", "description": "Active price alerts" },
+        "config": { "type": "object", "description": "Simulator configuration options" },
+        "totalEquity": { "type": "number", "description": "Net portfolio equity" },
+        "totalRealizedPnL": { "type": "number", "description": "Total realized profit or loss" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last update" }
+      },
+      "required": ["simulatorId", "cashBalance", "updatedAt"]
+    },
+    "MarketTable": {
+      "title": "MarketTable",
+      "description": "Grouped market dataset stored in table format (Nifty 500, Crypto 250, Indices, Forex, Commodity, Futures)",
+      "type": "object",
+      "properties": {
+        "tableId": { "type": "string", "description": "Identifier for the table (e.g. nifty_500, crypto_top250, indian_indices)" },
+        "name": { "type": "string", "description": "Human readable table name" },
+        "category": { "type": "string", "description": "Market sector or asset class" },
+        "count": { "type": "number", "description": "Total number of rows in the table" },
+        "data": { "type": "array", "description": "Array of row objects in table format" },
+        "updatedAt": { "type": "string", "description": "ISO timestamp of last table sync" }
+      },
+      "required": ["tableId", "updatedAt", "count"]
     }
   },
   "firestore": {
+    "/market_tables/{tableId}": {
+      "schema": "MarketTable",
+      "description": "Grouped and batch market tables stored in compact tabular format"
+    },
+    "/symbol_prices/{symbol}": {
+      "schema": "SymbolPrice",
+      "description": "Persistent real-time and historical symbol market prices stored by backend"
+    },
     "/users/{userId}": {
       "schema": "UserProfile",
       "description": "User profile data"
@@ -31,6 +95,14 @@
     "/users/{userId}/snapshots/{snapshotId}": {
       "schema": "PortfolioSnapshot",
       "description": "Stored portfolio snapshots"
+    },
+    "/simulator_states/{simulatorId}": {
+      "schema": "SimulatorState",
+      "description": "Persistent trading simulator state synchronized across page refreshes"
+    },
+    "/users/{userId}/simulator/{docId}": {
+      "schema": "SimulatorState",
+      "description": "User-specific simulator state"
     }
   }
 }

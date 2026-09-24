@@ -65,8 +65,11 @@ Keep tone professional, objective, actionable, and formatted in clean markdown b
       if (response.text) {
         return response.text;
       }
-    } catch (e) {
-      console.warn('Gemini API call failed, using quantitative risk model fallback', e);
+    } catch (e: any) {
+      // Silently fallback to quantitative model on quota/rate-limit exhaustion
+      if (!e?.message?.includes('RESOURCE_EXHAUSTED') && !e?.message?.includes('quota')) {
+        console.warn('Gemini API call failed, using quantitative risk model fallback');
+      }
     }
   }
 

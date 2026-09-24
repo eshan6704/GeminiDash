@@ -13,6 +13,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 173000000,
     marketCap: 1880000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'Regulated digital gold token backed 1:1 by London Good Delivery gold bars held by Paxos Trust.',
     goldOunceFactor: 1,
   },
@@ -28,6 +29,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 42000000000,
     marketCap: 1730000000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'The pioneering decentralized digital cryptocurrency and store of value.',
   },
   ETH: {
@@ -42,6 +44,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 16100000000,
     marketCap: 336000000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'Leading smart-contract platform for decentralized finance and web3 applications.',
   },
   SOL: {
@@ -56,6 +59,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 4140000000,
     marketCap: 69900000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'High-throughput, ultra-low fee proof-of-stake layer 1 blockchain.',
   },
   ZEC: {
@@ -70,6 +74,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 50000000,
     marketCap: 700000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'Privacy-focused cryptocurrency based on zk-SNARKs technology.',
   },
   XRP: {
@@ -84,6 +89,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 6700000000,
     marketCap: 102000000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'Real-time gross settlement system and currency exchange network token.',
   },
   DOGE: {
@@ -98,6 +104,7 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     volume24h: 1900000000,
     marketCap: 31000000000,
     lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
     description: 'Popular decentralized peer-to-peer digital currency.',
   },
 };
@@ -112,9 +119,15 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   ZEC: 'ZECUSDT',
 };
 
-// Fetch live market data for all supported assets
-export async function fetchLiveMarketData(): Promise<Record<string, MarketAsset>> {
-  const updatedAssets = { ...INITIAL_ASSETS };
+// Fetch live market data for all supported assets while preserving current live prices
+export async function fetchLiveMarketData(existingAssets?: Record<string, MarketAsset>): Promise<Record<string, MarketAsset>> {
+  const updatedAssets: Record<string, MarketAsset> = {};
+
+  Object.keys(INITIAL_ASSETS).forEach((symbol) => {
+    const existing = existingAssets?.[symbol];
+    const initial = INITIAL_ASSETS[symbol];
+    updatedAssets[symbol] = existing ? { ...existing } : { ...initial };
+  });
 
   try {
     // Fetch Binance 24hr tickers for crypto & PAXG
@@ -136,6 +149,7 @@ export async function fetchLiveMarketData(): Promise<Record<string, MarketAsset>
               const low = parseFloat(item.lowPrice);
               const volume = parseFloat(item.quoteVolume);
 
+              const nowMs = Date.now();
               updatedAssets[sym] = {
                 ...updatedAssets[sym],
                 price: isNaN(price) ? updatedAssets[sym].price : price,
@@ -143,7 +157,8 @@ export async function fetchLiveMarketData(): Promise<Record<string, MarketAsset>
                 high24h: isNaN(high) ? updatedAssets[sym].high24h : high,
                 low24h: isNaN(low) ? updatedAssets[sym].low24h : low,
                 volume24h: isNaN(volume) ? updatedAssets[sym].volume24h : volume,
-                lastUpdated: Date.now(),
+                lastUpdated: nowMs,
+                dataTimestamp: nowMs,
               };
             }
           });
@@ -168,12 +183,14 @@ export async function fetchLiveMarketData(): Promise<Record<string, MarketAsset>
             const asset = updatedAssets[key];
             const g = geckoData[asset.id];
             if (g && g.usd) {
+              const nowMs = Date.now();
               updatedAssets[key] = {
                 ...asset,
                 price: g.usd,
                 change24h: g.usd_24h_change ? Number(g.usd_24h_change.toFixed(2)) : asset.change24h,
                 volume24h: g.usd_24h_vol || asset.volume24h,
-                lastUpdated: Date.now(),
+                lastUpdated: nowMs,
+                dataTimestamp: nowMs,
               };
             }
           });

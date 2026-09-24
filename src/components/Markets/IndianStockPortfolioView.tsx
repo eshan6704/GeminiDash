@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useIndianStocks, IndianHolding, IndianStock } from '../../hooks/useIndianStocks';
 import { useTheme } from '../../context/ThemeContext';
-import { useSheetsSync } from '../../hooks/useSheetsSync';
 import {
   TrendingUp,
   TrendingDown,
@@ -18,11 +17,12 @@ import {
   Sparkles,
   Award,
   Zap,
+  ArrowUpRight,
 } from 'lucide-react';
+import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
 
 export const IndianStockPortfolioView: React.FC = () => {
   const { colors, isLight } = useTheme();
-  const { performSync, enableAutoSync } = useSheetsSync();
   const {
     stocks,
     holdings,
@@ -44,6 +44,10 @@ export const IndianStockPortfolioView: React.FC = () => {
   const [tradeQty, setTradeQty] = useState<number>(10);
   const [tradeError, setTradeError] = useState<string>('');
   const [tradeSuccess, setTradeSuccess] = useState<string>('');
+
+  // Detail modal state
+  const [detailItem, setDetailItem] = useState<GlobalIndexDetailItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
 
   // Tab state within the portfolio view: 'HOLDINGS' | 'ANALYSIS' | 'TRANSACTIONS'
   const [subTab, setSubTab] = useState<'HOLDINGS' | 'ANALYSIS' | 'TRANSACTIONS'>('HOLDINGS');
@@ -138,30 +142,6 @@ export const IndianStockPortfolioView: React.FC = () => {
             >
               <PlusCircle className="w-3.5 h-3.5" />
               <span>Add ₹50k</span>
-            </button>
-
-            <button
-              onClick={enableAutoSync}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                isLight
-                  ? 'bg-blue-50 hover:bg-blue-100 text-blue-800 border-blue-200'
-                  : 'bg-blue-950/20 hover:bg-blue-900/40 text-blue-400 border-blue-500/20'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              <span>Enable 15m Auto-Sync</span>
-            </button>
-
-            <button
-              onClick={performSync}
-              className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center gap-1.5 ${
-                isLight
-                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200'
-                  : 'bg-emerald-950/20 hover:bg-emerald-900/40 text-emerald-400 border-emerald-500/20'
-              }`}
-            >
-              <PieChart className="w-3.5 h-3.5" />
-              <span>Manual Sync Now</span>
             </button>
 
             <button
@@ -300,9 +280,36 @@ export const IndianStockPortfolioView: React.FC = () => {
                         const pnlPct = (pnl / h.investedValue) * 100;
 
                         return (
-                          <tr key={h.symbol} className="hover:bg-neutral-800/10 transition-colors">
+                          <tr
+                            key={h.symbol}
+                            onClick={() => {
+                              setDetailItem({
+                                id: h.symbol.toLowerCase(),
+                                name: h.name,
+                                symbol: h.symbol,
+                                yahooSymbol: `${h.symbol}.NS`,
+                                category: 'Indian Portfolio Asset',
+                                region: 'India (NSE)',
+                                price: livePrice,
+                                change1d: stock ? stock.change1d : 0,
+                                change1dPts: stock ? Number((livePrice * (stock.change1d / 100)).toFixed(2)) : 0,
+                                high24h: stock ? stock.high52w : livePrice * 1.02,
+                                low24h: stock ? stock.low52w : livePrice * 0.98,
+                                status: 'OPEN',
+                                currency: 'INR',
+                                peRatio: stock ? stock.peRatio : 22,
+                                isRealLive: true,
+                              });
+                              setIsDetailOpen(true);
+                            }}
+                            className="hover:bg-orange-500/10 cursor-pointer transition-colors group"
+                            title="Click to view historical trend chart & Gemini AI insights"
+                          >
                             <td className="py-3 font-semibold">
-                              <div>{h.name}</div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="group-hover:text-orange-600 transition-colors">{h.name}</span>
+                                <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-orange-600" />
+                              </div>
                               <div className="text-[10px] text-slate-400 font-mono">{h.symbol}</div>
                             </td>
                             <td className="py-3 text-right font-mono font-bold">{h.qty}</td>
@@ -601,6 +608,13 @@ export const IndianStockPortfolioView: React.FC = () => {
           </form>
         </div>
       </div>
+
+      {/* PORTFOLIO ASSET DETAIL MODAL */}
+      <GlobalIndexDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        item={detailItem}
+      />
     </div>
   );
 };

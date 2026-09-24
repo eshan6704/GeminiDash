@@ -20,6 +20,7 @@ import {
 import { NiftyStockAnalysisModal } from './NiftyStockAnalysisModal';
 import { AiFundamentalAnalystPanel } from './AiFundamentalAnalystPanel';
 import { fetchBatchLiveQuotes, fetchLiveQuote } from '../../services/liveMarketService';
+import { subscribeMarketTable, fetchMarketTable, MASTER_NIFTY_500, MarketTableRow } from '../../services/marketDataTables';
 
 export interface StockConstituentItem {
   rank: number;
@@ -47,8 +48,8 @@ export const StockConstituentsView: React.FC = () => {
   const [tierFilter, setTierFilter] = useState<string>('ALL');
   const [sectorFilter, setSectorFilter] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortField, setSortField] = useState<keyof StockConstituentItem>('weightagePct');
-  const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [sortField, setSortField] = useState<keyof StockConstituentItem>('rank');
+  const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [selectedStockForAnalysis, setSelectedStockForAnalysis] = useState<StockConstituentItem | null>(null);
   const [activeAnalystStock, setActiveAnalystStock] = useState<StockConstituentItem | null>(null);
@@ -56,68 +57,105 @@ export const StockConstituentsView: React.FC = () => {
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
   const itemsPerPage = 25;
 
-  const [stocks, setStocks] = useState<StockConstituentItem[]>([
-    // NIFTY 50 HEAVYWEIGHTS
-    { rank: 1, id: 'hdfcbank', name: 'HDFC Bank Ltd', symbol: 'HDFCBANK', yahooSymbol: 'HDFCBANK.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Banking & Finance', price: 1785.40, currency: 'INR', weightagePct: 11.45, change1d: 1.12, high52w: 1810, low52w: 1365, peRatio: 19.8, marketCap: '₹13.6 Lakh Cr' },
-    { rank: 2, id: 'reliance', name: 'Reliance Industries', symbol: 'RELIANCE', yahooSymbol: 'RELIANCE.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Energy & Power', price: 2980.50, currency: 'INR', weightagePct: 9.85, change1d: 0.85, high52w: 3215, low52w: 2220, peRatio: 26.4, marketCap: '₹20.2 Lakh Cr' },
-    { rank: 3, id: 'icicibank', name: 'ICICI Bank Ltd', symbol: 'ICICIBANK', yahooSymbol: 'ICICIBANK.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Banking & Finance', price: 1265.80, currency: 'INR', weightagePct: 7.92, change1d: 0.94, high52w: 1310, low52w: 920, peRatio: 18.2, marketCap: '₹8.9 Lakh Cr' },
-    { rank: 4, id: 'infosys', name: 'Infosys Ltd', symbol: 'INFY', yahooSymbol: 'INFY.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'IT & Tech', price: 1920.30, currency: 'INR', weightagePct: 5.84, change1d: 1.85, high52w: 1990, low52w: 1350, peRatio: 27.5, marketCap: '₹7.9 Lakh Cr' },
-    { rank: 5, id: 'tcs', name: 'Tata Consultancy Services', symbol: 'TCS', yahooSymbol: 'TCS.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'IT & Tech', price: 4280.00, currency: 'INR', weightagePct: 4.12, change1d: 1.35, high52w: 4580, low52w: 3400, peRatio: 31.0, marketCap: '₹15.5 Lakh Cr' },
-    { rank: 6, id: 'itc', name: 'ITC Ltd', symbol: 'ITC', yahooSymbol: 'ITC.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'FMCG & Consumer', price: 495.20, currency: 'INR', weightagePct: 3.95, change1d: -0.25, high52w: 528, low52w: 399, peRatio: 28.1, marketCap: '₹6.2 Lakh Cr' },
-    { rank: 7, id: 'lnt', name: 'Larsen & Toubro', symbol: 'LT', yahooSymbol: 'LT.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Infrastructure', price: 3640.10, currency: 'INR', weightagePct: 3.65, change1d: 0.62, high52w: 3920, low52w: 2980, peRatio: 33.2, marketCap: '₹5.0 Lakh Cr' },
-    { rank: 8, id: 'bhartiairtel', name: 'Bharti Airtel Ltd', symbol: 'BHARTIARTL', yahooSymbol: 'BHARTIARTL.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'IT & Tech', price: 1680.50, currency: 'INR', weightagePct: 3.42, change1d: 0.45, high52w: 1750, low52w: 910, peRatio: 48.0, marketCap: '₹9.8 Lakh Cr' },
-    { rank: 9, id: 'tatamotors', name: 'Tata Motors Ltd', symbol: 'TATAMOTORS', yahooSymbol: 'TATAMOTORS.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Auto & EV', price: 985.60, currency: 'INR', weightagePct: 2.85, change1d: 1.95, high52w: 1175, low52w: 610, peRatio: 11.2, marketCap: '₹3.6 Lakh Cr' },
-    { rank: 10, id: 'sbi', name: 'State Bank of India', symbol: 'SBIN', yahooSymbol: 'SBIN.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Banking & Finance', price: 842.10, currency: 'INR', weightagePct: 2.75, change1d: 0.72, high52w: 912, low52w: 560, peRatio: 10.8, marketCap: '₹7.5 Lakh Cr' },
-    { rank: 11, id: 'axisbank', name: 'Axis Bank Ltd', symbol: 'AXISBANK', yahooSymbol: 'AXISBANK.NS', exchange: 'NSE', tier: 'Nifty 50', sector: 'Banking & Finance', price: 1195.40, currency: 'INR', weightagePct: 2.52, change1d: 0.58, high52w: 1340, low52w: 930, peRatio: 13.5, marketCap: '₹3.7 Lakh Cr' },
+  const [stocks, setStocks] = useState<StockConstituentItem[]>(() =>
+    MASTER_NIFTY_500.map((m) => ({
+      rank: m.rank || 1,
+      id: m.id,
+      name: m.name,
+      symbol: m.symbol,
+      yahooSymbol: `${m.symbol}.NS`,
+      exchange: (m.exchange as any) || 'NSE',
+      sector: (m.sector as any) || 'Banking & Finance',
+      tier: (m.tier as any) || 'Nifty 50',
+      price: m.price,
+      currency: (m.currency as any) || 'INR',
+      weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
+      change1d: m.change1d,
+      high52w: m.high24h || Math.round(m.price * 1.1),
+      low52w: m.low24h || Math.round(m.price * 0.9),
+      peRatio: m.peRatio || 25,
+      marketCap: String(m.marketCap || '₹10,000 Cr'),
+    }))
+  );
 
-    // NIFTY NEXT 50 & DEFENSE / PSU STARS
-    { rank: 12, id: 'hal', name: 'Hindustan Aeronautics', symbol: 'HAL', yahooSymbol: 'HAL.NS', exchange: 'NSE', tier: 'Nifty Next 50', sector: 'Defense & Aerospace', price: 4520.00, currency: 'INR', weightagePct: 1.85, change1d: 2.85, high52w: 5670, low52w: 1950, peRatio: 38.5, marketCap: '₹3.0 Lakh Cr' },
-    { rank: 13, id: 'bel', name: 'Bharat Electronics', symbol: 'BEL', yahooSymbol: 'BEL.NS', exchange: 'NSE', tier: 'Nifty Next 50', sector: 'Defense & Aerospace', price: 285.40, currency: 'INR', weightagePct: 1.62, change1d: 3.12, high52w: 340, low52w: 128, peRatio: 45.0, marketCap: '₹2.1 Lakh Cr' },
-    { rank: 14, id: 'irfc', name: 'Indian Railway Finance', symbol: 'IRFC', yahooSymbol: 'IRFC.NS', exchange: 'NSE', tier: 'Nifty Next 50', sector: 'PSU & Railways', price: 162.80, currency: 'INR', weightagePct: 1.42, change1d: 1.85, high52w: 229, low52w: 72, peRatio: 31.0, marketCap: '₹2.1 Lakh Cr' },
-    { rank: 15, id: 'zomato', name: 'Zomato Ltd', symbol: 'ZOMATO', yahooSymbol: 'ZOMATO.NS', exchange: 'NSE', tier: 'Nifty Next 50', sector: 'IT & Tech', price: 275.40, currency: 'INR', weightagePct: 1.55, change1d: 4.25, high52w: 298, low52w: 98, peRatio: 120.0, marketCap: '₹2.4 Lakh Cr' },
-    { rank: 16, id: 'jiofin', name: 'Jio Financial Services', symbol: 'JIOFIN', yahooSymbol: 'JIOFIN.NS', exchange: 'NSE', tier: 'Nifty Next 50', sector: 'Banking & Finance', price: 342.00, currency: 'INR', weightagePct: 1.38, change1d: 0.95, high52w: 394, low52w: 205, peRatio: 85.0, marketCap: '₹2.2 Lakh Cr' },
-    { rank: 17, id: 'trent', name: 'Trent Ltd (Westside)', symbol: 'TRENT', yahooSymbol: 'TRENT.NS', exchange: 'NSE', tier: 'Nifty Next 50', sector: 'FMCG & Consumer', price: 7850.00, currency: 'INR', weightagePct: 1.95, change1d: 2.45, high52w: 8340, low52w: 2010, peRatio: 140.0, marketCap: '₹2.8 Lakh Cr' },
+  // Subscribe to grouped Nifty 500 table in Firestore (single document batch read)
+  useEffect(() => {
+    const unsubscribe = subscribeMarketTable('nifty_500', (table) => {
+      if (table && Array.isArray(table.data) && table.data.length > 0) {
+        setStocks((prev) => {
+          const existingMap = new Map(prev.map((s) => [s.symbol, s]));
+          return table.data.map((m) => {
+            const existing = existingMap.get(m.symbol);
+            const incomingMs = m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
+            const existingMs = (existing as any)?.updatedAtMs || 0;
 
-    // MIDCAP 150 & SMALLCAP 250 MULTIBAGGERS
-    { rank: 18, id: 'suzlon', name: 'Suzlon Energy', symbol: 'SUZLON', yahooSymbol: 'SUZLON.NS', exchange: 'NSE', tier: 'Nifty Midcap 150', sector: 'Energy & Power', price: 74.50, currency: 'INR', weightagePct: 0.85, change1d: 4.85, high52w: 86, low52w: 24, peRatio: 82.0, marketCap: '₹1.0 Lakh Cr' },
-    { rank: 19, id: 'cdsl', name: 'Central Depository Services', symbol: 'CDSL', yahooSymbol: 'CDSL.NS', exchange: 'NSE', tier: 'Nifty Midcap 150', sector: 'Banking & Finance', price: 1540.00, currency: 'INR', weightagePct: 0.72, change1d: 3.15, high52w: 1680, low52w: 780, peRatio: 65.0, marketCap: '₹32,000 Cr' },
-    { rank: 20, id: 'polycab', name: 'Polycab India', symbol: 'POLYCAB', yahooSymbol: 'POLYCAB.NS', exchange: 'NSE', tier: 'Nifty Midcap 150', sector: 'Capital Goods', price: 6850.00, currency: 'INR', weightagePct: 0.92, change1d: 1.65, high52w: 7400, low52w: 4500, peRatio: 52.0, marketCap: '₹1.0 Lakh Cr' },
-    { rank: 21, id: 'persistent', name: 'Persistent Systems', symbol: 'PERSISTENT', yahooSymbol: 'PERSISTENT.NS', exchange: 'NSE', tier: 'Nifty Midcap 150', sector: 'IT & Tech', price: 5480.00, currency: 'INR', weightagePct: 0.88, change1d: 2.15, high52w: 5900, low52w: 3200, peRatio: 55.0, marketCap: '₹85,000 Cr' },
-    { rank: 22, id: 'dixon', name: 'Dixon Technologies', symbol: 'DIXON', yahooSymbol: 'DIXON.NS', exchange: 'NSE', tier: 'Nifty Midcap 150', sector: 'IT & Tech', price: 14200.00, currency: 'INR', weightagePct: 0.95, change1d: 3.85, high52w: 15800, low52w: 4800, peRatio: 115.0, marketCap: '₹85,000 Cr' },
-    { rank: 23, id: 'mazdock', name: 'Mazagon Dock Shipbuilders', symbol: 'MAZDOCK', yahooSymbol: 'MAZDOCK.NS', exchange: 'NSE', tier: 'Nifty Smallcap 250', sector: 'Defense & Aerospace', price: 4250.00, currency: 'INR', weightagePct: 0.65, change1d: 5.25, high52w: 5860, low52w: 1850, peRatio: 42.0, marketCap: '₹85,000 Cr' },
-    { rank: 24, id: 'kpi', name: 'KPI Green Energy', symbol: 'KPIGREEN', yahooSymbol: 'KPIGREEN.NS', exchange: 'NSE', tier: 'Nifty Smallcap 250', sector: 'Energy & Power', price: 820.00, currency: 'INR', weightagePct: 0.45, change1d: 4.95, high52w: 1120, low52w: 340, peRatio: 48.0, marketCap: '₹18,000 Cr' },
+            if (existing && existingMs > 0 && incomingMs <= existingMs) {
+              return existing;
+            }
 
-    // GLOBAL MEGA CAPS (NASDAQ & NYSE)
-    { rank: 25, id: 'nvidia', name: 'NVIDIA Corporation', symbol: 'NVDA', yahooSymbol: 'NVDA', exchange: 'NASDAQ', tier: 'Global Tech', sector: 'IT & Tech', price: 142.50, currency: 'USD', weightagePct: 7.20, change1d: 3.45, high52w: 148, low52w: 45, peRatio: 62.0, marketCap: '$3.5 Trillion' },
-    { rank: 26, id: 'apple', name: 'Apple Inc', symbol: 'AAPL', yahooSymbol: 'AAPL', exchange: 'NASDAQ', tier: 'Global Tech', sector: 'IT & Tech', price: 232.10, currency: 'USD', weightagePct: 6.85, change1d: 0.85, high52w: 237, low52w: 164, peRatio: 34.0, marketCap: '$3.4 Trillion' },
-    { rank: 27, id: 'microsoft', name: 'Microsoft Corporation', symbol: 'MSFT', yahooSymbol: 'MSFT', exchange: 'NASDAQ', tier: 'Global Tech', sector: 'IT & Tech', price: 428.40, currency: 'USD', weightagePct: 6.15, change1d: 1.12, high52w: 468, low52w: 309, peRatio: 35.5, marketCap: '$3.1 Trillion' },
-  ]);
+            const validPrice = (typeof m.price === 'number' && !isNaN(m.price) && m.price > 0) ? m.price : (existing?.price || m.price);
+            return {
+              rank: m.rank || 1,
+              id: m.id,
+              name: m.name,
+              symbol: m.symbol,
+              yahooSymbol: `${m.symbol}.NS`,
+              exchange: (m.exchange as any) || 'NSE',
+              sector: (m.sector as any) || 'Banking & Finance',
+              tier: (m.tier as any) || 'Nifty 50',
+              price: validPrice,
+              currency: (m.currency as any) || 'INR',
+              weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
+              change1d: m.change1d,
+              high52w: m.high24h || Math.round(validPrice * 1.1),
+              low52w: m.low24h || Math.round(validPrice * 0.9),
+              peRatio: m.peRatio || 25,
+              marketCap: String(m.marketCap || '₹10,000 Cr'),
+              isRealLive: true,
+              updatedAtMs: incomingMs,
+            } as any;
+          });
+        });
+        setLastRefreshed(new Date(table.updatedAt || Date.now()).toLocaleTimeString('en-IN'));
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const loadRealStockQuotes = async () => {
     setIsLoadingLive(true);
-    const symbolsToFetch = stocks.map((s) => s.yahooSymbol);
-    const liveMap = await fetchBatchLiveQuotes(symbolsToFetch);
-
-    if (Object.keys(liveMap).length > 0) {
-      setStocks((prev) =>
-        prev.map((st) => {
-          const live = liveMap[st.yahooSymbol];
-          if (live && live.price > 0) {
-            return {
-              ...st,
-              price: live.price,
-              change1d: live.changePct,
-              high52w: live.high ? Math.max(st.high52w, live.high) : st.high52w,
-              low52w: live.low ? Math.min(st.low52w, live.low) : st.low52w,
-              isRealLive: true,
-            };
-          }
-          return st;
-        })
-      );
-      setLastRefreshed(new Date().toLocaleTimeString('en-IN'));
+    try {
+      const table = await fetchMarketTable('nifty_500');
+      if (table && table.data) {
+        setStocks(
+          table.data.map((m) => ({
+            rank: m.rank || 1,
+            id: m.id,
+            name: m.name,
+            symbol: m.symbol,
+            yahooSymbol: `${m.symbol}.NS`,
+            exchange: (m.exchange as any) || 'NSE',
+            sector: (m.sector as any) || 'Banking & Finance',
+            tier: (m.tier as any) || 'Nifty 50',
+            price: m.price,
+            currency: (m.currency as any) || 'INR',
+            weightagePct: Number((100 / (m.rank || 1)).toFixed(2)),
+            change1d: m.change1d,
+            high52w: m.high24h || Math.round(m.price * 1.1),
+            low52w: m.low24h || Math.round(m.price * 0.9),
+            peRatio: m.peRatio || 25,
+            marketCap: String(m.marketCap || '₹10,000 Cr'),
+            isRealLive: true,
+          }))
+        );
+        setLastRefreshed(new Date().toLocaleTimeString('en-IN'));
+      }
+    } catch {
+      // Keep state
+    } finally {
+      setIsLoadingLive(false);
     }
-    setIsLoadingLive(false);
   };
 
   useEffect(() => {
@@ -309,11 +347,12 @@ export const StockConstituentsView: React.FC = () => {
               isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-neutral-950 border-neutral-800 text-orange-400'
             }`}
           >
-            <option value="ALL">🇮🇳 All Nifty 500 Tiers</option>
+            <option value="ALL">🇮🇳 Nifty Total Market (All Tiers)</option>
             <option value="Nifty 50">Nifty 50 (LargeCap)</option>
-            <option value="Nifty Next 50">Nifty Next 50</option>
-            <option value="Nifty Midcap 150">Nifty Midcap 150</option>
-            <option value="Nifty Smallcap 250">Nifty Smallcap 250</option>
+            <option value="Nifty Next 50">Nifty Next 50 (LargeCap)</option>
+            <option value="Nifty Midcap 150">Nifty Midcap 150 (MidCap)</option>
+            <option value="Nifty Smallcap 250">Nifty Smallcap 250 (SmallCap)</option>
+            <option value="Nifty Microcap 250">Nifty Microcap 250 (MicroCap)</option>
             <option value="Global Tech">Global Tech MegaCaps</option>
           </select>
 

@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
-export type Theme = 'dark' | 'light' | 'cyberpunk' | 'emerald' | 'ocean' | 'dracula';
+export type Theme = 'executive' | 'alpine' | 'ivory' | 'nordic' | 'azure' | 'sage';
 
 export interface ThemeColors {
+  id: Theme;
   name: string;
-  isLight: boolean;
+  isLight: true;
   bgMain: string;
   bgCard: string;
   borderCard: string;
@@ -20,116 +21,122 @@ export interface ThemeColors {
 }
 
 export const themes: Record<Theme, ThemeColors> = {
-  dark: {
-    name: 'Classic Dark',
-    isLight: false,
-    bgMain: 'bg-neutral-950',
-    bgCard: 'bg-neutral-900',
-    borderCard: 'border-neutral-800',
-    textColor: 'text-neutral-100',
-    textMuted: 'text-neutral-400',
-    primary: 'amber-500',
-    accent: 'orange-500',
-    buttonBg: 'bg-amber-500 hover:bg-amber-600',
-    buttonText: 'text-neutral-950',
-    accentGlow: 'shadow-amber-500/20',
-    ringColor: 'ring-amber-400/50',
-    tagline: 'Institutional Gold & Onyx style',
-  },
-  light: {
-    name: 'Classic Light',
+  executive: {
+    id: 'executive',
+    name: 'Executive Platinum Daylight',
     isLight: true,
-    bgMain: 'bg-slate-50',
+    bgMain: 'bg-[#f8fafc]',
     bgCard: 'bg-white',
     borderCard: 'border-slate-200',
     textColor: 'text-slate-900',
     textMuted: 'text-slate-500',
     primary: 'blue-600',
-    accent: 'indigo-600',
+    accent: 'amber-500',
     buttonBg: 'bg-blue-600 hover:bg-blue-700',
     buttonText: 'text-white',
     accentGlow: 'shadow-blue-500/10',
     ringColor: 'ring-blue-400/50',
-    tagline: 'Clean slate and executive blue',
+    tagline: 'Ultra-crisp executive platinum daylight trading workstation',
   },
-  cyberpunk: {
-    name: 'Cyberpunk Neon',
-    isLight: false,
-    bgMain: 'bg-[#0b0314]',
-    bgCard: 'bg-[#150a24]',
-    borderCard: 'border-[#ec4899]/30',
-    textColor: 'text-white',
-    textMuted: 'text-pink-200/60',
-    primary: 'cyan-400',
-    accent: 'fuchsia-500',
-    buttonBg: 'bg-gradient-to-r from-pink-500 via-purple-500 to-cyan-500 hover:opacity-90',
+  alpine: {
+    id: 'alpine',
+    name: 'Alpine Clean Daylight',
+    isLight: true,
+    bgMain: 'bg-[#ffffff]',
+    bgCard: 'bg-slate-50/80',
+    borderCard: 'border-slate-200',
+    textColor: 'text-slate-900',
+    textMuted: 'text-slate-500',
+    primary: 'emerald-600',
+    accent: 'teal-600',
+    buttonBg: 'bg-emerald-600 hover:bg-emerald-700',
     buttonText: 'text-white',
-    accentGlow: 'shadow-fuchsia-500/30',
-    ringColor: 'ring-cyan-400/50',
-    tagline: 'Synthwave pink, cyan & purple grid',
-  },
-  emerald: {
-    name: 'Emerald Forest',
-    isLight: false,
-    bgMain: 'bg-[#020d08]',
-    bgCard: 'bg-[#061e13]',
-    borderCard: 'border-[#064e3b]/40',
-    textColor: 'text-emerald-50',
-    textMuted: 'text-emerald-400/60',
-    primary: 'emerald-400',
-    accent: 'teal-400',
-    buttonBg: 'bg-emerald-500 hover:bg-emerald-600',
-    buttonText: 'text-emerald-950',
-    accentGlow: 'shadow-emerald-500/20',
+    accentGlow: 'shadow-emerald-500/10',
     ringColor: 'ring-emerald-400/50',
-    tagline: 'Deep forest green and fresh mint',
+    tagline: 'Pure daylight alpine white with vivid emerald metrics',
   },
-  ocean: {
-    name: 'Ocean Deep',
-    isLight: false,
-    bgMain: 'bg-[#010915]',
-    bgCard: 'bg-[#051528]',
-    borderCard: 'border-[#1e3a8a]/30',
-    textColor: 'text-sky-50',
-    textMuted: 'text-sky-400/60',
-    primary: 'sky-400',
-    accent: 'cyan-400',
-    buttonBg: 'bg-sky-500 hover:bg-sky-600',
-    buttonText: 'text-neutral-950',
-    accentGlow: 'shadow-sky-500/20',
+  ivory: {
+    id: 'ivory',
+    name: 'Bloomberg Ivory Terminal',
+    isLight: true,
+    bgMain: 'bg-[#faf8f5]',
+    bgCard: 'bg-white',
+    borderCard: 'border-[#e8e2d8]',
+    textColor: 'text-[#1c1917]',
+    textMuted: 'text-[#78716c]',
+    primary: 'amber-600',
+    accent: 'orange-600',
+    buttonBg: 'bg-amber-600 hover:bg-amber-700',
+    buttonText: 'text-white',
+    accentGlow: 'shadow-amber-500/10',
+    ringColor: 'ring-amber-400/50',
+    tagline: 'Warm financial parchment & executive brass accents',
+  },
+  nordic: {
+    id: 'nordic',
+    name: 'Nordic Dawn & Linen',
+    isLight: true,
+    bgMain: 'bg-[#f4f4f7]',
+    bgCard: 'bg-white',
+    borderCard: 'border-neutral-200',
+    textColor: 'text-neutral-900',
+    textMuted: 'text-neutral-500',
+    primary: 'indigo-600',
+    accent: 'violet-600',
+    buttonBg: 'bg-indigo-600 hover:bg-indigo-700',
+    buttonText: 'text-white',
+    accentGlow: 'shadow-indigo-500/10',
+    ringColor: 'ring-indigo-400/50',
+    tagline: 'Soft daylight linen with calm indigo accents',
+  },
+  azure: {
+    id: 'azure',
+    name: 'Royal Azure Daylight',
+    isLight: true,
+    bgMain: 'bg-[#f0f7ff]',
+    bgCard: 'bg-white',
+    borderCard: 'border-sky-200',
+    textColor: 'text-slate-900',
+    textMuted: 'text-sky-700/70',
+    primary: 'sky-600',
+    accent: 'blue-600',
+    buttonBg: 'bg-sky-600 hover:bg-sky-700',
+    buttonText: 'text-white',
+    accentGlow: 'shadow-sky-500/10',
     ringColor: 'ring-sky-400/50',
-    tagline: 'Subaquatic blue & bright cyan',
+    tagline: 'Fresh corporate maritime sky with cobalt accents',
   },
-  dracula: {
-    name: 'Dracula Gothic',
-    isLight: false,
-    bgMain: 'bg-[#1e1f29]',
-    bgCard: 'bg-[#282a36]',
-    borderCard: 'border-[#44475a]',
-    textColor: 'text-[#f8f8f2]',
-    textMuted: 'text-[#6272a4]',
-    primary: 'purple-400',
-    accent: 'pink-500',
-    buttonBg: 'bg-[#bd93f9] hover:bg-[#bd93f9]/90',
-    buttonText: 'text-slate-900',
-    accentGlow: 'shadow-purple-500/20',
-    ringColor: 'ring-purple-400/50',
-    tagline: 'Standard geek-friendly vampire theme',
+  sage: {
+    id: 'sage',
+    name: 'Executive Sage Daylight',
+    isLight: true,
+    bgMain: 'bg-[#f2f7f4]',
+    bgCard: 'bg-white',
+    borderCard: 'border-emerald-200',
+    textColor: 'text-emerald-950',
+    textMuted: 'text-emerald-700/70',
+    primary: 'emerald-700',
+    accent: 'teal-600',
+    buttonBg: 'bg-emerald-600 hover:bg-emerald-700',
+    buttonText: 'text-white',
+    accentGlow: 'shadow-emerald-600/10',
+    ringColor: 'ring-emerald-400/50',
+    tagline: 'Botanical daylight with forest emerald accents',
   },
 };
 
 interface ThemeContextType {
   theme: Theme;
-  isLight: boolean;
+  isLight: true;
   colors: ThemeColors;
   toggleTheme: () => void;
   setTheme: (theme: Theme) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'dark',
-  isLight: false,
-  colors: themes.dark,
+  theme: 'executive',
+  isLight: true,
+  colors: themes.executive,
   toggleTheme: () => {},
   setTheme: () => {},
 });
@@ -137,64 +144,159 @@ const ThemeContext = createContext<ThemeContextType>({
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => {
     try {
-      const saved = localStorage.getItem('aurumx_theme_v2');
-      if (saved && Object.keys(themes).includes(saved)) return saved as Theme;
-      return 'dark';
+      const saved = localStorage.getItem('aurumx_daylight_theme_v4');
+      if (saved && Object.keys(themes).includes(saved)) {
+        return saved as Theme;
+      }
+      // Migrate legacy storage or default to executive daylight
+      return 'executive';
     } catch {
-      return 'dark';
+      return 'executive';
     }
   });
 
-  const colors = themes[theme];
-  const isLight = theme === 'light';
+  const colors = themes[theme] || themes.executive;
+  const isLight: true = true; // Always true: exclusively executive daylight themes
 
   const setTheme = (t: Theme) => {
-    setThemeState(t);
+    const validTheme = themes[t] ? t : 'executive';
+    setThemeState(validTheme);
     try {
-      localStorage.setItem('aurumx_theme_v2', t);
+      localStorage.setItem('aurumx_daylight_theme_v4', validTheme);
     } catch (e) {
       console.warn('Failed to save theme preference', e);
     }
   };
 
   const toggleTheme = () => {
-    setTheme(isLight ? 'dark' : 'light');
+    // Cycle daylight themes
+    const themeKeys = Object.keys(themes) as Theme[];
+    const nextIndex = (themeKeys.indexOf(theme) + 1) % themeKeys.length;
+    setTheme(themeKeys[nextIndex]);
   };
 
   useEffect(() => {
     const root = document.documentElement;
     
-    // Remove all old classes
+    // Clean all classes
     Object.keys(themes).forEach((t) => {
       root.classList.remove(t);
+      root.classList.remove(`theme-${t}`);
+      document.body.classList.remove(t);
       document.body.classList.remove(`theme-${t}`);
     });
+    
+    // Clean legacy dark classes
+    root.classList.remove('dark', 'theme-graphite', 'theme-navy', 'theme-slate', 'theme-dusk', 'theme-emerald', 'theme-ocean');
+    document.body.classList.remove('dark', 'theme-graphite', 'theme-navy', 'theme-slate', 'theme-dusk', 'theme-emerald', 'theme-ocean');
 
-    root.classList.add(theme);
-    document.body.classList.add(`theme-${theme}`);
+    // Add active daylight classes
+    root.classList.add('light', theme, `theme-${theme}`);
+    document.body.classList.add('light', theme, `theme-${theme}`);
 
-    if (isLight) {
-      root.classList.remove('dark');
-      root.classList.add('light');
-      document.body.style.backgroundColor = '#f8fafc';
-      document.body.style.color = '#0f172a';
-    } else {
-      root.classList.remove('light');
-      root.classList.add('dark');
-      if (theme === 'cyberpunk') {
-        document.body.style.backgroundColor = '#0b0314';
-      } else if (theme === 'emerald') {
-        document.body.style.backgroundColor = '#020d08';
-      } else if (theme === 'ocean') {
-        document.body.style.backgroundColor = '#010915';
-      } else if (theme === 'dracula') {
-        document.body.style.backgroundColor = '#1e1f29';
-      } else {
-        document.body.style.backgroundColor = '#0a0a0a';
-      }
-      document.body.style.color = '#f5f5f5';
-    }
-  }, [theme, isLight]);
+    // Map theme CSS variables to root
+    const themeVariables: Record<Theme, Record<string, string>> = {
+      executive: {
+        '--theme-bg-page': '#f8fafc',
+        '--theme-bg-header': 'rgba(255, 255, 255, 0.95)',
+        '--theme-bg-card': '#ffffff',
+        '--theme-bg-card-subtle': '#f1f5f9',
+        '--theme-border': '#e2e8f0',
+        '--theme-border-subtle': '#f1f5f9',
+        '--theme-text-primary': '#0f172a',
+        '--theme-text-secondary': '#475569',
+        '--theme-text-muted': '#94a3b8',
+        '--theme-accent': '#2563eb',
+        '--theme-accent-hover': '#1d4ed8',
+        '--theme-accent-light': '#eff6ff',
+        '--theme-accent-border': '#bfdbfe',
+      },
+      alpine: {
+        '--theme-bg-page': '#ffffff',
+        '--theme-bg-header': 'rgba(248, 250, 252, 0.95)',
+        '--theme-bg-card': '#f8fafc',
+        '--theme-bg-card-subtle': '#f1f5f9',
+        '--theme-border': '#e2e8f0',
+        '--theme-border-subtle': '#f1f5f9',
+        '--theme-text-primary': '#0f172a',
+        '--theme-text-secondary': '#334155',
+        '--theme-text-muted': '#64748b',
+        '--theme-accent': '#059669',
+        '--theme-accent-hover': '#047857',
+        '--theme-accent-light': '#ecfdf5',
+        '--theme-accent-border': '#a7f3d0',
+      },
+      ivory: {
+        '--theme-bg-page': '#faf8f5',
+        '--theme-bg-header': 'rgba(250, 248, 245, 0.95)',
+        '--theme-bg-card': '#ffffff',
+        '--theme-bg-card-subtle': '#f5efe6',
+        '--theme-border': '#e8e0d5',
+        '--theme-border-subtle': '#f2ede4',
+        '--theme-text-primary': '#1c1917',
+        '--theme-text-secondary': '#57534e',
+        '--theme-text-muted': '#78716c',
+        '--theme-accent': '#d97706',
+        '--theme-accent-hover': '#b45309',
+        '--theme-accent-light': '#fffbeb',
+        '--theme-accent-border': '#fde68a',
+      },
+      nordic: {
+        '--theme-bg-page': '#f4f4f7',
+        '--theme-bg-header': 'rgba(244, 244, 247, 0.95)',
+        '--theme-bg-card': '#ffffff',
+        '--theme-bg-card-subtle': '#ebebf0',
+        '--theme-border': '#e2e2e8',
+        '--theme-border-subtle': '#ededf2',
+        '--theme-text-primary': '#18181b',
+        '--theme-text-secondary': '#52525b',
+        '--theme-text-muted': '#71717a',
+        '--theme-accent': '#4f46e5',
+        '--theme-accent-hover': '#4338ca',
+        '--theme-accent-light': '#eef2ff',
+        '--theme-accent-border': '#c7d2fe',
+      },
+      azure: {
+        '--theme-bg-page': '#f0f7ff',
+        '--theme-bg-header': 'rgba(240, 247, 255, 0.95)',
+        '--theme-bg-card': '#ffffff',
+        '--theme-bg-card-subtle': '#e0f0fe',
+        '--theme-border': '#bae6fd',
+        '--theme-border-subtle': '#e0f2fe',
+        '--theme-text-primary': '#0c4a6e',
+        '--theme-text-secondary': '#0369a1',
+        '--theme-text-muted': '#38bdf8',
+        '--theme-accent': '#0284c7',
+        '--theme-accent-hover': '#0369a1',
+        '--theme-accent-light': '#f0f9ff',
+        '--theme-accent-border': '#bae6fd',
+      },
+      sage: {
+        '--theme-bg-page': '#f2f7f4',
+        '--theme-bg-header': 'rgba(242, 247, 244, 0.95)',
+        '--theme-bg-card': '#ffffff',
+        '--theme-bg-card-subtle': '#e2f1e8',
+        '--theme-border': '#a7f3d0',
+        '--theme-border-subtle': '#d1fae5',
+        '--theme-text-primary': '#064e3b',
+        '--theme-text-secondary': '#047857',
+        '--theme-text-muted': '#10b981',
+        '--theme-accent': '#059669',
+        '--theme-accent-hover': '#047857',
+        '--theme-accent-light': '#f0fdf4',
+        '--theme-accent-border': '#a7f3d0',
+      },
+    };
+
+    const vars = themeVariables[theme] || themeVariables.executive;
+    Object.entries(vars).forEach(([k, v]) => {
+      root.style.setProperty(k, v);
+      document.body.style.setProperty(k, v);
+    });
+
+    document.body.style.backgroundColor = vars['--theme-bg-page'];
+    document.body.style.color = vars['--theme-text-primary'];
+  }, [theme]);
 
   return (
     <ThemeContext.Provider value={{ theme, isLight, colors, toggleTheme, setTheme }}>

@@ -7,14 +7,25 @@ import {
   Sparkles,
   Settings,
   RotateCcw,
+  Database,
+  CloudCheck,
+  Cloud,
+  RefreshCw,
+  Zap,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { usePersistentSymbols } from '../services/symbolPersistenceService';
+import { useTop500BatchPrices } from '../services/batchPriceService';
 
 interface CryptoHeaderBarProps {
   cashBalance: number;
   totalEquity: number;
   isLiveConnected: boolean;
   goldHedgeRatio: number;
+  cloudSyncStatus?: 'idle' | 'syncing' | 'synced' | 'error';
+  lastCloudSync?: Date | null;
+  onManualCloudSync?: () => void;
+  onOpenFirestoreModal?: () => void;
   onOpenWhatIf: () => void;
   onOpenAiReview: () => void;
   onOpenSettings: () => void;
@@ -27,6 +38,10 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
   totalEquity,
   isLiveConnected,
   goldHedgeRatio,
+  cloudSyncStatus = 'synced',
+  lastCloudSync,
+  onManualCloudSync,
+  onOpenFirestoreModal,
   onOpenWhatIf,
   onOpenAiReview,
   onOpenSettings,
@@ -34,6 +49,8 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
   onAddFunds,
 }) => {
   const { isLight } = useTheme();
+  const { isPersisted, symbolCount } = usePersistentSymbols();
+  const { isLoading: isBatchLoading, totalSymbols, latencyMs, triggerBulkSync } = useTop500BatchPrices(30000);
 
   return (
     <div
@@ -62,7 +79,7 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
                       : 'bg-amber-500/10 text-amber-400 border-amber-500/20'
                   }`}
                 >
-                  Binance Live Feed
+                  Crypto & Gold Spot
                 </span>
               </div>
             </div>
@@ -96,6 +113,75 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
             <span className="opacity-40">•</span>
             <span>0.016% M / 0.064% T</span>
           </div>
+
+          {/* Firestore Real-Time Persistence Badge */}
+          <button
+            onClick={onOpenFirestoreModal}
+            className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] transition-all cursor-pointer ${
+              isLight
+                ? 'bg-amber-50/90 hover:bg-amber-100 border-amber-200 text-amber-900 shadow-sm'
+                : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
+            }`}
+            title="Persistent storage active via Firestore. Click to view all stored database collections and documents."
+          >
+            <Database className="w-3 h-3 text-amber-500 shrink-0" />
+            <span className="font-medium text-[10px] uppercase tracking-wider text-amber-500">Quotes DB:</span>
+            <span className="font-semibold font-mono text-[11px]">{isPersisted ? `${symbolCount} Synced` : 'Connecting...'}</span>
+          </button>
+
+          {/* Firestore Simulator State Synchronization Badge */}
+          <button
+            onClick={onManualCloudSync}
+            disabled={cloudSyncStatus === 'syncing'}
+            className={`hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] transition-all cursor-pointer ${
+              cloudSyncStatus === 'syncing'
+                ? isLight
+                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                  : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                : cloudSyncStatus === 'error'
+                ? isLight
+                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                  : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                : isLight
+                ? 'bg-emerald-50/90 hover:bg-emerald-100 border-emerald-200 text-emerald-900 shadow-sm'
+                : 'bg-emerald-500/10 hover:bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+            }`}
+            title={`Simulator state (assets, positions, balances) synchronized with Firestore. Click to force instant cloud backup. Last synced: ${
+              lastCloudSync ? lastCloudSync.toLocaleTimeString() : 'Active'
+            }`}
+          >
+            {cloudSyncStatus === 'syncing' ? (
+              <RefreshCw className="w-3 h-3 text-blue-500 animate-spin shrink-0" />
+            ) : (
+              <CloudCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            )}
+            <span className="font-medium text-[10px] uppercase tracking-wider text-emerald-500">Simulator:</span>
+            <span className="font-semibold font-mono text-[11px]">
+              {cloudSyncStatus === 'syncing' ? 'Syncing...' : 'Persisted'}
+            </span>
+          </button>
+
+          {/* Top 500 Multi-Asset Batch Mechanism Badge */}
+          <button
+            onClick={() => triggerBulkSync(true)}
+            disabled={isBatchLoading}
+            className={`hidden 2xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] transition-all cursor-pointer ${
+              isBatchLoading
+                ? isLight
+                  ? 'bg-blue-50 border-blue-200 text-blue-700'
+                  : 'bg-blue-500/10 border-blue-500/30 text-blue-300'
+                : isLight
+                ? 'bg-amber-100/70 hover:bg-amber-100 border-amber-300 text-amber-900 shadow-sm'
+                : 'bg-gradient-to-r from-amber-500/15 to-emerald-500/15 hover:from-amber-500/25 hover:to-emerald-500/25 border-amber-500/30 text-amber-300'
+            }`}
+            title={`Batch processing mechanism: 1 request fetches & bulk-updates top 500 symbols across indices, forex, commodities & crypto to Firestore. Latency: ${latencyMs}ms`}
+          >
+            <Zap className={`w-3 h-3 text-amber-500 shrink-0 ${isBatchLoading ? 'animate-spin' : ''}`} />
+            <span className="font-bold text-[10px] text-amber-500">Top 500:</span>
+            <span className="font-semibold font-mono text-[11px]">
+              {isBatchLoading ? 'Updating 500...' : `${totalSymbols} Batch Sync`}
+            </span>
+          </button>
         </div>
 
         {/* Quick Balance & Equity Bar */}

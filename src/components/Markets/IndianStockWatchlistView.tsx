@@ -15,7 +15,10 @@ import {
   TrendingUpIcon,
   Plus,
   Minus,
+  ArrowUpRight,
+  BarChart2,
 } from 'lucide-react';
+import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
 
 export const IndianStockWatchlistView: React.FC = () => {
   const { colors, isLight } = useTheme();
@@ -29,9 +32,14 @@ export const IndianStockWatchlistView: React.FC = () => {
   } = useIndianStocks();
 
   const [filterMode, setFilterMode] = useState<'WATCHLIST' | 'ALL'>('WATCHLIST');
+  const [capFilter, setCapFilter] = useState<'ALL' | 'LARGECAP' | 'MIDCAP' | 'SMALLCAP' | 'MICROCAP'>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedSector, setSelectedSector] = useState<string>('ALL');
   const [selectedStock, setSelectedStock] = useState<IndianStock | null>(null);
+
+  // Detail Modal State
+  const [detailItem, setDetailItem] = useState<GlobalIndexDetailItem | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState<boolean>(false);
 
   // List of all sectors for filters
   const sectors = useMemo(() => {
@@ -46,20 +54,24 @@ export const IndianStockWatchlistView: React.FC = () => {
       if (filterMode === 'WATCHLIST' && !watchlist.includes(stock.symbol)) {
         return false;
       }
-      // 2. Search query filter
+      // 2. Cap Category Filter
+      if (capFilter !== 'ALL' && stock.marketCapCategory !== capFilter) {
+        return false;
+      }
+      // 3. Search query filter
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         const matchesName = stock.name.toLowerCase().includes(query);
         const matchesSymbol = stock.symbol.toLowerCase().includes(query);
         if (!matchesName && !matchesSymbol) return false;
       }
-      // 3. Sector filter
+      // 4. Sector filter
       if (selectedSector !== 'ALL' && stock.sector !== selectedSector) {
         return false;
       }
       return true;
     });
-  }, [stocks, watchlist, filterMode, searchQuery, selectedSector]);
+  }, [stocks, watchlist, filterMode, capFilter, searchQuery, selectedSector]);
 
   // Set default selected stock if null
   React.useEffect(() => {
@@ -157,6 +169,34 @@ export const IndianStockWatchlistView: React.FC = () => {
             </select>
           </div>
         </div>
+
+        {/* NIFTY CAP SPECTRUM FILTERS (LARGE / MID / SMALL / MICRO) */}
+        <div className="flex items-center gap-1.5 pt-3 border-t overflow-x-auto no-scrollbar" style={{ borderColor: 'var(--theme-border-subtle)' }}>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider shrink-0 mr-1">
+            Market Cap:
+          </span>
+          {[
+            { id: 'ALL', label: 'All Spectrum' },
+            { id: 'LARGECAP', label: 'LargeCap (Nifty 100)' },
+            { id: 'MIDCAP', label: 'MidCap (Midcap 150)' },
+            { id: 'SMALLCAP', label: 'SmallCap (Smallcap 250)' },
+            { id: 'MICROCAP', label: 'MicroCap (Microcap 250)' },
+          ].map((cap) => (
+            <button
+              key={cap.id}
+              onClick={() => setCapFilter(cap.id as any)}
+              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap transition-all cursor-pointer ${
+                capFilter === cap.id
+                  ? 'bg-orange-500 text-white font-black shadow-xs'
+                  : isLight
+                  ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  : 'bg-neutral-900 hover:bg-neutral-800 text-slate-300'
+              }`}
+            >
+              {cap.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* WATCHLIST MONITORS GRID */}
@@ -251,9 +291,33 @@ export const IndianStockWatchlistView: React.FC = () => {
                         <td className="py-3 text-right">
                           <button
                             type="button"
-                            className="p-1 rounded bg-neutral-800 hover:bg-neutral-700 text-slate-200 transition-all text-[10px] font-mono"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedStock(stock);
+                              setDetailItem({
+                                id: stock.symbol.toLowerCase(),
+                                name: stock.name,
+                                symbol: stock.symbol,
+                                yahooSymbol: `${stock.symbol}.NS`,
+                                category: `${stock.sector} Stock`,
+                                region: 'India (NSE)',
+                                price: stock.price,
+                                change1d: stock.change1d,
+                                change1dPts: Number((stock.price * (stock.change1d / 100)).toFixed(2)),
+                                high24h: stock.high52w,
+                                low24h: stock.low52w,
+                                status: 'OPEN',
+                                currency: 'INR',
+                                peRatio: stock.peRatio,
+                                isRealLive: true,
+                              });
+                              setIsDetailOpen(true);
+                            }}
+                            className="px-2 py-1 rounded bg-orange-500/10 hover:bg-orange-500/20 text-orange-600 border border-orange-200 transition-all text-[10px] font-mono font-bold flex items-center gap-1 ml-auto cursor-pointer"
+                            title="Open Trend Chart & AI Insights"
                           >
-                            Analyze
+                            <BarChart2 className="w-3 h-3" />
+                            <span>Trend & AI</span>
                           </button>
                         </td>
                       </tr>
@@ -361,6 +425,35 @@ export const IndianStockWatchlistView: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* LAUNCH FULL HISTORICAL TREND MODAL BUTTON */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDetailItem({
+                        id: selectedStock.symbol.toLowerCase(),
+                        name: selectedStock.name,
+                        symbol: selectedStock.symbol,
+                        yahooSymbol: `${selectedStock.symbol}.NS`,
+                        category: `${selectedStock.sector} Stock`,
+                        region: 'India (NSE)',
+                        price: selectedStock.price,
+                        change1d: selectedStock.change1d,
+                        change1dPts: Number((selectedStock.price * (selectedStock.change1d / 100)).toFixed(2)),
+                        high24h: selectedStock.high52w,
+                        low24h: selectedStock.low52w,
+                        status: 'OPEN',
+                        currency: 'INR',
+                        peRatio: selectedStock.peRatio,
+                        isRealLive: true,
+                      });
+                      setIsDetailOpen(true);
+                    }}
+                    className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-neutral-950 font-black text-xs flex items-center justify-center gap-2 shadow-md hover:from-orange-400 hover:to-amber-400 transition-all cursor-pointer"
+                  >
+                    <BarChart2 className="w-4 h-4" />
+                    <span>Open Historical Trend & Gemini AI</span>
+                  </button>
+
                   {/* CONSTITUENT VALUATION HIGHLIGHTS */}
                   <div className="space-y-1.5 text-xs border-t border-neutral-800/30 pt-3">
                     <span className="text-[10px] font-bold text-slate-400 block uppercase">
@@ -387,6 +480,13 @@ export const IndianStockWatchlistView: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* WATCHLIST ASSET DETAIL MODAL */}
+      <GlobalIndexDetailModal
+        isOpen={isDetailOpen}
+        onClose={() => setIsDetailOpen(false)}
+        item={detailItem}
+      />
     </div>
   );
 };
