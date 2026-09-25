@@ -112,7 +112,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [slPriceInput, setSlPriceInput] = useState<string>('');
   const [trailingStopInput, setTrailingStopInput] = useState<string>('');
 
-  const currentPrice = asset.price;
+  // A local stablePrice variable in the UI components that defaults to the previous valid price if no update has arrived
+  const lastValidPriceRef = React.useRef<number>(asset.price || 0);
+  if (asset.price && typeof asset.price === 'number' && asset.price > 0) {
+    lastValidPriceRef.current = asset.price;
+  }
+  const stablePrice = lastValidPriceRef.current;
+
+  const currentPrice = stablePrice;
 
   // Sync default target price when switching to limit
   const effectiveTargetPrice =

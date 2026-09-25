@@ -16,6 +16,14 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 }) => {
   const { isLight } = useTheme();
   const assetList = Object.values(assets);
+  
+  // Track last valid non-zero prices per symbol to ensure no flickering to null or hardcoded values
+  const lastValidPricesRef = React.useRef<Record<string, number>>({});
+  assetList.forEach((asset) => {
+    if (asset.price && typeof asset.price === 'number' && asset.price > 0) {
+      lastValidPricesRef.current[asset.symbol] = asset.price;
+    }
+  });
 
   return (
     <div
@@ -28,6 +36,11 @@ export const TickerBar: React.FC<TickerBarProps> = ({
           const isSelected = asset.symbol === selectedSymbol;
           const isPositive = asset.change24h >= 0;
           const isGold = asset.category === 'gold';
+
+          // Use local stablePrice variable that defaults to the previous valid price if no update has arrived
+          const stablePrice = asset.price && asset.price > 0 
+            ? asset.price 
+            : (lastValidPricesRef.current[asset.symbol] || asset.price || 0);
 
           return (
             <button
@@ -94,9 +107,9 @@ export const TickerBar: React.FC<TickerBarProps> = ({
 
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`font-mono text-xs font-semibold ${isLight ? 'text-slate-800' : 'text-neutral-200'}`}>
-                    ${asset.price.toLocaleString('en-US', {
-                      minimumFractionDigits: asset.price < 10 ? 4 : 2,
-                      maximumFractionDigits: asset.price < 10 ? 4 : 2,
+                    ${stablePrice.toLocaleString('en-US', {
+                      minimumFractionDigits: stablePrice < 10 ? 4 : 2,
+                      maximumFractionDigits: stablePrice < 10 ? 4 : 2,
                     })}
                   </span>
                   <span
