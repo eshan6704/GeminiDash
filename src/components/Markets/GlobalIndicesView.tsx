@@ -140,12 +140,12 @@ export const GlobalIndicesView: React.FC = () => {
 
   // Subscribe to grouped Global Indices and Futures tables in Firestore (batch format)
   useEffect(() => {
-    const unsubIndices = subscribeMarketTable('global_indices', (table) => {
+    const unsubIndices = subscribeMarketTable('global_indices', (table: any) => {
       if (table && table.data && table.data.length > 0) {
         setIndices((prev) => {
           const nonIndices = prev.filter((i) => i.category === 'Futures');
           const existingMap = new Map(prev.map((i) => [i.id, i]));
-          const updated = table.data.map((m) => {
+          const updated = table.data.map((m: any) => {
             const existing = existingMap.get(m.id);
             const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
@@ -183,12 +183,12 @@ export const GlobalIndicesView: React.FC = () => {
       }
     });
 
-    const unsubFutures = subscribeMarketTable('futures', (table) => {
+    const unsubFutures = subscribeMarketTable('futures', (table: any) => {
       if (table && table.data && table.data.length > 0) {
         setIndices((prev) => {
           const nonFutures = prev.filter((i) => i.category !== 'Futures');
           const existingMap = new Map(prev.map((i) => [i.id, i]));
-          const updatedFutures = table.data.map((m) => {
+          const updatedFutures = table.data.map((m: any) => {
             const existing = existingMap.get(m.id);
             const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;

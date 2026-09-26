@@ -15,11 +15,16 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
-import { usePersistentSymbols } from '../../services/symbolPersistenceService';
-import { subscribeMarketTable, fetchMarketTable, MASTER_INDIAN_INDICES } from '../../services/marketDataTables';
 import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
 import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
+
+export const MASTER_INDIAN_INDICES = [
+  { id: 'nifty50', name: 'NIFTY 50', symbol: 'NIFTY 50', price: 24320.50, change1d: 0.45, change1dPts: 108.20, category: 'Benchmark' },
+  { id: 'banknifty', name: 'NIFTY BANK', symbol: 'BANKNIFTY', price: 51240.30, change1d: -0.15, change1dPts: -76.40, category: 'Benchmark' },
+  { id: 'niftyit', name: 'NIFTY IT', symbol: 'NIFTY IT', price: 38450.20, change1d: 1.20, change1dPts: 456.10, category: 'Sectoral' },
+  { id: 'midcap100', name: 'NIFTY MIDCAP 100', symbol: 'MIDCAP100', price: 58200.00, change1d: 0.85, change1dPts: 492.30, category: 'Broad Market' },
+];
 
 export interface NiftyIndexItem {
   id: string;
@@ -80,88 +85,13 @@ export const NiftyIndicesView: React.FC = () => {
         price: hydrated.price,
         change1d: hydrated.change1d ?? m.change1d,
         change1dPts: m.change1dPts || 0,
-        high24h: m.high24h || hydrated.price,
-        low24h: m.low24h || hydrated.price,
-        peRatio: m.peRatio || 22.5,
+        high24h: (m as any).high24h || hydrated.price,
+        low24h: (m as any).low24h || hydrated.price,
+        peRatio: (m as any).peRatio || 22.5,
         currency: 'INR',
       };
     })
   );
-
-  // Subscribe to grouped Indian Indices table in Firestore (batch format)
-  useEffect(() => {
-    const unsub = subscribeMarketTable('indian_indices', (table) => {
-      if (table && table.data && table.data.length > 0) {
-        setIndices((prev) => {
-          const existingMap = new Map(prev.map((i) => [i.symbol, i]));
-          return table.data.map((m) => {
-            const existing = existingMap.get(m.symbol);
-            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
-            const existingMs = (existing as any)?.updatedAtMs || 0;
-
-            if (existing && existingMs > 0 && incomingMs <= existingMs) {
-              return existing;
-            }
-
-            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
-            if (validPrice > 0) {
-              updateRememberedPrice(m.symbol, validPrice, incomingMs, { change1d: m.change1d });
-            }
-            return {
-              id: m.id.toLowerCase(),
-              name: m.name,
-              symbol: m.symbol,
-              yahooSymbol: NIFTY_YAHOO_MAP[m.symbol] || NIFTY_YAHOO_MAP[m.id] || m.symbol,
-              category: (m.category as any) || 'Benchmark',
-              price: validPrice,
-              change1d: m.change1d,
-              change1dPts: m.change1dPts || 0,
-              high24h: m.high24h || validPrice,
-              low24h: m.low24h || validPrice,
-              peRatio: m.peRatio || 22.5,
-              currency: 'INR',
-              isRealLive: true,
-              updatedAtMs: incomingMs,
-            } as any;
-          });
-        });
-        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
-        setLastRefreshed(formatIndianTime(sourceTime));
-      }
-    });
-
-    return () => unsub();
-  }, []);
-
-  const { prices: persistentPrices } = usePersistentSymbols();
-
-  // Instant update from Firestore persistence
-  useEffect(() => {
-    if (!persistentPrices || Object.keys(persistentPrices).length === 0) return;
-    setIndices((prev) =>
-      prev.map((idx) => {
-        const cleanSym = idx.symbol.replace(/\s+/g, '').toUpperCase();
-        const live =
-          persistentPrices[idx.yahooSymbol] ||
-          persistentPrices[idx.yahooSymbol.toUpperCase()] ||
-          persistentPrices[cleanSym] ||
-          persistentPrices[idx.symbol];
-
-        if (live && live.price > 0 && live.price !== idx.price) {
-          return {
-            ...idx,
-            price: live.price,
-            change1d: live.changePct !== undefined ? live.changePct : idx.change1d,
-            change1dPts: live.change !== undefined ? live.change : idx.change1dPts,
-            high24h: Math.max(idx.high24h, live.high || live.price),
-            low24h: live.low || idx.low24h,
-            isRealLive: true,
-          };
-        }
-        return idx;
-      })
-    );
-  }, [persistentPrices]);
 
   const loadRealQuotes = async () => {
     setIsLoadingLive(true);

@@ -85,11 +85,11 @@ export const StockConstituentsView: React.FC = () => {
 
   // Subscribe to grouped Nifty 500 table in Firestore (single document batch read)
   useEffect(() => {
-    const unsubscribe = subscribeMarketTable('nifty_500', (table) => {
+    const unsubscribe = subscribeMarketTable('nifty_500', (table: any) => {
       if (table && Array.isArray(table.data) && table.data.length > 0) {
         setStocks((prev) => {
           const existingMap = new Map(prev.map((s) => [s.symbol, s]));
-          return table.data.map((m) => {
+          return table.data.map((m: any) => {
             const existing = existingMap.get(m.symbol);
             const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;
@@ -140,7 +140,7 @@ export const StockConstituentsView: React.FC = () => {
       if (table && table.data) {
         setStocks((prev) => {
           const existingMap = new Map(prev.map((s) => [s.symbol, s]));
-          return table.data.map((m) => {
+          return table.data.map((m: any) => {
             const existing = existingMap.get(m.symbol);
             const incomingMs = m.dataTimestamp || m.updatedAtMs || (table.dataTimestamp || table.updatedAtMs || Date.now());
             const price = resolveLivePrice({ ...m, dataTimestamp: incomingMs }, existing?.price);

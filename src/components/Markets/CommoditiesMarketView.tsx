@@ -13,10 +13,17 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
-import { subscribeMarketTable, fetchMarketTable, MASTER_COMMODITIES } from '../../services/marketDataTables';
 import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
 import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
+
+export const MASTER_COMMODITIES = [
+  { id: 'oil', name: 'Crude Oil WTI', symbol: 'CL', price: 71.45, change1d: 0.85, category: 'Energy' },
+  { id: 'gold', name: 'Gold Spot', symbol: 'GC', price: 2645.20, change1d: 0.12, category: 'Precious Metals' },
+  { id: 'silver', name: 'Silver Spot', symbol: 'SI', price: 31.15, change1d: -0.45, category: 'Precious Metals' },
+  { id: 'natgas', name: 'Natural Gas', symbol: 'NG', price: 2.34, change1d: -1.20, category: 'Energy' },
+  { id: 'copper', name: 'Copper', symbol: 'HG', price: 4.12, change1d: 0.55, category: 'Industrial Metals' },
+];
 
 export interface CommodityItem {
   id: string;
@@ -56,56 +63,12 @@ export const CommoditiesMarketView: React.FC = () => {
         category: (m.category as any) || 'Energy',
         price: hydrated.price,
         change1d: hydrated.change1d ?? m.change1d,
-        high24h: m.high24h || hydrated.price,
-        low24h: m.low24h || hydrated.price,
+        high24h: (m as any).high24h || hydrated.price,
+        low24h: (m as any).low24h || hydrated.price,
         contractExpiry: 'DEC 2026',
       };
     })
   );
-
-  // Subscribe to grouped Commodities table in Firestore (batch format)
-  useEffect(() => {
-    const unsub = subscribeMarketTable('commodities', (table) => {
-      if (table && table.data && table.data.length > 0) {
-        setCommodities((prev) => {
-          const existingMap = new Map(prev.map((c) => [c.symbol, c]));
-          return table.data.map((m) => {
-            const existing = existingMap.get(m.symbol);
-            const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
-            const existingMs = (existing as any)?.updatedAtMs || 0;
-
-            if (existing && existingMs > 0 && incomingMs <= existingMs) {
-              return existing;
-            }
-
-            const validPrice = resolveLivePrice({ ...m, dataTimestamp: incomingMs, updatedAtMs: incomingMs }, existing?.price);
-            if (validPrice > 0) {
-              updateRememberedPrice(m.symbol, validPrice, incomingMs, { change1d: m.change1d });
-            }
-            return {
-              id: m.id.toLowerCase(),
-              name: m.name,
-              symbol: m.symbol,
-              yahooSymbol: `${m.symbol}=F`,
-              unit: m.category === 'Energy' ? 'USD / Barrel' : m.category === 'Precious Metals' ? 'USD / Troy Oz' : 'USD / Unit',
-              category: (m.category as any) || 'Energy',
-              price: validPrice,
-              change1d: m.change1d,
-              high24h: m.high24h || validPrice,
-              low24h: m.low24h || validPrice,
-              contractExpiry: 'DEC 2026',
-              isRealLive: true,
-              updatedAtMs: incomingMs,
-            } as any;
-          });
-        });
-        const sourceTime = table.dataTimestamp || table.updatedAtMs || (table.updatedAt ? new Date(table.updatedAt).getTime() : Date.now());
-        setLastRefreshed(formatIndianTime(sourceTime));
-      }
-    });
-
-    return () => unsub();
-  }, []);
 
   const loadRealCommodityQuotes = async () => {
     setIsLoadingLive(true);

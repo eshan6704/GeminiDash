@@ -40,47 +40,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl relative text-slate-900">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-200 mb-4">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-md max-w-md w-full p-5 sm:p-6 shadow-2xl relative text-[var(--theme-text-primary)]">
+        <div className="flex items-center justify-between pb-3 border-b border-[var(--theme-border)] mb-4">
           <div className="flex items-center gap-2">
-            <Settings className="w-4 h-4 text-amber-600" />
-            <h3 className="text-sm font-bold text-slate-900">
-              Broker & Execution Settings
+            <Settings className="w-3.5 h-3.5 text-amber-500" />
+            <h3 className="text-xs font-bold uppercase tracking-wider">
+              BROKER & EXECUTION SETTINGS
             </h3>
           </div>
-          <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-800 transition-colors">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="p-1 text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] transition-colors">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="space-y-4 text-xs">
+        <div className="space-y-4 text-[11px]">
           {/* Shark Exchange Preset Box */}
-          <div className="bg-cyan-50/70 border border-cyan-200 p-3 rounded-xl flex items-start justify-between gap-3">
+          <div className="bg-cyan-500/5 border border-cyan-500/20 p-3 rounded-sm flex items-start justify-between gap-3">
             <div>
-              <div className="flex items-center gap-1.5 text-cyan-900 font-bold mb-1">
-                <Building2 className="w-3.5 h-3.5 text-cyan-700" />
-                <span>Shark Exchange Broker Specs</span>
+              <div className="flex items-center gap-1.5 text-cyan-400 font-bold mb-1">
+                <Building2 className="w-3 h-3" />
+                <span>SHARK EXCHANGE PRESET</span>
               </div>
-              <p className="text-[11px] text-slate-700 font-mono leading-snug">
-                Brokerage: <span className="text-amber-700 font-bold">Maker 0.016%</span> | <span className="text-orange-700 font-bold">Taker 0.064% (4x Maker)</span><br />
-                Margin: <span className="text-amber-700">Gold 75x</span> | <span className="text-orange-700">BTC 150x</span> | <span className="text-blue-700">Rest 25x</span><br />
-                Sizing: Default lot 0.002 | Gold 0.1 size | BTC 0.002 lot
+              <p className="text-[10px] text-[var(--theme-text-muted)] font-mono leading-snug">
+                BROKERAGE: <span className="text-amber-500 font-bold">MAKER 0.016%</span> | <span className="text-orange-500 font-bold">TAKER 0.064%</span><br />
+                MARGIN: <span className="text-amber-500">GOLD 75x</span> | <span className="text-orange-500">BTC 150x</span> | <span className="text-blue-500">REST 25x</span>
               </p>
             </div>
             <button
               type="button"
               onClick={applySharkPreset}
-              className="px-2.5 py-1 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white font-bold shrink-0 transition-colors text-[10px]"
+              className="px-2.5 py-1 rounded-sm bg-cyan-600 hover:bg-cyan-700 text-white font-bold shrink-0 transition-colors text-[9px] uppercase"
             >
-              Apply Preset
+              Apply
             </button>
           </div>
 
           {/* Editable Starting Balance */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
-            <label className="font-semibold text-slate-800 block">
-              Editable Starting Balance ($ USDT)
+          <div className="bg-[var(--theme-bg-card-subtle)] p-3 rounded-sm border border-[var(--theme-border-subtle)] space-y-2">
+            <label className="font-bold text-[var(--theme-text-secondary)] block uppercase tracking-tight">
+              STARTING BALANCE ($ USDT)
             </label>
             <div className="flex gap-2 font-mono">
               <input
@@ -89,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 step="10"
                 value={resetBalanceInput}
                 onChange={(e) => setResetBalanceInput(parseFloat(e.target.value) || 100)}
-                className="flex-1 bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-slate-900 font-bold"
+                className="flex-1 bg-[var(--theme-bg-main)] border border-[var(--theme-border-subtle)] px-3 py-1.5 rounded-sm text-[var(--theme-text-primary)] font-bold outline-none focus:border-[var(--theme-accent)]"
               />
               <button
                 type="button"
@@ -97,20 +96,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onReset(resetBalanceInput);
                   onClose();
                 }}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white font-extrabold transition-colors text-xs shadow-xs"
+                className="px-3 py-1.5 rounded-sm bg-amber-500 hover:bg-amber-600 text-black font-bold transition-colors text-[10px] uppercase"
               >
-                Reset & Apply
+                Reset Account
               </button>
             </div>
-            <p className="text-[10px] text-slate-500">
-              Resets simulation positions and sets your starting cash balance to this amount.
-            </p>
           </div>
 
           {/* Quick Virtual Fund Deposit */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-            <label className="font-semibold text-slate-800 block mb-2">
-              Add Virtual USDT Funds (Instant Deposit)
+          <div className="bg-[var(--theme-bg-card-subtle)] p-3 rounded-sm border border-[var(--theme-border-subtle)]">
+            <label className="font-bold text-[var(--theme-text-secondary)] block mb-2 uppercase tracking-tight">
+              INSTANT USDT DEPOSIT
             </label>
             <div className="grid grid-cols-3 gap-2 font-mono">
               {[1000, 5000, 25000].map((amt) => (
@@ -120,7 +116,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   onClick={() => {
                     onAddFunds(amt);
                   }}
-                  className="py-1.5 rounded-lg bg-white hover:bg-emerald-50 text-emerald-700 font-bold border border-slate-200 hover:border-emerald-300 transition-colors shadow-xs"
+                  className="py-1.5 rounded-sm bg-[var(--theme-bg-main)] hover:bg-emerald-500/10 text-emerald-500 font-bold border border-[var(--theme-border-subtle)] hover:border-emerald-500/30 transition-colors text-[10px]"
                 >
                   +${amt.toLocaleString()}
                 </button>
@@ -129,10 +125,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Fee Modeling */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3">
+          <div className="bg-[var(--theme-bg-card-subtle)] p-3 rounded-sm border border-[var(--theme-border-subtle)] space-y-3">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-800">
-                Brokerage Trading Fees (Shark: 0.016%)
+              <span className="font-bold text-[var(--theme-text-secondary)] uppercase tracking-tight">
+                ENABLE TRADING FEES
               </span>
               <input
                 type="checkbox"
@@ -140,14 +136,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onChange={(e) =>
                   setLocalConfig({ ...localConfig, enableFees: e.target.checked })
                 }
-                className="accent-blue-600 w-4 h-4 cursor-pointer"
+                className="accent-[var(--theme-accent)] w-3.5 h-3.5 cursor-pointer"
               />
             </div>
 
             {localConfig.enableFees && (
               <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
                 <div>
-                  <span className="text-slate-500 text-[10px] block">Taker Fee (%)</span>
+                  <span className="text-[var(--theme-text-muted)] text-[9px] block uppercase">Taker Fee (%)</span>
                   <input
                     type="number"
                     step="0.001"
@@ -158,11 +154,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         takerFeeRate: (parseFloat(e.target.value) || 0) / 100,
                       })
                     }
-                    className="w-full bg-white border border-slate-300 px-2 py-1 rounded text-slate-900"
+                    className="w-full bg-[var(--theme-bg-main)] border border-[var(--theme-border-subtle)] px-2 py-1 rounded-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
                   />
                 </div>
                 <div>
-                  <span className="text-slate-500 text-[10px] block">Maker Fee (%)</span>
+                  <span className="text-[var(--theme-text-muted)] text-[9px] block uppercase">Maker Fee (%)</span>
                   <input
                     type="number"
                     step="0.001"
@@ -173,7 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         makerFeeRate: (parseFloat(e.target.value) || 0) / 100,
                       })
                     }
-                    className="w-full bg-white border border-slate-300 px-2 py-1 rounded text-slate-900"
+                    className="w-full bg-[var(--theme-bg-main)] border border-[var(--theme-border-subtle)] px-2 py-1 rounded-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)]"
                   />
                 </div>
               </div>
@@ -181,10 +177,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Slippage Modeling */}
-          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+          <div className="bg-[var(--theme-bg-card-subtle)] p-3 rounded-sm border border-[var(--theme-border-subtle)] space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-semibold text-slate-800">
-                Simulate Market Slippage
+              <span className="font-bold text-[var(--theme-text-secondary)] uppercase tracking-tight">
+                SIMULATE SLIPPAGE
               </span>
               <input
                 type="checkbox"
@@ -192,13 +188,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 onChange={(e) =>
                   setLocalConfig({ ...localConfig, enableSlippage: e.target.checked })
                 }
-                className="accent-blue-600 w-4 h-4 cursor-pointer"
+                className="accent-[var(--theme-accent)] w-3.5 h-3.5 cursor-pointer"
               />
             </div>
             {localConfig.enableSlippage && (
               <div className="pt-1 font-mono">
-                <span className="text-slate-500 text-[10px] block">
-                  Average Market Slippage Rate (%)
+                <span className="text-[var(--theme-text-muted)] text-[9px] block uppercase">
+                  Avg Slippage Rate (%)
                 </span>
                 <input
                   type="number"
@@ -210,55 +206,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       slippageRate: (parseFloat(e.target.value) || 0) / 100,
                     })
                   }
-                  className="w-full bg-white border border-slate-300 px-2 py-1 rounded text-slate-900 mt-1"
+                  className="w-full bg-[var(--theme-bg-main)] border border-[var(--theme-border-subtle)] px-2 py-1 rounded-sm text-[var(--theme-text-primary)] outline-none focus:border-[var(--theme-accent)] mt-1"
                 />
               </div>
             )}
           </div>
-
-          {/* Reset Account */}
-          <div className="bg-rose-50 border border-rose-200 p-3 rounded-xl">
-            <span className="font-semibold text-rose-800 block mb-1">
-              Reset Simulation State
-            </span>
-            <div className="flex items-center gap-2 mt-2">
-              <input
-                type="number"
-                value={resetBalanceInput}
-                onChange={(e) => setResetBalanceInput(Number(e.target.value) || 10000)}
-                className="w-28 bg-white border border-slate-300 px-2 py-1 rounded font-mono text-slate-900 text-xs"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm('Are you sure you want to reset all positions, history, and balance?')) {
-                    onReset(resetBalanceInput);
-                    onClose();
-                  }
-                }}
-                className="px-3 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors"
-              >
-                Reset Account
-              </button>
-            </div>
-          </div>
         </div>
 
-        <div className="pt-4 mt-3 border-t border-slate-200 flex justify-end gap-2">
+        <div className="pt-4 mt-3 border-t border-[var(--theme-border)] flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="px-3 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 text-xs font-semibold"
+            className="px-3 py-1.5 rounded-sm bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] text-[10px] font-bold uppercase transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="px-4 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs"
+            className="px-4 py-1.5 rounded-sm bg-[var(--theme-accent)] text-black font-bold text-[10px] uppercase shadow-md transition-all active:scale-95"
           >
             Save Settings
           </button>
         </div>
       </div>
     </div>
+
   );
 };

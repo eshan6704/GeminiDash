@@ -19,8 +19,8 @@ import { PortfolioOverview } from './components/Portfolio/PortfolioOverview';
 import { WhatIfScenarioModal } from './components/Modals/WhatIfScenarioModal';
 import { AiRiskModal } from './components/Modals/AiRiskModal';
 import { SettingsModal } from './components/Modals/SettingsModal';
-import { FirestoreDataModal } from './components/Modals/FirestoreDataModal';
 import { BatchWriterModal } from './components/Modals/BatchWriterModal';
+import { StorageManagerModal } from './components/Modals/StorageManagerModal';
 import { NotificationToast } from './components/Notifications/NotificationToast';
 import { DailyPnLChart } from './components/Portfolio/DailyPnLChart';
 import { WhaleTradesFeed } from './components/Trades/WhaleTradesFeed';
@@ -81,7 +81,7 @@ export default function App() {
     resetSimulation,
     adjustCashBalance,
     addNotification,
-    // Firestore cloud synchronization
+    // B2 Cloud Storage synchronization
     cloudSyncStatus,
     lastCloudSync,
     syncSimulatorToCloud,
@@ -91,8 +91,8 @@ export default function App() {
   const [isWhatIfOpen, setIsWhatIfOpen] = useState<boolean>(false);
   const [isAiReviewOpen, setIsAiReviewOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [isFirestoreOpen, setIsFirestoreOpen] = useState<boolean>(false);
   const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
+  const [isStorageOpen, setIsStorageOpen] = useState<boolean>(false);
 
   const activeAsset = assets[selectedSymbol] || assets.PAXG;
   const currentSpotHolding = spotHoldings.find((h) => h.symbol === selectedSymbol);
@@ -144,11 +144,11 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col font-sans transition-colors selection:bg-blue-500 selection:text-white" style={{ backgroundColor: 'var(--theme-bg-page)', color: 'var(--theme-text-primary)' }}>
+    <div className="min-h-screen flex flex-col font-sans transition-colors selection:bg-emerald-500 selection:text-white" style={{ backgroundColor: 'var(--theme-bg-page)', color: 'var(--theme-text-primary)' }}>
       {/* Top Navigation */}
       <Navbar
-        onOpenFirestoreModal={() => setIsFirestoreOpen(true)}
         onOpenBatchModal={() => setIsBatchModalOpen(true)}
+        onOpenStorage={() => setIsStorageOpen(true)}
         onSelectAsset={handleGlobalAssetSelect}
       />
 
@@ -172,194 +172,34 @@ export default function App() {
         />
         
         {/* PRIMARY MULTI-ASSET MARKET CATEGORY SELECTION BAR */}
-        <div className="p-2 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-xs transition-colors" style={{ backgroundColor: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}>
+        <div className="p-1 rounded-md border bg-[var(--theme-bg-card)] border-[var(--theme-border)] flex flex-wrap items-center justify-between gap-2 transition-colors">
           <div className="flex items-center gap-1.5 flex-wrap w-full lg:w-auto">
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('CRYPTO')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'CRYPTO'
-                  ? 'bg-blue-600 text-white font-black shadow-md ring-2 ring-blue-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'CRYPTO' ? 'var(--theme-accent)' : 'transparent',
-                color: mainMarketTab === 'CRYPTO' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Coins className="w-4 h-4" />
-              <span>🪙 Crypto & Gold Derivatives</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('GLOBAL_INDICES')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'GLOBAL_INDICES'
-                  ? 'text-white font-black shadow-md ring-2 ring-blue-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'GLOBAL_INDICES' ? 'var(--theme-accent)' : 'transparent',
-                color: mainMarketTab === 'GLOBAL_INDICES' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Globe className="w-4 h-4" />
-              <span>🌐 Global Indices & Futures</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('FOREX')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'FOREX'
-                  ? 'bg-emerald-600 text-white font-black shadow-md ring-2 ring-emerald-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'FOREX' ? '#059669' : 'transparent',
-                color: mainMarketTab === 'FOREX' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <DollarSign className="w-4 h-4" />
-              <span>💱 Forex Exchange</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('COMMODITIES')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'COMMODITIES'
-                  ? 'bg-amber-600 text-white font-black shadow-md ring-2 ring-amber-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'COMMODITIES' ? '#d97706' : 'transparent',
-                color: mainMarketTab === 'COMMODITIES' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Flame className="w-4 h-4" />
-              <span>🛢️ Commodities & Energy</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('NIFTY_INDICES')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'NIFTY_INDICES'
-                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'NIFTY_INDICES' ? '#ea580c' : 'transparent',
-                color: mainMarketTab === 'NIFTY_INDICES' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>🇮🇳 Nifty & Indian Indices</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('INDIAN_PORTFOLIO')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'INDIAN_PORTFOLIO'
-                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'INDIAN_PORTFOLIO' ? '#ea580c' : 'transparent',
-                color: mainMarketTab === 'INDIAN_PORTFOLIO' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Briefcase className="w-4 h-4 text-white" />
-              <span>💼 Indian Stock Portfolio</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('INDIAN_WATCHLIST')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'INDIAN_WATCHLIST'
-                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'INDIAN_WATCHLIST' ? '#ea580c' : 'transparent',
-                color: mainMarketTab === 'INDIAN_WATCHLIST' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Star className="w-4 h-4 text-amber-300 fill-amber-300" />
-              <span>🏷️ Indian Stock Watchlist</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('STOCK_CONSTITUENTS')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'STOCK_CONSTITUENTS'
-                  ? 'bg-orange-600 text-white font-black shadow-md ring-2 ring-orange-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'STOCK_CONSTITUENTS' ? '#ea580c' : 'transparent',
-                color: mainMarketTab === 'STOCK_CONSTITUENTS' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Building className="w-4 h-4" />
-              <span>📊 Nifty Total & Global Stock Constituents</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('OPTION_CHAIN')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'OPTION_CHAIN'
-                  ? 'bg-purple-600 text-white font-black shadow-md ring-2 ring-purple-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'OPTION_CHAIN' ? '#7c3aed' : 'transparent',
-                color: mainMarketTab === 'OPTION_CHAIN' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Zap className="w-4 h-4 text-amber-300" />
-              <span>⚡ Nifty 50 & Bank Nifty Option Chain</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('STOCK_OPTION_CHAIN')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'STOCK_OPTION_CHAIN'
-                  ? 'bg-rose-600 text-white font-black shadow-md ring-2 ring-rose-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'STOCK_OPTION_CHAIN' ? '#e11d48' : 'transparent',
-                color: mainMarketTab === 'STOCK_OPTION_CHAIN' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <Briefcase className="w-4 h-4 text-amber-300" />
-              <span>📈 Stock F&O Option Chain</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setMainMarketTab('MARKET_SCREENER')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                mainMarketTab === 'MARKET_SCREENER'
-                  ? 'bg-blue-600 text-white font-black shadow-md ring-2 ring-blue-400/50'
-                  : 'hover:opacity-80'
-              }`}
-              style={{
-                backgroundColor: mainMarketTab === 'MARKET_SCREENER' ? '#2563eb' : 'transparent',
-                color: mainMarketTab === 'MARKET_SCREENER' ? '#ffffff' : 'var(--theme-text-primary)'
-              }}
-            >
-              <SlidersHorizontal className="w-4 h-4 text-amber-300" />
-              <span>📊 Advanced Market Screener</span>
-            </button>
+            {[
+              { id: 'CRYPTO', label: 'AurumX Derivatives', icon: <Coins className="w-3.5 h-3.5" /> },
+              { id: 'GLOBAL_INDICES', label: 'Global Indices', icon: <Globe className="w-3.5 h-3.5" /> },
+              { id: 'FOREX', label: 'Forex Exchange', icon: <DollarSign className="w-3.5 h-3.5" /> },
+              { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
+              { id: 'NIFTY_INDICES', label: 'Indian Indices', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+              { id: 'INDIAN_PORTFOLIO', label: 'Portfolio View', icon: <Briefcase className="w-3.5 h-3.5" /> },
+              { id: 'INDIAN_WATCHLIST', label: 'Watchlist', icon: <Star className="w-3.5 h-3.5" /> },
+              { id: 'STOCK_CONSTITUENTS', label: 'NIFTY 500 Stocks', icon: <Building className="w-3.5 h-3.5" /> },
+              { id: 'OPTION_CHAIN', label: 'Index Options', icon: <Waves className="w-3.5 h-3.5" /> },
+              { id: 'STOCK_OPTION_CHAIN', label: 'Stock Options', icon: <Briefcase className="w-3.5 h-3.5" /> },
+              { id: 'MARKET_SCREENER', label: 'Screener Pro', icon: <SlidersHorizontal className="w-3.5 h-3.5" /> },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setMainMarketTab(tab.id as any)}
+                className={`px-3 py-1.5 rounded-sm text-[9px] font-bold flex items-center gap-2 transition-all uppercase tracking-widest border border-transparent ${
+                  mainMarketTab === tab.id
+                    ? 'bg-[var(--theme-border)] text-emerald-500 border-[var(--theme-border-subtle)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -387,9 +227,9 @@ export default function App() {
               lastCloudSync={lastCloudSync}
               onManualCloudSync={() => {
                 syncSimulatorToCloud(true);
-                addNotification('success', 'Firestore Cloud Sync', 'Simulator state successfully synced to Firestore persistent store.');
+                addNotification('success', 'B2 Cloud Sync', 'Simulator state successfully synced to Backblaze B2 persistent store.');
               }}
-              onOpenFirestoreModal={() => setIsFirestoreOpen(true)}
+              onOpenFirestoreModal={() => setIsStorageOpen(true)}
               onOpenWhatIf={() => setIsWhatIfOpen(true)}
               onOpenAiReview={() => setIsAiReviewOpen(true)}
               onOpenSettings={() => setIsSettingsOpen(true)}
@@ -454,9 +294,8 @@ export default function App() {
         <div className="space-y-4 pt-2">
           {/* Workstation Navigation Bar */}
           <div
-            className={`p-1.5 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-lg transition-colors ${
-              isLight ? 'bg-white border-slate-200' : 'bg-neutral-900 border-neutral-800'
-            }`}
+            className="p-1.5 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-lg transition-colors"
+            style={{ backgroundColor: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
           >
             <div className="flex items-center gap-1.5 flex-wrap">
               <button
@@ -464,9 +303,7 @@ export default function App() {
                 onClick={() => setAnalysisTab('OPTIONS')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                   analysisTab === 'OPTIONS'
-                    ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                    : isLight
-                    ? 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
                     : 'text-neutral-300 hover:bg-neutral-800'
                 }`}
               >
@@ -479,9 +316,7 @@ export default function App() {
                 onClick={() => setAnalysisTab('MARKETCAP')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                   analysisTab === 'MARKETCAP'
-                    ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                    : isLight
-                    ? 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
                     : 'text-neutral-300 hover:bg-neutral-800'
                 }`}
               >
@@ -494,9 +329,7 @@ export default function App() {
                 onClick={() => setAnalysisTab('ANALYTICS')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                   analysisTab === 'ANALYTICS'
-                    ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                    : isLight
-                    ? 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
                     : 'text-neutral-300 hover:bg-neutral-800'
                 }`}
               >
@@ -509,9 +342,7 @@ export default function App() {
                 onClick={() => setAnalysisTab('WHALES')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                   analysisTab === 'WHALES'
-                    ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                    : isLight
-                    ? 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
                     : 'text-neutral-300 hover:bg-neutral-800'
                 }`}
               >
@@ -524,9 +355,7 @@ export default function App() {
                 onClick={() => setAnalysisTab('BACKTEST')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
                   analysisTab === 'BACKTEST'
-                    ? 'bg-amber-500 text-neutral-950 font-black shadow-md'
-                    : isLight
-                    ? 'text-slate-700 hover:bg-slate-100'
+                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
                     : 'text-neutral-300 hover:bg-neutral-800'
                 }`}
               >
@@ -599,9 +428,9 @@ export default function App() {
   </main>
 
       {/* Footer */}
-      <footer className="py-4 px-4 text-center text-xs font-mono border-t bg-white border-slate-200 text-slate-500 transition-colors">
-        <p>
-          AurumX Live Terminal • Real-time feeds via Binance & Bitfinex WebSockets • Sub-second Execution & Slippage Modeling
+      <footer className="py-4 px-4 text-center text-[10px] font-mono border-t transition-colors" style={{ backgroundColor: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)', color: 'var(--theme-text-muted)' }}>
+        <p className="uppercase tracking-widest opacity-60">
+          AurumX Live Institutional Terminal • Real-time WebSocket execution • Institutional Durability
         </p>
       </footer>
 
@@ -634,22 +463,21 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
       />
 
-      <FirestoreDataModal
-        isOpen={isFirestoreOpen}
-        onClose={() => setIsFirestoreOpen(false)}
-        cashBalance={cashBalance}
-        totalEquity={totalEquity}
-        positions={positions}
-        limitOrders={limitOrders}
-        tradeHistory={tradeHistory}
-        spotHoldings={spotHoldings}
-        lastCloudSync={lastCloudSync}
-        onManualSync={() => syncSimulatorToCloud(true)}
-      />
-
       <BatchWriterModal
         isOpen={isBatchModalOpen}
         onClose={() => setIsBatchModalOpen(false)}
+      />
+
+      <StorageManagerModal
+        isOpen={isStorageOpen}
+        onClose={() => setIsStorageOpen(false)}
+        simulatorData={{
+          cashBalance,
+          totalEquity,
+          tradeHistory,
+          positions,
+          spotHoldings
+        }}
       />
 
       {/* Notifications Toast */}

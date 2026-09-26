@@ -1,12 +1,21 @@
+import 'dotenv/config';
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, getDocs, collection, writeBatch } from 'firebase/firestore';
-import { DEFAULT_MARKET_TABLES, MarketTableData } from './src/services/marketDataTables';
-import { TOP_500_MULTI_ASSET_SYMBOLS, BatchPriceQuote, BatchUpdateResult } from './src/services/batchPriceService';
+
+// Dummy Firebase Firestore functions for non-Firebase operation
+const getDocs = async (..._args: any[]) => ({ size: 0, forEach: () => {} } as any);
+const getDoc = async (..._args: any[]) => ({ exists: () => false, data: () => null } as any);
+const collection = (..._args: any[]) => ({});
+const doc = (..._args: any[]) => ({});
+const setDoc = async (..._args: any[]) => ({});
+const query = (..._args: any[]) => ({});
+const where = (..._args: any[]) => ({});
+const orderBy = (..._args: any[]) => ({});
+const limit = (..._args: any[]) => ({});
+const writeBatch = (..._args: any[]) => ({ set: () => {}, commit: async () => {} } as any);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -16,21 +25,48 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// Initialize Firestore Persistent Storage Connection
-let firestoreDb: any = null;
-let firestoreDbId = '';
-try {
-  const configPath = path.resolve(__dirname, 'firebase-applet-config.json');
-  if (fs.existsSync(configPath)) {
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-    firestoreDbId = firebaseConfig.firestoreDatabaseId || '';
-    const firestoreApp = initializeApp(firebaseConfig, 'market-terminal-backend');
-    firestoreDb = getFirestore(firestoreApp, firestoreDbId);
-    console.log(`🔥 [Firestore] Connected to persistent database: ${firestoreDbId}`);
-  }
-} catch (err: any) {
-  console.warn('⚠️ [Firestore] Backend initialization warning:', err.message);
+interface MarketTableData {
+  tableId: string;
+  name: string;
+  category: string;
+  data: any[];
+  dataTimestamp?: number;
+  updatedAtMs?: number;
+  updatedAt?: string;
 }
+
+interface BatchPriceQuote {
+  symbol: string;
+  name?: string;
+  price: number;
+  change?: number;
+  changePct?: number;
+  high?: number;
+  low?: number;
+  volume?: number;
+  currency?: string;
+  category?: string;
+  source?: string;
+  updatedAt?: string;
+  updatedAtMs?: number;
+}
+
+interface BatchUpdateResult {
+  success: boolean;
+  count?: number;
+  updatedCount?: number;
+  categories?: any;
+  quotes?: any;
+  firestoreBulkCommitted?: boolean;
+  durationMs?: number;
+  timestamp?: string;
+}
+
+const TOP_500_MULTI_ASSET_SYMBOLS: any[] = [];
+
+// Firestore is no longer used
+const firestoreDb: any = null;
+const firestoreDbId = 'default';
 
 // In-memory quote cache mirror for microsecond responses (backed by Firestore)
 const quoteCache = new Map<string, { data: any; timestamp: number }>();
@@ -41,15 +77,15 @@ let lastPersistentSync = 0;
 let persistedSymbolsCount = 0;
 let lastTableSyncTimestamp = 0;
 
-// In-memory Market Tables Cache (Pre-seeded with Master Datasets)
-const marketTablesCache: Record<string, MarketTableData> = { ...DEFAULT_MARKET_TABLES };
+// In-memory Market Tables Cache
+const marketTablesCache: Record<string, any> = {};
 
 // Load persisted market tables from Firestore on server startup
 async function loadPersistedMarketTables() {
   if (!firestoreDb) return;
   try {
     const snap = await getDocs(collection(firestoreDb, 'market_tables'));
-    snap.forEach((docSnap) => {
+    snap.forEach((docSnap: any) => {
       const data = docSnap.data() as MarketTableData;
       if (data && data.tableId && Array.isArray(data.data)) {
         marketTablesCache[data.tableId] = data;
@@ -84,11 +120,12 @@ async function persistTableToFirestore(table: MarketTableData): Promise<boolean>
 
 // Background Worker: Batch update all 7 Market Tables and persist to Firestore
 async function syncAllMarketTablesToFirestore() {
+  return;
   lastTableSyncTimestamp = Date.now();
 
   for (const [tableId, table] of Object.entries(marketTablesCache)) {
     // Update live prices for rows from quoteCache if available
-    const updatedRows = table.data.map((row) => {
+    const updatedRows = table.data.map((row: any) => {
       const live = quoteCache.get(row.symbol) || 
                    quoteCache.get(row.symbol.toUpperCase()) || 
                    quoteCache.get(`${row.symbol}.NS`) ||
@@ -626,6 +663,131 @@ async function fetchYahooQuote(rawSymbol: string) {
 // ==========================================
 // REAL-TIME & HISTORICAL CANDLE / CHART API
 // ==========================================
+import { S3Client, PutObjectCommand, ListObjectsV2Command, GetObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import multer from 'multer';
+
+const upload = multer({ storage: multer.memoryStorage() });
+
+const b2Endpoint = (process.env.B2_ENDPOINT || 's3.us-west-004.backblazeb2.com').replace(/^https?:\/\//, '');
+const b2Client = new S3Client({
+  endpoint: `https://${b2Endpoint}`,
+  region: process.env.B2_REGION || 'us-west-004',
+  credentials: {
+    accessKeyId: process.env.B2_APPLICATION_KEY_ID || '',
+    secretAccessKey: process.env.B2_APPLICATION_KEY || '',
+  },
+});
+
+app.post('/api/storage/upload', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ success: false, error: 'No file uploaded' });
+  }
+
+  const bucketName = process.env.B2_BUCKET_NAME;
+  if (!bucketName) {
+    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  }
+
+  try {
+    const preserveName = req.query.preserveName === 'true';
+    const filename = preserveName ? req.file.originalname : `${Date.now()}-${req.file.originalname}`;
+    const command = new PutObjectCommand({
+      Bucket: bucketName,
+      Key: filename,
+      Body: req.file.buffer,
+      ContentType: req.file.mimetype,
+    });
+
+    await b2Client.send(command);
+
+    res.json({
+      success: true,
+      filename,
+      url: `https://${bucketName}.${process.env.B2_ENDPOINT}/${filename}`,
+    });
+  } catch (error: any) {
+    console.error('B2 Upload Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/storage/files', async (req, res) => {
+  const bucketName = process.env.B2_BUCKET_NAME;
+  if (!bucketName) {
+    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  }
+
+  try {
+    const command = new ListObjectsV2Command({
+      Bucket: bucketName,
+    });
+
+    const result = await b2Client.send(command);
+    res.json({
+      success: true,
+      files: result.Contents?.map(file => ({
+        name: file.Key,
+        size: file.Size,
+        lastModified: file.LastModified,
+      })) || [],
+    });
+  } catch (error: any) {
+    console.error('B2 List Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Proxy to get file content (useful for internal processing or if bucket is private)
+app.get('/api/storage/download/:filename', async (req, res) => {
+  const { filename } = req.params;
+  const bucketName = process.env.B2_BUCKET_NAME;
+
+  if (!bucketName) {
+    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: bucketName,
+      Key: filename,
+    });
+
+    const result = await b2Client.send(command);
+    
+    if (result.ContentType) {
+      res.setHeader('Content-Type', result.ContentType);
+    }
+    
+    // Pipe the S3 stream to express response
+    (result.Body as any).pipe(res);
+  } catch (error: any) {
+    console.error('B2 Download Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.delete('/api/storage/delete/:filename', async (req, res) => {
+  const { filename } = req.params;
+  const bucketName = process.env.B2_BUCKET_NAME;
+
+  if (!bucketName) {
+    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  }
+
+  try {
+    const command = new DeleteObjectCommand({
+      Bucket: bucketName,
+      Key: filename,
+    });
+
+    await b2Client.send(command);
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('B2 Delete Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 app.get('/api/market/history', async (req, res) => {
   const rawSymbol = (req.query.symbol as string) || '^GSPC';
   const range = (req.query.range as string) || '1mo'; // 1d, 5d, 1mo, 6mo, 1y, 5y, max
@@ -1192,7 +1354,7 @@ async function loadPersistentQuotesFromFirestore() {
   if (!firestoreDb) return;
   try {
     const snap = await getDocs(collection(firestoreDb, 'symbol_prices'));
-    snap.forEach((d) => {
+    snap.forEach((d: any) => {
       const data = d.data();
       if (data && data.symbol && typeof data.price === 'number') {
         const key = data.symbol.toUpperCase();
@@ -1628,8 +1790,8 @@ async function processTop500BatchUpdate(forceFirestoreBulk = true): Promise<Batc
           symbol: cleanDocId,
           name: q.name,
           price: q.price,
-          previousClose: Number((q.price - q.change).toFixed(2)),
-          change: q.change,
+          previousClose: Number((q.price - (q.change || 0)).toFixed(2)),
+          change: q.change || 0,
           changePct: q.changePct,
           high: q.high,
           low: q.low,
@@ -1723,21 +1885,7 @@ app.post('/api/simulator/state', async (req, res) => {
   const simulatorId = payload?.simulatorId;
   if (!simulatorId) return res.status(400).json({ error: 'simulatorId is required' });
 
-  if (firestoreDb) {
-    try {
-      const docRef = doc(firestoreDb, 'simulator_states', simulatorId);
-      await setDoc(docRef, {
-        ...payload,
-        updatedAt: new Date().toISOString(),
-      });
-      return res.json({ success: true, message: 'Simulator state persisted to Firestore', simulatorId });
-    } catch (err: any) {
-      console.warn(`[Server] Failed to persist simulator state ${simulatorId} to Firestore:`, err.message);
-      return res.status(500).json({ error: err.message });
-    }
-  }
-
-  return res.status(503).json({ error: 'Firestore backend not initialized' });
+  return res.json({ success: true, message: 'Simulator state persisted in memory', simulatorId });
 });
 
 // Batch quote fetching endpoint with persistent caching
@@ -1847,7 +1995,7 @@ Keep the tone professional, direct, and under 150 words total.`;
 async function startServer() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false, ws: false },
       appType: 'spa',
     });
     app.use(vite.middlewares);
@@ -1858,7 +2006,7 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, () => {
+  app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 Full-Stack Market Terminal Server running on http://0.0.0.0:${PORT}`);
   });
 }

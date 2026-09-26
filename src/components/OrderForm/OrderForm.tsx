@@ -73,7 +73,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onNotify,
   onPlaceOrder,
 }) => {
-  const { isLight } = useTheme();
   const [terminalTab, setTerminalTab] = useState<'TRADE' | 'AUTOGRID' | 'ALERTS'>('TRADE');
   const alertEngine = usePriceAlerts(asset, allAssets, onNotify);
   const autoGrid = useAutoGridTrader(
@@ -299,98 +298,46 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   return (
     <div
-      className={`rounded-2xl p-4 flex flex-col shadow-lg space-y-3 border transition-colors ${
-        isLight
-          ? 'bg-white border-slate-200 text-slate-800 shadow-slate-200/50'
-          : 'bg-neutral-900 border-neutral-800 text-neutral-100 shadow-black/40'
-      }`}
+      className="rounded-md p-4 flex flex-col space-y-4 border transition-colors bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)]"
     >
       {/* Shark Exchange Header Badge */}
       <div
-        className={`flex items-center justify-between px-3 py-1.5 rounded-xl border text-xs ${
-          isLight
-            ? 'bg-cyan-50 border-cyan-200 text-cyan-950'
-            : 'bg-cyan-950/40 border-cyan-500/30 text-neutral-100'
-        }`}
+        className="flex items-center justify-between px-3 py-2 rounded-sm border text-[9px] font-bold bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[var(--theme-text-secondary)] uppercase tracking-widest"
       >
-        <div className={`flex items-center gap-1.5 font-semibold ${isLight ? 'text-cyan-800' : 'text-cyan-300'}`}>
-          <Building2 className="w-3.5 h-3.5 text-cyan-500" />
-          <span>Shark Exchange Terminal</span>
+        <div className="flex items-center gap-2 text-emerald-500">
+          <Building2 className="w-3.5 h-3.5" />
+          <span>Terminal Engine</span>
         </div>
-        <div className={`flex items-center gap-2 font-mono text-[11px] ${isLight ? 'text-slate-700' : 'text-neutral-300'}`}>
-          <span className="text-amber-600 font-bold" title="Maker: 0.016% | Taker: 0.064% (4x Maker)">
-            0.016% Maker / 0.064% Taker
-          </span>
-          <span className="opacity-30">•</span>
-          <span>Max {maxLeverage}x Margin</span>
+        <div className="flex items-center gap-3 font-mono">
+          <span className="text-emerald-500/80">0.016% Maker</span>
+          <span className="opacity-10">|</span>
+          <span>MAX {maxLeverage}X</span>
         </div>
       </div>
 
-      {/* Terminal View Switcher (Trade vs Auto Grid vs Price Alerts) */}
+      {/* Terminal View Switcher */}
       <div
-        className={`flex p-1 rounded-xl border gap-1 ${
-          isLight ? 'bg-slate-100 border-slate-200' : 'bg-neutral-950 border-neutral-800'
-        }`}
+        className="flex p-1 rounded-sm border gap-1 bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]"
       >
-        <button
-          type="button"
-          onClick={() => setTerminalTab('TRADE')}
-          className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            terminalTab === 'TRADE'
-              ? isLight
-                ? 'bg-white text-amber-700 shadow-xs'
-                : 'bg-neutral-800 text-amber-400 shadow-sm'
-              : isLight
-              ? 'text-slate-600 hover:text-slate-900'
-              : 'text-neutral-400 hover:text-neutral-200'
-          }`}
-        >
-          <span>Trade</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setTerminalTab('AUTOGRID')}
-          className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            terminalTab === 'AUTOGRID'
-              ? isLight
-                ? 'bg-white text-amber-700 shadow-xs'
-                : 'bg-neutral-800 text-amber-400 shadow-sm'
-              : isLight
-              ? 'text-slate-600 hover:text-slate-900'
-              : 'text-neutral-400 hover:text-neutral-200'
-          }`}
-        >
-          <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-          <span>Auto Grid</span>
-          {autoGrid.gridConfig.enabled && (
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-          )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setTerminalTab('ALERTS')}
-          className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            terminalTab === 'ALERTS'
-              ? isLight
-                ? 'bg-white text-amber-700 shadow-xs'
-                : 'bg-neutral-800 text-amber-400 shadow-sm'
-              : isLight
-              ? 'text-slate-600 hover:text-slate-900'
-              : 'text-neutral-400 hover:text-neutral-200'
-          }`}
-        >
-          <Bell className="w-3.5 h-3.5" />
-          <span>Alerts</span>
-          {alertEngine.activeAlertsThisAsset.length > 0 && (
-            <span className={`px-1.5 py-0.2 rounded-full font-mono text-[10px] font-bold ${
-              isLight ? 'bg-amber-100 text-amber-900' : 'bg-amber-500/20 text-amber-300'
-            }`}>
-              {alertEngine.activeAlertsThisAsset.length}
-            </span>
-          )}
-        </button>
+        {[ 
+          { id: 'TRADE', label: 'Direct Trade' },
+          { id: 'AUTOGRID', label: 'Auto Grid', icon: <Sparkles className="w-3 h-3" /> },
+          { id: 'ALERTS', label: 'Alerts', icon: <Bell className="w-3 h-3" /> }
+        ].map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setTerminalTab(tab.id as any)}
+            className={`flex-1 py-1.5 text-[9px] uppercase tracking-widest font-bold rounded-sm transition-all flex items-center justify-center gap-2 border border-transparent ${
+              terminalTab === tab.id
+                ? 'bg-[var(--theme-border)] text-emerald-500 border-[var(--theme-border-subtle)]'
+                : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+            }`}
+          >
+            {tab.icon}
+            <span>{tab.label}</span>
+          </button>
+        ))}
       </div>
 
       {/* Render Selected View */}
@@ -433,35 +380,27 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start">
             
             {/* COLUMN 1: Mode, Direction, Order Type & Leverage */}
-            <div className="space-y-3">
-              <div className="text-xs font-bold text-amber-500 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-neutral-800">
+            <div className="space-y-4">
+              <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-[var(--theme-border-subtle)]">
                 <Sliders className="w-3.5 h-3.5" />
-                <span>1. Order Setup & Mode</span>
+                <span>01. Order Setup</span>
               </div>
 
               {/* Mode Selector (Spot vs Leveraged) */}
-              <div
-                className={`flex p-1 rounded-xl border ${
-                  isLight ? 'bg-slate-100 border-slate-200' : 'bg-neutral-950 border-neutral-800'
-                }`}
-              >
+              <div className="flex p-1 rounded-sm border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
                 <button
                   type="button"
                   onClick={() => {
                     setMode('LEVERAGED');
                     if (leverage === 1) setLeverage(isBtc ? 50 : isGold ? 25 : 10);
                   }}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded-sm transition-all ${
                     mode === 'LEVERAGED'
-                      ? isLight
-                        ? 'bg-white text-amber-700 font-bold shadow-xs'
-                        : 'bg-neutral-800 text-amber-400 shadow-sm'
-                      : isLight
-                      ? 'text-slate-600 hover:text-slate-900'
-                      : 'text-neutral-400 hover:text-neutral-200'
+                      ? 'bg-[var(--theme-border)] text-amber-400'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                   }`}
                 >
-                  Futures ({maxLeverage}x)
+                  Futures
                 </button>
                 <button
                   type="button"
@@ -469,17 +408,13 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                     setMode('SPOT');
                     setLeverage(1);
                   }}
-                  className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-widest rounded-sm transition-all ${
                     mode === 'SPOT'
-                      ? isLight
-                        ? 'bg-white text-emerald-700 font-bold shadow-xs'
-                        : 'bg-neutral-800 text-emerald-400 shadow-sm'
-                      : isLight
-                      ? 'text-slate-600 hover:text-slate-900'
-                      : 'text-neutral-400 hover:text-neutral-200'
+                      ? 'bg-[var(--theme-border)] text-emerald-400'
+                      : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                   }`}
                 >
-                  Spot (1:1)
+                  Spot
                 </button>
               </div>
 
@@ -488,48 +423,40 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 <button
                   type="button"
                   onClick={() => setSide('BUY')}
-                  className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  className={`py-2.5 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all border ${
                     side === 'BUY'
-                      ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30'
-                      : isLight
-                      ? 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                      : 'bg-neutral-950 text-neutral-400 border border-neutral-800 hover:text-neutral-200'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                      : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] border-[var(--theme-border-subtle)] hover:text-[var(--theme-text-secondary)]'
                   }`}
                 >
-                  <TrendingUp className="w-4 h-4" />
-                  {mode === 'SPOT' ? 'BUY (Spot)' : 'LONG / BUY'}
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  {mode === 'SPOT' ? 'Buy' : 'Long'}
                 </button>
                 <button
                   type="button"
                   onClick={() => setSide('SELL')}
-                  className={`py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  className={`py-2.5 rounded-sm text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 transition-all border ${
                     side === 'SELL'
-                      ? 'bg-rose-600 text-white shadow-md shadow-rose-600/30'
-                      : isLight
-                      ? 'bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200'
-                      : 'bg-neutral-950 text-neutral-400 border border-neutral-800 hover:text-neutral-200'
+                      ? 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] border-[var(--theme-border-subtle)] hover:text-[var(--theme-text-secondary)]'
                   }`}
                 >
-                  <TrendingDown className="w-4 h-4" />
-                  {mode === 'SPOT' ? 'SELL (Spot)' : 'SHORT / SELL'}
+                  <TrendingDown className="w-3.5 h-3.5" />
+                  {mode === 'SPOT' ? 'Sell' : 'Short'}
                 </button>
               </div>
 
               {/* Order Type (Market vs Limit) */}
-              <div className={`flex items-center justify-between pb-2 border-b text-xs ${isLight ? 'border-slate-200' : 'border-neutral-800'}`}>
-                <span className={isLight ? 'text-slate-600 font-medium' : 'text-neutral-400 font-medium'}>Order Execution</span>
-                <div className={`flex p-0.5 rounded-lg border ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-neutral-950 border-neutral-800'}`}>
+              <div className="flex items-center justify-between pb-2 border-b border-[var(--theme-border-subtle)] text-[9px] uppercase tracking-widest font-bold text-[var(--theme-text-muted)]">
+                <span>Execution</span>
+                <div className="flex p-0.5 rounded-sm border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
                   <button
                     type="button"
                     onClick={() => setOrderType('MARKET')}
-                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                    className={`px-2.5 py-1 rounded-sm transition-all ${
                       orderType === 'MARKET'
-                        ? isLight
-                          ? 'bg-white text-slate-900 font-bold shadow-xs'
-                          : 'bg-neutral-800 text-white'
-                        : isLight
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : 'text-neutral-500 hover:text-neutral-300'
+                        ? 'bg-[var(--theme-border)] text-[var(--theme-text-primary)]'
+                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                     }`}
                   >
                     Market
@@ -540,14 +467,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                       setOrderType('LIMIT');
                       if (!targetPriceInput) setTargetPriceInput(currentPrice.toString());
                     }}
-                    className={`px-2.5 py-1 rounded text-[11px] font-medium transition-all ${
+                    className={`px-2.5 py-1 rounded-sm transition-all ${
                       orderType === 'LIMIT'
-                        ? isLight
-                          ? 'bg-white text-slate-900 font-bold shadow-xs'
-                          : 'bg-neutral-800 text-white'
-                        : isLight
-                        ? 'text-slate-600 hover:text-slate-900'
-                        : 'text-neutral-500 hover:text-neutral-300'
+                        ? 'bg-[var(--theme-border)] text-[var(--theme-text-primary)]'
+                        : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                     }`}
                   >
                     Limit
@@ -557,11 +480,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
               {/* Limit Target Price Input */}
               {orderType === 'LIMIT' && (
-                <div>
-                  <div className="flex items-center justify-between text-xs mb-1">
-                    <label className={`font-medium ${isLight ? 'text-slate-700' : 'text-neutral-400'}`}>
-                      Target Limit Price (USDT)
-                    </label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[9px] uppercase tracking-widest font-bold">
+                    <label className="text-[var(--theme-text-muted)]">Target Price</label>
                     <button
                       type="button"
                       onClick={() => {
@@ -572,11 +493,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                           `Target for Limit ${side} ${asset.symbol}`
                         );
                       }}
-                      className="text-[10px] text-amber-600 hover:text-amber-700 flex items-center gap-1 font-mono transition-colors font-medium"
-                      title="Create browser price alert for this target limit price"
+                      className="text-amber-500 hover:text-amber-400 flex items-center gap-1 transition-colors"
                     >
                       <Bell className="w-3 h-3" />
-                      Alert @ Target
+                      Alert
                     </button>
                   </div>
                   <div className="relative">
@@ -586,14 +506,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                       value={targetPriceInput}
                       onChange={(e) => setTargetPriceInput(e.target.value)}
                       placeholder={currentPrice.toString()}
-                      className={`w-full border rounded-xl px-3 py-2 font-mono text-sm focus:outline-none focus:border-amber-500 ${
-                        isLight
-                          ? 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
-                          : 'bg-neutral-950 border-neutral-800 text-neutral-100'
-                      }`}
+                      className="w-full bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] rounded-sm px-3 py-2 font-mono text-xs focus:border-[var(--theme-accent)] transition-colors text-[var(--theme-text-primary)]"
                       required
                     />
-                    <span className={`absolute right-3 top-2.5 text-xs font-mono ${isLight ? 'text-slate-400' : 'text-neutral-500'}`}>
+                    <span className="absolute right-3 top-2.5 text-[10px] font-mono text-[var(--theme-text-muted)]">
                       USDT
                     </span>
                   </div>
@@ -602,26 +518,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
               {/* Leverage Slider (if leveraged) */}
               {mode === 'LEVERAGED' && (
-                <div
-                  className={`p-3 rounded-xl border ${
-                    isLight ? 'bg-slate-50 border-slate-200' : 'bg-neutral-950/70 border-neutral-800/80'
-                  }`}
-                >
-                  <div className="flex items-center justify-between text-xs mb-1.5">
-                    <span className={`flex items-center gap-1 ${isLight ? 'text-slate-700' : 'text-neutral-400'}`}>
-                      <Sliders className="w-3.5 h-3.5 text-amber-500" />
-                      Shark Margin Multiplier
+                <div className="p-3 rounded-sm border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
+                  <div className="flex items-center justify-between text-[9px] uppercase tracking-widest font-bold mb-3">
+                    <span className="text-[var(--theme-text-muted)] flex items-center gap-2">
+                      <Sliders className="w-3 h-3" />
+                      Multiplier
                     </span>
-                    <span
-                      className={`font-mono font-bold px-2 py-0.5 rounded text-xs ${
-                        leverage >= 50
-                          ? isLight ? 'bg-rose-100 text-rose-800' : 'bg-rose-500/20 text-rose-400'
-                          : leverage >= 20
-                          ? isLight ? 'bg-amber-100 text-amber-900' : 'bg-amber-500/20 text-amber-400'
-                          : isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-400'
-                      }`}
-                    >
-                      {leverage}x / max {maxLeverage}x
+                    <span className={`font-mono ${leverage >= 50 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                      {leverage}x
                     </span>
                   </div>
 
@@ -632,186 +536,136 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                     step="1"
                     value={leverage}
                     onChange={(e) => handleLeverageChange(parseInt(e.target.value))}
-                    className="w-full h-1.5 bg-slate-300 dark:bg-neutral-800 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    className="w-full h-1 bg-[var(--theme-border)] rounded-full appearance-none cursor-pointer accent-amber-500"
                   />
 
-                  <div className={`flex justify-between text-[10px] font-mono mt-1 ${isLight ? 'text-slate-500' : 'text-neutral-500'}`}>
+                  <div className="flex justify-between text-[8px] font-mono mt-2 text-[var(--theme-text-muted)] uppercase tracking-tighter">
                     <span>1x</span>
                     <span>10x</span>
-                    <span>25x {isGold || isBtc ? '' : '(Max)'}</span>
-                    {maxLeverage >= 75 && <span className="text-amber-600 font-bold">75x</span>}
-                    {maxLeverage >= 150 && <span className="text-rose-600 font-bold">150x</span>}
+                    <span>25x</span>
+                    {maxLeverage >= 75 && <span>75x</span>}
+                    {maxLeverage >= 150 && <span>150x</span>}
                   </div>
                 </div>
               )}
             </div>
 
             {/* COLUMN 2: Sizing & Risk Orders (TP / SL) */}
-            <div className="space-y-3">
-              <div className="text-xs font-bold text-amber-500 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-neutral-800">
+            <div className="space-y-4">
+              <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-[var(--theme-border-subtle)]">
                 <Coins className="w-3.5 h-3.5" />
-                <span>2. Position Sizing & Risk</span>
+                <span>02. Position Sizing</span>
               </div>
 
               {/* Sizing Input Toggle: By Lots vs By Margin USDT */}
               <div>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`font-medium ${isLight ? 'text-slate-700' : 'text-neutral-400'}`}>Order Sizing:</span>
-                    <div className={`flex rounded-lg p-0.5 border text-[10px] ${isLight ? 'bg-slate-100 border-slate-200' : 'bg-neutral-950 border-neutral-800'}`}>
+                <div className="flex items-center justify-between text-[9px] uppercase tracking-widest font-bold mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[var(--theme-text-muted)]">Mode</span>
+                    <div className="flex rounded-sm p-0.5 border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
                       <button
                         type="button"
                         onClick={() => setSizingMode('LOT')}
-                        className={`px-2 py-0.5 rounded font-medium transition-all ${
+                        className={`px-2 py-0.5 rounded-sm transition-all ${
                           sizingMode === 'LOT'
-                            ? isLight ? 'bg-white text-amber-800 font-bold shadow-xs' : 'bg-neutral-800 text-amber-300'
-                            : isLight ? 'text-slate-600' : 'text-neutral-500'
+                            ? 'bg-[var(--theme-border)] text-[var(--theme-text-primary)]'
+                            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                         }`}
                       >
-                        Lot / Units
+                        Units
                       </button>
                       <button
                         type="button"
                         onClick={() => setSizingMode('MARGIN')}
-                        className={`px-2 py-0.5 rounded font-medium transition-all ${
+                        className={`px-2 py-0.5 rounded-sm transition-all ${
                           sizingMode === 'MARGIN'
-                            ? isLight ? 'bg-white text-amber-800 font-bold shadow-xs' : 'bg-neutral-800 text-amber-300'
-                            : isLight ? 'text-slate-600' : 'text-neutral-500'
+                            ? 'bg-[var(--theme-border)] text-[var(--theme-text-primary)]'
+                            : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
                         }`}
                       >
-                        Margin ($)
+                        Margin
                       </button>
                     </div>
                   </div>
 
-                  <span className={`font-mono text-[11px] ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                    Avail:{' '}
-                    <strong className={isLight ? 'text-slate-900' : 'text-neutral-200'}>
-                      {mode === 'SPOT' && side === 'SELL'
-                        ? `${spotBalanceAmount.toFixed(4)} ${asset.symbol}`
-                        : `$${cashBalance.toFixed(2)} USDT`}
-                    </strong>
+                  <span className="font-mono text-emerald-400">
+                    {mode === 'SPOT' && side === 'SELL'
+                      ? `${spotBalanceAmount.toFixed(4)} ${asset.symbol}`
+                      : `$${cashBalance.toFixed(0)}`}
                   </span>
                 </div>
 
                 {sizingMode === 'LOT' ? (
-                  <div>
+                  <div className="space-y-2">
                     <div className="relative">
                       <input
                         type="number"
                         step="any"
                         value={lotInput}
                         onChange={(e) => handleLotChange(e.target.value)}
-                        className={`w-full border rounded-xl px-3 py-2 font-mono text-sm focus:outline-none focus:border-amber-500 ${
-                          isLight
-                            ? 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
-                            : 'bg-neutral-950 border-neutral-800 text-neutral-100'
-                        }`}
+                        className="w-full bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] rounded-sm px-3 py-2 font-mono text-xs focus:border-[var(--theme-accent)] transition-colors text-[var(--theme-text-primary)]"
                         placeholder={defaultSize.toString()}
                         required
                       />
-                      <span className={`absolute right-3 top-2.5 text-xs font-mono font-bold ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-                        {asset.symbol} ({isGold ? 'oz fine gold' : 'lots'})
+                      <span className="absolute right-3 top-2.5 text-[10px] font-mono font-bold text-[var(--theme-text-muted)] uppercase">
+                        {asset.symbol}
                       </span>
                     </div>
-                    <div className={`flex justify-between text-[10px] font-mono mt-1 px-1 ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                      <span>Trade Value: ~${tradeValue.toFixed(2)}</span>
-                      <span className="text-amber-600 font-semibold">Margin ({effectiveLeverage}x): ~${numericMargin.toFixed(2)} USDT</span>
+                    <div className="flex justify-between text-[8px] font-mono text-[var(--theme-text-muted)] uppercase px-1">
+                      <span>Val: ${tradeValue.toFixed(0)}</span>
+                      <span className="text-amber-500/80">Req: ${numericMargin.toFixed(0)}</span>
                     </div>
                   </div>
                 ) : (
-                  <div>
+                  <div className="space-y-2">
                     <div className="relative">
                       <input
                         type="number"
                         step="any"
                         value={marginInput}
                         onChange={(e) => handleMarginChange(e.target.value)}
-                        className={`w-full border rounded-xl px-3 py-2 font-mono text-sm focus:outline-none focus:border-amber-500 ${
-                          isLight
-                            ? 'bg-slate-50 border-slate-300 text-slate-900 focus:bg-white'
-                            : 'bg-neutral-950 border-neutral-800 text-neutral-100'
-                        }`}
+                        className="w-full bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] rounded-sm px-3 py-2 font-mono text-xs focus:border-[var(--theme-accent)] transition-colors text-[var(--theme-text-primary)]"
                         required
                       />
-                      <span className={`absolute right-3 top-2.5 text-xs font-mono ${isLight ? 'text-slate-400' : 'text-neutral-500'}`}>
+                      <span className="absolute right-3 top-2.5 text-[10px] font-mono text-[var(--theme-text-muted)] uppercase">
                         USDT
                       </span>
                     </div>
-                    <div className={`flex justify-between text-[10px] font-mono mt-1 px-1 ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                      <span>Purchase Qty: ~{assetUnits.toFixed(4)} {asset.symbol}</span>
-                      <span className={isLight ? 'text-slate-800 font-semibold' : 'text-neutral-300'}>Trade Value: ~${tradeValue.toFixed(2)}</span>
+                    <div className="flex justify-between text-[8px] font-mono text-[var(--theme-text-muted)] uppercase px-1">
+                      <span>Qty: {assetUnits.toFixed(4)} {asset.symbol}</span>
+                      <span className="text-[var(--theme-text-secondary)]">Val: ${tradeValue.toFixed(0)}</span>
                     </div>
                   </div>
                 )}
 
                 {/* Quick Shark Exchange Presets */}
-                <div className="mt-2 space-y-1.5">
+                <div className="mt-3 space-y-2">
                   <div className="grid grid-cols-4 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => applyPresetLot(0.002)}
-                      className={`py-1 rounded text-[10px] font-mono border transition-colors ${
-                        lotInput === '0.002'
-                          ? 'border-amber-500 text-amber-800 font-bold bg-amber-100'
-                          : isLight
-                          ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
-                          : 'bg-neutral-950 hover:bg-neutral-800 border-neutral-800 text-neutral-300'
-                      }`}
-                    >
-                      0.002 Lot
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyPresetLot(0.1)}
-                      className={`py-1 rounded text-[10px] font-mono border transition-colors ${
-                        lotInput === '0.1'
-                          ? 'border-amber-500 text-amber-800 font-bold bg-amber-100'
-                          : isLight
-                          ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-800'
-                          : 'bg-neutral-950 hover:bg-neutral-800 border-neutral-800 text-neutral-300'
-                      }`}
-                    >
-                      0.1 Size
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyPresetLot(0.01)}
-                      className={`py-1 rounded text-[10px] font-mono border ${
-                        isLight
-                          ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
-                          : 'bg-neutral-950 hover:bg-neutral-800 border-neutral-800 text-neutral-400'
-                      }`}
-                    >
-                      0.01 Lot
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => applyPresetLot(1)}
-                      className={`py-1 rounded text-[10px] font-mono border ${
-                        isLight
-                          ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
-                          : 'bg-neutral-950 hover:bg-neutral-800 border-neutral-800 text-neutral-400'
-                      }`}
-                    >
-                      1.0 Lot
-                    </button>
+                    {[0.002, 0.1, 0.01, 1].map((lots) => (
+                      <button
+                        key={lots}
+                        type="button"
+                        onClick={() => applyPresetLot(lots)}
+                        className={`py-1 rounded-sm text-[9px] font-mono border transition-all ${
+                          parseFloat(lotInput) === lots
+                            ? 'bg-amber-500/10 border-amber-500/20 text-amber-500'
+                            : 'bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+                        }`}
+                      >
+                        {lots}
+                      </button>
+                    ))}
                   </div>
 
-                  {/* Quick % buttons */}
-                  <div className="grid grid-cols-4 gap-1.5 pt-0.5">
+                  <div className="grid grid-cols-4 gap-1.5">
                     {[25, 50, 75, 100].map((pct) => (
                       <button
                         type="button"
                         key={pct}
                         onClick={() => handleQuickPercent(pct)}
-                        className={`py-0.5 rounded text-[10px] font-mono border transition-colors ${
-                          isLight
-                            ? 'bg-slate-100 hover:bg-slate-200 border-slate-300 text-slate-700'
-                            : 'bg-neutral-950 hover:bg-neutral-800 border-neutral-800 text-neutral-400 hover:text-neutral-200'
-                        }`}
+                        className="py-1 rounded-sm text-[8px] font-bold uppercase tracking-tighter border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)] transition-all"
                       >
-                        {pct}% Cash
+                        {pct}%
                       </button>
                     ))}
                   </div>
@@ -820,87 +674,67 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
               {/* Take-Profit & Stop-Loss Expandable */}
               {mode === 'LEVERAGED' && (
-                <div
-                  className={`p-2.5 rounded-xl border text-xs ${
-                    isLight ? 'bg-slate-50 border-slate-200' : 'bg-neutral-950/60 border-neutral-800/70'
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-2">
-                    <span className={`font-medium flex items-center gap-1 ${isLight ? 'text-slate-700' : 'text-neutral-400'}`}>
+                <div className="p-3 rounded-sm border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] space-y-3">
+                  <div className="flex items-center justify-between text-[9px] uppercase tracking-widest font-bold">
+                    <span className="text-[var(--theme-text-muted)] flex items-center gap-2">
                       <Shield className="w-3.5 h-3.5 text-emerald-500" />
-                      TP / SL Orders
+                      Risk Levels
                     </span>
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => applyPresetTPSL(4, 2)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] ${
-                          isLight ? 'bg-slate-200 text-slate-800 hover:bg-slate-300' : 'bg-neutral-800 text-neutral-300 hover:text-white'
-                        }`}
+                        className="px-1.5 py-0.5 rounded-sm bg-[var(--theme-border)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] transition-colors"
                       >
-                        2:1 Ratio
+                        2:1
                       </button>
                       <button
                         type="button"
                         onClick={() => applyPresetTPSL(6, 3)}
-                        className={`px-1.5 py-0.5 rounded text-[10px] ${
-                          isLight ? 'bg-slate-200 text-slate-800 hover:bg-slate-300' : 'bg-neutral-800 text-neutral-300 hover:text-white'
-                        }`}
+                        className="px-1.5 py-0.5 rounded-sm bg-[var(--theme-border)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] transition-colors"
                       >
-                        3:1 Ratio
+                        3:1
                       </button>
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="text-[10px] text-emerald-600 font-semibold block mb-0.5">Take Profit</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[8px] text-emerald-500/80 font-bold uppercase tracking-widest">Take Profit</label>
                       <input
                         type="number"
                         step="any"
-                        placeholder={
-                          side === 'BUY'
-                            ? (execPrice * 1.05).toFixed(2)
-                            : (execPrice * 0.95).toFixed(2)
-                        }
+                        placeholder="Price"
                         value={tpPriceInput}
                         onChange={(e) => {
                           setTpPriceInput(e.target.value);
                           setEnableTP(true);
                         }}
-                        className={`w-full border rounded-lg px-2 py-1 font-mono text-xs focus:outline-none focus:border-emerald-500 ${
-                          isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-neutral-900 border-neutral-800 text-neutral-200'
-                        }`}
+                        className="w-full bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)] rounded-sm px-2 py-1.5 font-mono text-[10px] focus:border-emerald-500 transition-colors text-[var(--theme-text-primary)]"
                       />
                     </div>
-                    <div>
-                      <label className="text-[10px] text-rose-600 font-semibold block mb-0.5">Stop Loss</label>
+                    <div className="space-y-1">
+                      <label className="text-[8px] text-rose-500/80 font-bold uppercase tracking-widest">Stop Loss</label>
                       <input
                         type="number"
                         step="any"
-                        placeholder={
-                          side === 'BUY'
-                            ? (execPrice * 0.97).toFixed(2)
-                            : (execPrice * 1.03).toFixed(2)
-                        }
+                        placeholder="Price"
                         value={slPriceInput}
                         onChange={(e) => {
                           setSlPriceInput(e.target.value);
                           setEnableSL(true);
                         }}
-                        className={`w-full border rounded-lg px-2 py-1 font-mono text-xs focus:outline-none focus:border-rose-500 ${
-                          isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-neutral-900 border-neutral-800 text-neutral-200'
-                        }`}
+                        className="w-full bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)] rounded-sm px-2 py-1.5 font-mono text-[10px] focus:border-rose-500 transition-colors text-[var(--theme-text-primary)]"
                       />
                     </div>
                   </div>
-                  <div className="mt-2 pt-2 border-t border-neutral-800/30">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-[10px] text-amber-500 font-bold uppercase tracking-wider flex items-center gap-1">
-                        <Sparkles className="w-2.5 h-2.5" />
-                        Smart Trailing SL
+                  
+                  <div className="pt-2 border-t border-[var(--theme-border-subtle)]">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-[8px] text-amber-500 font-bold uppercase tracking-widest flex items-center gap-1.5">
+                        <Sparkles className="w-3 h-3" />
+                        Trailing
                       </label>
-                      <span className="text-[9px] text-neutral-500 font-medium">Automatic Adjustment</span>
                     </div>
                     <div className="relative">
                       <input
@@ -910,11 +744,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                         placeholder="2.0"
                         value={trailingStopInput}
                         onChange={(e) => setTrailingStopInput(e.target.value)}
-                        className={`w-full border rounded-lg pl-2 pr-6 py-1 font-mono text-xs focus:outline-none focus:border-amber-500 ${
-                          isLight ? 'bg-white border-slate-300 text-slate-900' : 'bg-neutral-900 border-neutral-800 text-neutral-200'
-                        }`}
+                        className="w-full bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)] rounded-sm pl-2 pr-6 py-1.5 font-mono text-[10px] focus:border-amber-500 transition-colors text-[var(--theme-text-primary)]"
                       />
-                      <span className="absolute right-2 top-1.5 text-[10px] font-bold text-neutral-500">%</span>
+                      <span className="absolute right-2 top-2 text-[9px] font-bold text-[var(--theme-text-muted)]">%</span>
                     </div>
                   </div>
                 </div>
@@ -937,10 +769,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             </div>
 
             {/* COLUMN 3: Mini Market Depth, Execution Summary & Submit */}
-            <div className="space-y-3">
-              <div className="text-xs font-bold text-amber-500 uppercase tracking-wider flex items-center gap-1.5 pb-1 border-b border-neutral-800">
+            <div className="space-y-4">
+              <div className="text-[9px] font-bold text-amber-500 uppercase tracking-widest flex items-center gap-2 pb-2 border-b border-[var(--theme-border-subtle)]">
                 <Building2 className="w-3.5 h-3.5" />
-                <span>3. Execution & Depth</span>
+                <span>03. Execution</span>
               </div>
 
               {/* Mini Market Depth & Bid/Ask Volume Distribution */}
@@ -953,50 +785,43 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               />
 
               {/* Real-World Execution Breakdown */}
-              <div
-                className={`p-3 rounded-xl border text-[11px] font-mono space-y-1.5 ${
-                  isLight ? 'bg-slate-50 border-slate-200 text-slate-700' : 'bg-neutral-950 border-neutral-800/80'
-                }`}
-              >
-                <div className={`flex justify-between ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                  <span>Trade Value:</span>
-                  <span className={`font-semibold ${isLight ? 'text-slate-900' : 'text-neutral-100'}`}>
-                    ${tradeValue.toFixed(2)}{' '}
-                    <span className={`text-[10px] font-normal ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-                      ({assetUnits.toFixed(4)} {asset.symbol})
-                    </span>
+              <div className="p-3 rounded-sm border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[10px] font-mono space-y-2">
+                <div className="flex justify-between text-[var(--theme-text-muted)]">
+                  <span className="uppercase tracking-tighter">Notional:</span>
+                  <span className="text-[var(--theme-text-primary)]">
+                    ${tradeValue.toFixed(0)} <span className="opacity-50">({assetUnits.toFixed(4)} {asset.symbol})</span>
                   </span>
                 </div>
 
-                <div className={`flex justify-between ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                  <span>Margin Required ({effectiveLeverage}x):</span>
-                  <span className="text-amber-600 font-bold">
-                    ${numericMargin.toFixed(2)} USDT
+                <div className="flex justify-between text-[var(--theme-text-muted)]">
+                  <span className="uppercase tracking-tighter">Margin ({effectiveLeverage}x):</span>
+                  <span className="text-amber-500 font-bold">
+                    ${numericMargin.toFixed(2)}
                   </span>
                 </div>
 
-                <div className={`flex justify-between ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                  <span>Est. Price:</span>
-                  <span className={`font-semibold ${isLight ? 'text-slate-800' : 'text-neutral-200'}`}>
+                <div className="flex justify-between text-[var(--theme-text-muted)]">
+                  <span className="uppercase tracking-tighter">Est. Price:</span>
+                  <span className="text-[var(--theme-text-primary)]">
                     ${execPrice.toFixed(execPrice < 10 ? 4 : 2)}
                   </span>
                 </div>
 
-                <div className={`flex justify-between ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
-                  <span>Brokerage Fee ({orderType === 'MARKET' ? '0.064%' : '0.016%'}):</span>
-                  <span className="text-amber-600 font-semibold">
+                <div className="flex justify-between text-[var(--theme-text-muted)]">
+                  <span className="uppercase tracking-tighter">Fee ({orderType === 'MARKET' ? 'Taker' : 'Maker'}):</span>
+                  <span className="text-amber-500/80">
                     ${estimatedFee.toFixed(3)}
                   </span>
                 </div>
 
                 {mode === 'LEVERAGED' && (
-                  <div className={`flex justify-between items-center pt-1 border-t ${isLight ? 'border-slate-200 text-slate-600' : 'border-neutral-800 text-neutral-400'}`}>
-                    <span className="flex items-center gap-1">
-                      <AlertTriangle className="w-3 h-3 text-orange-500" />
-                      Liquidation:
+                  <div className="flex justify-between items-center pt-2 border-t border-[var(--theme-border-subtle)]">
+                    <span className="flex items-center gap-1.5 text-orange-500/80 uppercase tracking-tighter font-bold">
+                      <AlertTriangle className="w-3 h-3" />
+                      Liq.
                     </span>
-                    <span className="text-orange-600 font-bold">
-                      ${liquidationPrice.toFixed(2)} ({distanceToLiqPct.toFixed(1)}%)
+                    <span className="text-orange-500 font-bold">
+                      ${liquidationPrice.toFixed(2)} <span className="text-[8px] opacity-50">({distanceToLiqPct.toFixed(1)}%)</span>
                     </span>
                   </div>
                 )}
@@ -1013,44 +838,32 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                       isMaxTrades ||
                       (mode === 'SPOT' && side === 'SELL' && spotBalanceAmount <= 0)
                     }
-                    className={`w-full py-3.5 rounded-xl font-extrabold text-sm tracking-wide shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                    className={`w-full py-4 rounded-sm font-bold text-[10px] uppercase tracking-[0.2em] shadow-lg transition-all disabled:opacity-30 disabled:cursor-not-allowed ${
                       isMaxTrades
-                        ? isLight ? 'bg-slate-200 text-slate-500 border border-slate-300' : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                        ? 'bg-[var(--theme-border)] text-[var(--theme-text-muted)]'
                         : side === 'BUY'
-                        ? 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-emerald-600/20'
-                        : 'bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white shadow-rose-600/20'
+                        ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20'
+                        : 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-900/20'
                     }`}
                   >
-                    {isMaxTrades
-                      ? `Max Live Trades Reached (${positions.length}/10)`
-                      : `Execute ${side === 'BUY' ? 'Buy / Long' : 'Sell / Short'} ${assetUnits.toFixed(4)} ${asset.symbol}`}
+                    {isMaxTrades ? 'Limit Reached' : `Execute ${side} Order`}
                   </button>
                 );
               })()}
 
-              {/* Shark Exchange Broker Rules Callout */}
-              <div
-                className={`p-2.5 rounded-xl border text-[11px] ${
-                  isLight ? 'bg-cyan-50/70 border-cyan-200 text-cyan-950' : 'bg-cyan-950/20 border-cyan-500/20 text-neutral-300'
-                }`}
-              >
-                <div className={`flex items-center gap-1.5 font-semibold mb-0.5 ${isLight ? 'text-cyan-900' : 'text-cyan-400'}`}>
-                  <Info className="w-3.5 h-3.5 shrink-0" />
-                  <span>Shark Exchange Rules:</span>
+              {/* Terminal Broker Rules Callout */}
+              <div className="p-3 rounded-sm border bg-cyan-500/5 border-cyan-500/10 text-[9px] space-y-1">
+                <div className="flex items-center gap-2 font-bold text-cyan-400 uppercase tracking-widest">
+                  <Info className="w-3.5 h-3.5" />
+                  <span>Terminal Protocol</span>
                 </div>
-                <p className={`leading-relaxed text-[10px] ${isLight ? 'text-slate-600' : 'text-neutral-400'}`}>
+                <p className="text-[var(--theme-text-muted)] leading-relaxed">
                   {isGold ? (
-                    <>
-                      <strong className="text-amber-500">Gold (PAXG):</strong> Up to 75x leverage. Brokerage: 0.016% Maker / 0.064% Taker.
-                    </>
+                    <>Gold (PAXG): 75x MAX. 0.016% Maker / 0.064% Taker.</>
                   ) : isBtc ? (
-                    <>
-                      <strong className="text-orange-500">Bitcoin (BTC):</strong> Up to 150x leverage. Brokerage: 0.016% Maker / 0.064% Taker.
-                    </>
+                    <>Bitcoin (BTC): 150x MAX. 0.016% Maker / 0.064% Taker.</>
                   ) : (
-                    <>
-                      <strong className="text-blue-500">{asset.symbol}:</strong> Up to 25x leverage. Brokerage: 0.016% Maker / 0.064% Taker.
-                    </>
+                    <>{asset.symbol}: 25x MAX. 0.016% Maker / 0.064% Taker.</>
                   )}
                 </p>
               </div>

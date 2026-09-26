@@ -10,7 +10,6 @@ interface NewsItem {
 }
 
 export const MarketNewsTicker: React.FC = () => {
-  const { isLight } = useTheme();
   const [news, setNews] = useState<NewsItem[]>([]);
 
   useEffect(() => {
@@ -36,34 +35,30 @@ export const MarketNewsTicker: React.FC = () => {
   if (news.length === 0) return null;
 
   return (
-    <div className={`w-full overflow-hidden border-b flex items-center h-10 ${
-      isLight ? 'bg-indigo-600 text-white border-indigo-500' : 'bg-neutral-950 text-indigo-400 border-neutral-800'
-    }`}>
-      <div className={`flex items-center gap-2 px-4 h-full z-10 font-black text-[10px] uppercase tracking-widest border-r ${
-        isLight ? 'bg-indigo-700 border-indigo-500' : 'bg-neutral-900 border-neutral-800'
-      }`}>
-        <Newspaper className="w-3.5 h-3.5" />
-        <span>Live Feed</span>
+    <div className="w-full overflow-hidden border-b flex items-center h-8 transition-colors bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-muted)]">
+      <div className="flex items-center gap-2 px-3 h-full z-10 font-bold text-[9px] uppercase tracking-widest border-r border-[var(--theme-border)] bg-[var(--theme-bg-card)]">
+        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+        <span className="text-[var(--theme-text-primary)]">LIVE FEED</span>
       </div>
       
       <div className="flex-1 relative overflow-hidden h-full">
         <div className="absolute flex items-center h-full whitespace-nowrap animate-marquee hover:pause">
           {/* Double the news to create a seamless loop */}
           {[...news, ...news].map((item, idx) => (
-            <div key={`${item.id}-${idx}`} className="flex items-center gap-3 px-8 border-r border-neutral-800/30">
-              <span className={`text-[10px] font-bold uppercase ${
-                item.sentiment === 'positive' ? 'text-emerald-400' : 
-                item.sentiment === 'negative' ? 'text-rose-400' : 
-                'text-neutral-400'
+            <div key={`${item.id}-${idx}`} className="flex items-center gap-3 px-6 border-r border-[var(--theme-border-subtle)]/30">
+              <span className={`text-[9px] font-bold uppercase flex items-center gap-1 ${
+                item.sentiment === 'positive' ? 'text-emerald-500' : 
+                item.sentiment === 'negative' ? 'text-rose-500' : 
+                'text-[var(--theme-text-muted)]'
               }`}>
-                {item.sentiment === 'positive' && <TrendingUp className="w-3 h-3 inline mr-1" />}
-                {item.sentiment === 'negative' && <TrendingDown className="w-3 h-3 inline mr-1" />}
-                {item.sentiment === 'neutral' && <Minus className="w-3 h-3 inline mr-1" />}
+                {item.sentiment === 'positive' && <TrendingUp className="w-2.5 h-2.5" />}
+                {item.sentiment === 'negative' && <TrendingDown className="w-2.5 h-2.5" />}
+                {item.sentiment === 'neutral' && <Minus className="w-2.5 h-2.5" />}
                 {item.sentiment}
               </span>
-              <p className="text-xs font-medium tracking-tight">
+              <p className="text-[10px] font-medium tracking-tight text-[var(--theme-text-secondary)]">
                 {item.headline}
-                <span className="ml-2 opacity-50 font-mono text-[9px] uppercase">[{item.source}]</span>
+                <span className="ml-2 opacity-40 font-mono text-[8px] uppercase">[{item.source}]</span>
               </p>
             </div>
           ))}
@@ -76,7 +71,7 @@ export const MarketNewsTicker: React.FC = () => {
           100% { transform: translateX(-50%); }
         }
         .animate-marquee {
-          animation: marquee 60s linear infinite;
+          animation: marquee 80s linear infinite;
         }
         .hover\\:pause:hover {
           animation-play-state: paused;

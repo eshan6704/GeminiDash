@@ -97,75 +97,55 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
   const daysToProbableLiqBtc = Math.max(0.5, Number((goldLiqDist / (btcVolDaily * 2)).toFixed(1)));
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl relative my-6 max-h-[92vh] flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-[var(--theme-bg-card)] border border-[var(--theme-border)] rounded-md max-w-4xl w-full p-4 sm:p-6 shadow-2xl relative my-6 max-h-[92vh] flex flex-col text-[var(--theme-text-primary)]">
         {/* Header */}
-        <div className="flex items-center justify-between pb-3.5 border-b border-neutral-800 flex-shrink-0">
+        <div className="flex items-center justify-between pb-3.5 border-b border-[var(--theme-border)] flex-shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+            <div className="w-8 h-8 rounded-sm bg-amber-500/10 text-amber-500 flex items-center justify-center border border-amber-500/20">
               <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">
-                "What If?" Trading & Grid Simulation Lab
+              <h2 className="text-xs font-bold uppercase tracking-wider">
+                "WHAT IF?" SIMULATION LAB
               </h2>
-              <p className="text-xs text-neutral-400">
-                Visualize exact DCA buy levels, preview order schedules on interactive charts, and model risk scenarios before confirming.
+              <p className="text-[10px] text-[var(--theme-text-muted)] uppercase tracking-tight">
+                VISUALIZE GRID DCA LEVELS & MODEL RISK SCENARIOS
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors"
+            className="p-1.5 rounded-sm text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-card-subtle)] transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex items-center gap-1 sm:gap-2 pt-3 pb-1 border-b border-neutral-800 flex-shrink-0">
-          <button
-            type="button"
-            onClick={() => setActiveTab('GRID_DCA')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'GRID_DCA'
-                ? 'bg-amber-500 text-neutral-950 shadow-md'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-            }`}
-          >
-            <LineChart className="w-3.5 h-3.5" />
-            <span>Grid DCA Order Visualizer & Preview</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('FLASH_CRASH')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'FLASH_CRASH'
-                ? 'bg-amber-500 text-neutral-950 shadow-md'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-            }`}
-          >
-            <Flame className="w-3.5 h-3.5" />
-            <span>Portfolio Flash Crash Stress Test</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('GOLD_VS_CRYPTO')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
-              activeTab === 'GOLD_VS_CRYPTO'
-                ? 'bg-amber-500 text-neutral-950 shadow-md'
-                : 'text-neutral-400 hover:text-white hover:bg-neutral-800'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Gold vs Crypto Leverage Risk</span>
-          </button>
+        <div className="flex items-center gap-1 sm:gap-2 pt-3 pb-1 border-b border-[var(--theme-border)] flex-shrink-0">
+          {[
+            { id: 'GRID_DCA', label: 'GRID DCA PREVIEW', icon: LineChart },
+            { id: 'FLASH_CRASH', label: 'STRESS TEST', icon: Flame },
+            { id: 'GOLD_VS_CRYPTO', label: 'RISK AUDIT', icon: ShieldCheck },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`px-3 py-1.5 rounded-sm text-[9px] font-bold transition-all flex items-center gap-1.5 border uppercase ${
+                activeTab === tab.id
+                  ? 'bg-[var(--theme-accent)] border-[var(--theme-accent)] text-black'
+                  : 'text-[var(--theme-text-muted)] border-transparent hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-card-subtle)]'
+              }`}
+            >
+              <tab.icon className="w-3 h-3" />
+              <span>{tab.label}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Modal Body Content (Scrollable) */}
-        <div className="overflow-y-auto py-4 pr-1 text-xs space-y-4 flex-1">
+        <div className="overflow-y-auto py-4 pr-1 text-[11px] space-y-4 flex-1 no-scrollbar">
           {/* TAB 1: Visual Grid DCA Preview Chart */}
           {activeTab === 'GRID_DCA' && (
             <GridDcaPreviewChart
@@ -179,25 +159,25 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
           {/* TAB 2: Flash Crash Portfolio Stress Test */}
           {activeTab === 'FLASH_CRASH' && (
             <div className="space-y-4">
-              <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-800">
-                <div className="flex items-center justify-between mb-3">
+              <div className="bg-[var(--theme-bg-card-subtle)] p-4 rounded-sm border border-[var(--theme-border-subtle)]">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <Flame className="w-4 h-4 text-rose-500" />
-                    <h3 className="font-bold text-white text-sm">
-                      Flash Crash Stress Test on Live Positions
+                    <Flame className="w-3.5 h-3.5 text-rose-500" />
+                    <h3 className="font-bold text-[var(--theme-text-secondary)] uppercase tracking-tight">
+                      PORTFOLIO FLASH CRASH STRESS TEST
                     </h3>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-neutral-400">Simulate Crash:</span>
+                    <span className="text-[var(--theme-text-muted)] uppercase text-[9px] font-bold">SIMULATE:</span>
                     <div className="flex items-center gap-1 font-mono">
                       {[5, 12, 20].map((drop) => (
                         <button
                           key={drop}
                           onClick={() => setMarketDropPct(drop)}
-                          className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                          className={`px-2 py-0.5 rounded-sm text-[9px] font-bold border transition-colors ${
                             marketDropPct === drop
-                              ? 'bg-rose-600 text-white'
-                              : 'bg-neutral-900 text-neutral-400 hover:text-white'
+                              ? 'bg-rose-500 border-rose-500 text-white'
+                              : 'bg-[var(--theme-bg-card)] border-[var(--theme-border-subtle)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
                           }`}
                         >
                           -{drop}%
@@ -208,30 +188,30 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
                 </div>
 
                 {positions.length === 0 ? (
-                  <p className="text-neutral-500 py-6 text-center">
-                    You currently have no open leveraged positions in the simulator. Open a position to test if a -{marketDropPct}% sudden wick would trigger liquidation!
+                  <p className="text-[var(--theme-text-muted)] py-10 text-center uppercase font-bold tracking-tight">
+                    NO ACTIVE LEVERAGED POSITIONS TO TEST.
                   </p>
                 ) : (
                   <div className="space-y-2">
-                    <div className="divide-y divide-neutral-900 font-mono">
+                    <div className="divide-y divide-[var(--theme-border-subtle)] font-mono">
                       {crashResults.map((r, i) => (
                         <div key={i} className="py-2.5 flex items-center justify-between">
                           <div>
-                            <span className="font-bold text-neutral-200">
+                            <span className="font-bold text-[var(--theme-text-secondary)]">
                               {r.pos.assetSymbol} ({r.pos.leverage}x {r.pos.side})
                             </span>
-                            <span className="text-[10px] text-neutral-500 block">
-                              Asset drop: -{r.assetDrop.toFixed(1)}% | Liq Price: ${r.pos.liquidationPrice.toFixed(2)}
+                            <span className="text-[9px] text-[var(--theme-text-muted)] block uppercase">
+                              DROP: -{r.assetDrop.toFixed(1)}% | LIQ PRICE: ${r.pos.liquidationPrice.toFixed(2)}
                             </span>
                           </div>
                           <div className="text-right">
                             {r.wouldLiquidate ? (
-                              <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 font-bold text-[10px]">
+                              <span className="px-2 py-0.5 rounded-sm bg-rose-500/10 text-rose-500 border border-rose-500/20 font-bold text-[9px] uppercase">
                                 LIQUIDATED (-${r.pos.margin.toFixed(2)})
                               </span>
                             ) : (
-                              <span className="text-amber-400 font-semibold">
-                                Survives (-${r.simulatedLoss.toFixed(2)})
+                              <span className="text-emerald-500 font-bold">
+                                SURVIVES (-${r.simulatedLoss.toFixed(2)})
                               </span>
                             )}
                           </div>
@@ -239,9 +219,9 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
                       ))}
                     </div>
 
-                    <div className="pt-3 border-t border-neutral-800 flex justify-between font-mono font-bold text-neutral-300">
-                      <span>Total Estimated Portfolio Drawdown:</span>
-                      <span className="text-rose-400 text-sm">-${totalSimulatedLoss.toFixed(2)}</span>
+                    <div className="pt-3 border-t border-[var(--theme-border-subtle)] flex justify-between font-mono font-bold uppercase">
+                      <span className="text-[var(--theme-text-muted)]">EST. TOTAL DRAWDOWN:</span>
+                      <span className="text-rose-500 text-[12px]">-${totalSimulatedLoss.toFixed(2)}</span>
                     </div>
                   </div>
                 )}
@@ -252,84 +232,70 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
           {/* TAB 3: Gold vs Crypto Volatility Comparison */}
           {activeTab === 'GOLD_VS_CRYPTO' && (
             <div className="space-y-4">
-              <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-800">
-                <div className="flex items-center justify-between mb-3">
+              <div className="bg-[var(--theme-bg-card-subtle)] p-4 rounded-sm border border-[var(--theme-border-subtle)]">
+                <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-amber-400" />
-                    <h3 className="font-bold text-white text-sm">
-                      Physical Gold (XAUT) vs Bitcoin (BTC): Volatility & Holding Dynamics
+                    <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                    <h3 className="font-bold text-[var(--theme-text-secondary)] uppercase tracking-tight">
+                      GOLD (XAUT) VS BITCOIN (BTC) VOLATILITY
                     </h3>
                   </div>
-                  <div className="flex items-center gap-1 font-mono">
-                    <span className="text-neutral-500">Test Capital:</span>
+                  <div className="flex items-center gap-2 font-mono">
+                    <span className="text-[var(--theme-text-muted)] text-[9px] uppercase font-bold">CAPITAL:</span>
                     <input
                       type="number"
                       value={simCapital}
                       onChange={(e) => setSimCapital(Number(e.target.value) || 0)}
-                      className="w-20 bg-neutral-900 border border-neutral-800 px-2 py-0.5 rounded text-white text-right"
+                      className="w-20 bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)] px-2 py-0.5 rounded-sm text-[var(--theme-text-primary)] text-right font-bold outline-none focus:border-[var(--theme-accent)]"
                     />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {/* Gold Box */}
-                  <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-500/30">
+                  <div className="p-3 rounded-sm bg-amber-500/5 border border-amber-500/20">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-amber-400 flex items-center gap-1">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Tether Gold (XAUT)
-                      </span>
-                      <span className="text-[10px] text-neutral-400 font-mono">
-                        1 XAUT = 1 oz Gold
+                      <span className="font-bold text-amber-500 flex items-center gap-1 text-[10px] uppercase">
+                        <ShieldCheck className="w-3 h-3" />
+                        TETHER GOLD
                       </span>
                     </div>
-                    <div className="space-y-1.5 font-mono text-[11px]">
-                      <div className="flex justify-between text-neutral-400">
-                        <span>90-Day Est. Return:</span>
-                        <span className="text-emerald-400 font-bold">+{goldReturn90d}% (+${gold90dProfit.toFixed(0)})</span>
+                    <div className="space-y-2 font-mono text-[10px] uppercase">
+                      <div className="flex justify-between text-[var(--theme-text-muted)]">
+                        <span>90D EST. RETURN:</span>
+                        <span className="text-emerald-500 font-bold">+{goldReturn90d}% (+${gold90dProfit.toFixed(0)})</span>
                       </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Historical Max Drawdown:</span>
-                        <span className="text-amber-300 font-semibold">{goldMaxDrawdown}% (Mild)</span>
+                      <div className="flex justify-between text-[var(--theme-text-muted)]">
+                        <span>MAX DRAWDOWN:</span>
+                        <span className="text-amber-500/80 font-bold">{goldMaxDrawdown}%</span>
                       </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Volatility Index:</span>
-                        <span className="text-neutral-200">Very Low (~0.7% daily)</span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Real-World Backing:</span>
-                        <span className="text-amber-300 font-sans text-[10px]">Swiss Vault Allocated Bullion</span>
+                      <div className="flex justify-between text-[var(--theme-text-muted)]">
+                        <span>VOLATILITY:</span>
+                        <span className="text-[var(--theme-text-secondary)]">LOW (0.7% DAILY)</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Crypto Box */}
-                  <div className="p-3 rounded-xl bg-orange-950/20 border border-orange-500/30">
+                  <div className="p-3 rounded-sm bg-orange-500/5 border border-orange-500/20">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="font-bold text-orange-400 flex items-center gap-1">
-                        <Zap className="w-3.5 h-3.5" />
-                        Bitcoin (BTC)
-                      </span>
-                      <span className="text-[10px] text-neutral-400 font-mono">
-                        High Beta Crypto
+                      <span className="font-bold text-orange-500 flex items-center gap-1 text-[10px] uppercase">
+                        <Zap className="w-3 h-3" />
+                        BITCOIN
                       </span>
                     </div>
-                    <div className="space-y-1.5 font-mono text-[11px]">
-                      <div className="flex justify-between text-neutral-400">
-                        <span>90-Day Est. Return:</span>
-                        <span className="text-emerald-400 font-bold">+{btcReturn90d}% (+${btc90dProfit.toFixed(0)})</span>
+                    <div className="space-y-2 font-mono text-[10px] uppercase">
+                      <div className="flex justify-between text-[var(--theme-text-muted)]">
+                        <span>90D EST. RETURN:</span>
+                        <span className="text-emerald-500 font-bold">+{btcReturn90d}% (+${btc90dProfit.toFixed(0)})</span>
                       </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Historical Max Drawdown:</span>
-                        <span className="text-rose-400 font-semibold">{btcMaxDrawdown}% (Severe)</span>
+                      <div className="flex justify-between text-[var(--theme-text-muted)]">
+                        <span>MAX DRAWDOWN:</span>
+                        <span className="text-rose-500 font-bold">{btcMaxDrawdown}%</span>
                       </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Volatility Index:</span>
-                        <span className="text-neutral-200">High (~4.2% daily)</span>
-                      </div>
-                      <div className="flex justify-between text-neutral-400">
-                        <span>Real-World Backing:</span>
-                        <span className="text-neutral-300 font-sans text-[10px]">Algorithmic / Proof of Work</span>
+                      <div className="flex justify-between text-[var(--theme-text-muted)]">
+                        <span>VOLATILITY:</span>
+                        <span className="text-[var(--theme-text-secondary)]">HIGH (4.2% DAILY)</span>
                       </div>
                     </div>
                   </div>
@@ -337,13 +303,13 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
               </div>
 
               {/* Leverage Danger Gauge */}
-              <div className="bg-neutral-950 p-4 rounded-xl border border-neutral-800">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-bold text-white text-sm">
-                    Leverage Danger Gauge: Why 20x+ Wipes Out Crypto Traders
+              <div className="bg-[var(--theme-bg-card-subtle)] p-4 rounded-sm border border-[var(--theme-border-subtle)]">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="font-bold text-[var(--theme-text-secondary)] uppercase tracking-tight">
+                    LEVERAGE DANGER GAUGE
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <span className="text-neutral-400 font-mono">Test: {testLeverage}x</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[var(--theme-text-muted)] font-mono text-[10px] font-bold">{testLeverage}x</span>
                     <input
                       type="range"
                       min="2"
@@ -351,30 +317,27 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
                       step="1"
                       value={testLeverage}
                       onChange={(e) => setTestLeverage(parseInt(e.target.value))}
-                      className="w-24 accent-amber-400"
+                      className="w-24 accent-[var(--theme-accent)]"
                     />
                   </div>
                 </div>
 
-                <p className="text-neutral-400 text-[11px] leading-relaxed mb-3">
-                  At <strong className="text-amber-400 font-mono">{testLeverage}x leverage</strong>, an adverse price move of only{' '}
-                  <strong className="text-rose-400 font-mono">{goldLiqDist.toFixed(1)}%</strong> triggers an immediate liquidation and 100% loss of your margin.
+                <p className="text-[var(--theme-text-muted)] text-[10px] leading-relaxed mb-4 uppercase font-bold">
+                  AT <span className="text-[var(--theme-accent)]">{testLeverage}X LEVERAGE</span>, A MOVE OF <span className="text-rose-500">{goldLiqDist.toFixed(1)}%</span> TRIGGERS LIQUIDATION.
                 </p>
 
                 <div className="grid grid-cols-2 gap-3 text-center font-mono">
-                  <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
-                    <span className="text-[10px] text-neutral-500 uppercase block font-sans">Survival on XAUT Gold</span>
-                    <span className="text-sm font-bold text-emerald-400">
-                      ~{daysToProbableLiqGold} days
+                  <div className="bg-[var(--theme-bg-card)] p-3 rounded-sm border border-[var(--theme-border-subtle)]">
+                    <span className="text-[9px] text-[var(--theme-text-muted)] uppercase block font-bold mb-1">XAUT SURVIVAL</span>
+                    <span className="text-[12px] font-bold text-emerald-500">
+                      ~{daysToProbableLiqGold} DAYS
                     </span>
-                    <span className="text-[10px] text-neutral-500 block mt-0.5">Lower noise, stable trend</span>
                   </div>
-                  <div className="bg-neutral-900 p-2.5 rounded-lg border border-neutral-800">
-                    <span className="text-[10px] text-neutral-500 uppercase block font-sans">Survival on Bitcoin/ETH</span>
-                    <span className="text-sm font-bold text-rose-400">
-                      ~{daysToProbableLiqBtc} days
+                  <div className="bg-[var(--theme-bg-card)] p-3 rounded-sm border border-[var(--theme-border-subtle)]">
+                    <span className="text-[9px] text-[var(--theme-text-muted)] uppercase block font-bold mb-1">BTC SURVIVAL</span>
+                    <span className="text-[12px] font-bold text-rose-500">
+                      ~{daysToProbableLiqBtc} DAYS
                     </span>
-                    <span className="text-[10px] text-neutral-500 block mt-0.5">Frequent 5% wick liquidations</span>
                   </div>
                 </div>
               </div>
@@ -383,10 +346,10 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="pt-3 border-t border-neutral-800 flex justify-end flex-shrink-0">
+        <div className="pt-3 border-t border-[var(--theme-border)] flex justify-end flex-shrink-0">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-xs transition-colors"
+            className="px-5 py-1.5 rounded-sm bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-card)] text-[var(--theme-text-primary)] border border-[var(--theme-border-subtle)] font-bold text-[10px] uppercase transition-colors"
           >
             Close Lab
           </button>

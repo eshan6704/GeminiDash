@@ -68,10 +68,10 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
 
   // Real-time Firestore subscription to grouped Top 250 table
   useEffect(() => {
-    const unsub = subscribeMarketTable('crypto_top250', (table) => {
+    const unsub = subscribeMarketTable('crypto_top250', (table: any) => {
       if (table && table.data && table.data.length > 0) {
         setCoins(
-          table.data.map((m) => ({
+          table.data.map((m: any) => ({
             rank: m.rank || 1,
             id: m.id,
             name: m.name,

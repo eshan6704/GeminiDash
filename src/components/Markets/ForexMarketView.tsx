@@ -69,11 +69,11 @@ export const ForexMarketView: React.FC = () => {
 
   // Subscribe to grouped Forex table in Firestore (batch format)
   useEffect(() => {
-    const unsub = subscribeMarketTable('forex', (table) => {
+    const unsub = subscribeMarketTable('forex', (table: any) => {
       if (table && table.data && table.data.length > 0) {
         setPairs((prev) => {
           const existingMap = new Map(prev.map((p) => [p.pair, p]));
-          return table.data.map((m) => {
+          return table.data.map((m: any) => {
             const existing = existingMap.get(m.symbol);
             const incomingMs = m.dataTimestamp || m.updatedAtMs || (m.updatedAt ? new Date(m.updatedAt).getTime() : (table.dataTimestamp || table.updatedAtMs || new Date(table.updatedAt || 0).getTime()));
             const existingMs = (existing as any)?.updatedAtMs || 0;

@@ -95,24 +95,13 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       chartInstanceRef.current = null;
     }
 
-    const getChartThemeColors = () => {
-      switch (theme) {
-        case 'alpine':
-          return { bg: '#ffffff', text: '#0f172a', grid: '#f1f5f9', border: '#e2e8f0' };
-        case 'ivory':
-          return { bg: '#faf8f5', text: '#1c1917', grid: '#f4efe6', border: '#e8e0d5' };
-        case 'nordic':
-          return { bg: '#f4f4f7', text: '#18181b', grid: '#ebebf0', border: '#e2e2e8' };
-        case 'azure':
-          return { bg: '#f0f7ff', text: '#0c4a6e', grid: '#e0f0fe', border: '#bae6fd' };
-        case 'sage':
-          return { bg: '#f2f7f4', text: '#064e3b', grid: '#e2f1e8', border: '#a7f3d0' };
-        default:
-          return { bg: '#ffffff', text: '#0f172a', grid: '#f1f5f9', border: '#e2e8f0' };
-      }
+    // Fixed Quickstack colors for the chart
+    const colors = {
+      bg: '#0F1113', // Matches --theme-bg-main/card roughly
+      text: '#A1A1AA',
+      grid: '#1D1F23',
+      border: '#2A2D32'
     };
-
-    const colors = getChartThemeColors();
 
     const chart = createChart(containerRef.current, {
       width: containerRef.current.clientWidth,
@@ -143,7 +132,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     // Add Volume Series
     if (showVolume) {
       const volSeries = chart.addSeries(HistogramSeries, {
-        color: '#26a69a',
+        color: '#10b981', // Emerald 500
         priceFormat: {
           type: 'volume',
         },
@@ -167,11 +156,14 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         borderDownColor: '#ef4444',
         wickUpColor: '#10b981',
         wickDownColor: '#ef4444',
-      });
+        candleStyle: {
+          borderColor: '#2A2D32'
+        }
+      } as any);
       candlestickSeriesRef.current = candleSeries as any;
     } else {
       const lineSeries = chart.addSeries(LineSeries, {
-        color: asset.category === 'gold' ? '#f59e0b' : '#3b82f6',
+        color: asset.category === 'gold' ? '#f59e0b' : '#10b981',
         lineWidth: 2,
       });
       lineSeriesRef.current = lineSeries as any;
@@ -200,7 +192,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         chartInstanceRef.current = null;
       }
     };
-  }, [theme, isLight, chartType, showVolume, asset.category]);
+  }, [theme, chartType, showVolume, asset.category, timeframe]);
 
   // Update chart data when candles change
   useEffect(() => {
@@ -217,7 +209,7 @@ export const TradingChart: React.FC<TradingChartProps> = ({
     const formattedVolume: HistogramData[] = candles.map((c) => ({
       time: (c.time / 1000) as any,
       value: c.volume,
-      color: c.close >= c.open ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)',
+      color: c.close >= c.open ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)',
     }));
 
     if (candlestickSeriesRef.current) {
@@ -248,49 +240,37 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
   return (
     <div
-      className={`rounded-2xl p-4 flex flex-col h-[580px] sm:h-[620px] shadow-lg border transition-colors ${
-        isLight
-          ? 'bg-white border-slate-200 text-slate-800 shadow-slate-200/50'
-          : 'bg-neutral-900 border-neutral-800 text-neutral-100 shadow-black/40'
-      }`}
+      className="rounded-md p-4 flex flex-col h-[580px] sm:h-[620px] border transition-colors bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)]"
     >
       {/* Chart Header Controls */}
       <div
-        className={`flex flex-wrap items-center justify-between gap-3 pb-3 border-b text-xs ${
-          isLight ? 'border-slate-200' : 'border-neutral-800'
-        }`}
+        className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border)] text-xs"
       >
         {/* Pair Title & Real-time Quote */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <span
-              className={`font-extrabold text-base font-mono tracking-tight ${
-                isLight ? 'text-slate-900' : 'text-neutral-100'
-              }`}
+              className="font-bold text-base font-mono tracking-tight text-[var(--theme-text-primary)]"
             >
               {asset.symbol}/USDT
             </span>
-            <span className={`font-medium hidden sm:inline ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
+            <span className="font-medium hidden sm:inline text-[var(--theme-text-muted)]">
               {asset.name}
             </span>
           </div>
 
           <div className="flex items-center gap-2 font-mono">
-            <span className={`text-base font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>
+            <span className="text-base font-bold text-[var(--theme-text-primary)]">
               ${asset.price.toLocaleString('en-US', {
                 minimumFractionDigits: asset.price < 10 ? 4 : 2,
                 maximumFractionDigits: asset.price < 10 ? 4 : 2,
               })}
             </span>
             <span
-              className={`text-xs font-semibold px-1.5 py-0.5 rounded ${
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-sm border transition-colors ${
                 asset.change24h >= 0
-                  ? isLight
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-emerald-500/20 text-emerald-400'
-                  : isLight
-                  ? 'bg-rose-50 text-rose-700 border border-rose-200'
-                  : 'bg-rose-500/20 text-rose-400'
+                  ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                  : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
               }`}
             >
               {asset.change24h >= 0 ? '+' : ''}
@@ -303,77 +283,64 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           {/* Chart Type Toggle */}
           <div
-            className={`flex items-center p-0.5 rounded-lg border text-[11px] font-mono ${
-              isLight ? 'bg-slate-100 border-slate-300' : 'bg-neutral-950 border-neutral-800'
-            }`}
+            className="flex items-center p-0.5 rounded-md border text-[10px] font-mono bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]"
           >
             <button
               onClick={() => setChartType('candles')}
-              className={`px-2 py-1 rounded transition-all font-semibold ${
+              className={`px-2 py-1 rounded-sm transition-all font-bold ${
                 chartType === 'candles'
-                  ? isLight ? 'bg-white text-emerald-600 shadow-sm' : 'bg-neutral-800 text-emerald-400 shadow-sm'
-                  : isLight ? 'text-slate-600' : 'text-neutral-400'
+                  ? 'bg-[var(--theme-accent)] text-black'
+                  : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
               }`}
             >
-              Candles
+              CANDLES
             </button>
             <button
               onClick={() => setChartType('line')}
-              className={`px-2 py-1 rounded transition-all font-semibold ${
+              className={`px-2 py-1 rounded-sm transition-all font-bold ${
                 chartType === 'line'
-                  ? isLight ? 'bg-white text-blue-600 shadow-sm' : 'bg-neutral-800 text-blue-400 shadow-sm'
-                  : isLight ? 'text-slate-600' : 'text-neutral-400'
+                  ? 'bg-[var(--theme-accent)] text-black'
+                  : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
               }`}
             >
-              Line
+              LINE
             </button>
           </div>
 
-          {/* Indicators Toggle */}
-
-
           <button
             onClick={() => setShowVolume(!showVolume)}
-            className={`px-2 py-1 rounded text-[11px] font-mono font-semibold border transition-all ${
+            className={`px-2 py-1 rounded-md text-[10px] font-mono font-bold border transition-all ${
               showVolume
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                : isLight ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-neutral-950 text-neutral-400 border-neutral-800'
+                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] border-[var(--theme-border-subtle)]'
             }`}
             title="Toggle Volume"
           >
-            Vol
+            VOL
           </button>
 
           {/* Timeframe selector */}
           <div
-            className={`flex items-center p-0.5 rounded-lg border ${
-              isLight ? 'bg-slate-100 border-slate-300' : 'bg-neutral-950 border-neutral-800'
-            }`}
+            className="flex items-center p-0.5 rounded-md border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]"
           >
             {timeframes.map((tf) => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-2 py-1 rounded text-[11px] font-mono font-semibold transition-all ${
+                className={`px-2 py-1 rounded-sm text-[10px] font-mono font-bold transition-all ${
                   timeframe === tf
-                    ? isLight
-                      ? 'bg-white text-slate-900 shadow-sm'
-                      : 'bg-neutral-800 text-white shadow-sm'
-                    : isLight
-                    ? 'text-slate-600 hover:text-slate-900'
-                    : 'text-neutral-400 hover:text-neutral-200'
+                    ? 'bg-[var(--theme-border-subtle)] text-[var(--theme-text-primary)]'
+                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
                 }`}
               >
-                {tf}
+                {tf.toUpperCase()}
               </button>
             ))}
           </div>
 
           <button
             onClick={loadCandles}
-            className={`p-1.5 rounded-lg border transition-all ${
-              isLight ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200' : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:bg-neutral-800'
-            }`}
+            className="p-1.5 rounded-md border transition-all bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]"
             title="Refresh Chart Data"
           >
             <RefreshCcw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -383,26 +350,24 @@ export const TradingChart: React.FC<TradingChartProps> = ({
 
       {/* OHLCV Live Bar */}
       <div
-        className={`flex flex-wrap items-center gap-4 px-2 py-1.5 text-[11px] font-mono border-b ${
-          isLight ? 'bg-slate-50 border-slate-200 text-slate-600' : 'bg-neutral-950/60 border-neutral-800 text-neutral-400'
-        }`}
+        className="flex flex-wrap items-center gap-4 px-2 py-1.5 text-[10px] font-mono border-b bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[var(--theme-text-muted)]"
       >
         <span>
-          O: <strong className={isLight ? 'text-slate-900' : 'text-neutral-200'}>${currentCandle.open.toFixed(2)}</strong>
+          O: <strong className="text-[var(--theme-text-secondary)]">${currentCandle.open.toFixed(2)}</strong>
         </span>
         <span>
-          H: <strong className={isLight ? 'text-slate-900' : 'text-neutral-200'}>${currentCandle.high.toFixed(2)}</strong>
+          H: <strong className="text-[var(--theme-text-secondary)]">${currentCandle.high.toFixed(2)}</strong>
         </span>
         <span>
-          L: <strong className={isLight ? 'text-slate-900' : 'text-neutral-200'}>${currentCandle.low.toFixed(2)}</strong>
+          L: <strong className="text-[var(--theme-text-secondary)]">${currentCandle.low.toFixed(2)}</strong>
         </span>
         <span>
           C:{' '}
           <strong
             className={
               currentCandle.close >= currentCandle.open
-                ? 'text-emerald-500 font-bold'
-                : 'text-rose-500 font-bold'
+                ? 'text-emerald-500'
+                : 'text-rose-500'
             }
           >
             ${currentCandle.close.toFixed(2)}
@@ -410,42 +375,35 @@ export const TradingChart: React.FC<TradingChartProps> = ({
         </span>
         {showVolume && (
           <span>
-            Vol: <strong className={isLight ? 'text-slate-700' : 'text-neutral-300'}>{Math.round(currentCandle.volume)}</strong>
+            VOL: <strong className="text-[var(--theme-text-secondary)]">{Math.round(currentCandle.volume)}</strong>
           </span>
         )}
         {symbolPositions.length > 0 && (
           <span
-            className={`font-semibold px-2 py-0.5 rounded border text-[10px] ${
-              isLight
-                ? 'bg-amber-50 border-amber-300 text-amber-800'
-                : 'bg-amber-950/40 border-amber-600/30 text-amber-400'
-            }`}
+            className="font-bold px-2 py-0.5 rounded-sm border text-[9px] bg-amber-500/10 border-amber-500/20 text-amber-500"
           >
-            {symbolPositions.length} Active Position(s)
+            {symbolPositions.length} ACTIVE POSITION(S)
           </span>
         )}
       </div>
 
       {/* Official TradingView Lightweight Chart Container */}
       <div className="relative flex-1 w-full min-h-0 h-full pt-1">
-        <div ref={containerRef} className="w-full h-full rounded-lg overflow-hidden" />
+        <div ref={containerRef} className="w-full h-full overflow-hidden" />
 
         {/* Gold Badge */}
         {asset.category === 'gold' && (
           <div
-            className={`absolute bottom-3 left-3 pointer-events-none backdrop-blur px-3 py-1.5 rounded-lg text-xs border ${
-              isLight
-                ? 'bg-amber-50/90 border-amber-200 text-amber-900 shadow-sm'
-                : 'bg-neutral-950/80 border-amber-500/30 text-amber-300'
-            }`}
+            className="absolute bottom-3 left-3 pointer-events-none backdrop-blur-md px-3 py-1.5 rounded-sm text-[10px] border bg-[var(--theme-bg-card-subtle)]/80 border-amber-500/20 text-amber-400 font-bold"
           >
-            <div className="flex items-center gap-1.5 font-bold text-xs">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span>Real Live Physical Gold Feed (PAX Gold 1:1 London Good Delivery)</span>
+            <div className="flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+              <span>REAL LIVE PHYSICAL GOLD FEED</span>
             </div>
           </div>
         )}
       </div>
     </div>
+
   );
 };

@@ -1,35 +1,39 @@
 @import "tailwindcss";
 
 @layer utilities {
-  /* Hide scrollbar for Chrome, Safari and Opera */
-  .no-scrollbar::-webkit-scrollbar {
-    display: none;
-  }
-  /* Hide scrollbar for IE, Edge and Firefox */
-  .no-scrollbar {
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
-  }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }
 
 /* =========================================================
-   EXECUTIVE DAYLIGHT GLOBAL BASELINE (ZERO DARK / ZERO BLACK)
-   Universal variables initialized for default Executive Platinum
+   QUICKSTACK / 3DVC DESIGN CONSTITUTION
+   Optimized for high-density structure and zero eye strain.
+   Refined Institutional Dark: Soft deep charcoal & Slate accents.
    ========================================================= */
+
 :root {
-  --theme-bg-page: #f8fafc;
-  --theme-bg-header: rgba(255, 255, 255, 0.95);
-  --theme-bg-card: #ffffff;
-  --theme-bg-card-subtle: #f1f5f9;
-  --theme-border: #e2e8f0;
-  --theme-border-subtle: #f1f5f9;
-  --theme-text-primary: #0f172a;
-  --theme-text-secondary: #475569;
-  --theme-text-muted: #94a3b8;
-  --theme-accent: #2563eb;
-  --theme-accent-hover: #1d4ed8;
-  --theme-accent-light: #eff6ff;
-  --theme-accent-border: #bfdbfe;
+  /* Core Palette (3DVC Quickstack inspired) */
+  --theme-bg-page: #0B0E14;      /* Soft charcoal (reduces halation) */
+  --theme-bg-header: rgba(11, 14, 20, 0.92);
+  --theme-bg-card: #12151C;      /* Subtle elevation surface */
+  --theme-bg-card-subtle: #161A23;
+  
+  --theme-border: #1E232D;       /* Defined grid borders */
+  --theme-border-subtle: #181C25;
+  
+  --theme-text-primary: #F1F5F9;   /* High legibility off-white */
+  --theme-text-secondary: #94A3B8; /* Muted slate */
+  --theme-text-muted: #475569;
+  
+  --theme-accent: #10B981;       /* Institutional Emerald */
+  --theme-accent-hover: #059669;
+  --theme-accent-light: rgba(16, 185, 129, 0.08);
+  --theme-accent-border: rgba(16, 185, 129, 0.15);
+  
+  --color-success: #10B981;
+  --color-error: #EF4444;
+  --color-warning: #F59E0B;
+  --color-info: #3B82F6;
 }
 
 body {
@@ -37,284 +41,133 @@ body {
   background-color: var(--theme-bg-page);
   color: var(--theme-text-primary);
   overflow-x: hidden;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  line-height: 1.5;
 }
 
-code, pre, .font-mono {
+/* Institutional Tabular Data */
+code, pre, .font-mono, .tabular-nums {
   font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 /* =========================================================
-   UNIVERSAL THEME PROPAGATION ACROSS FULL PAGE
-   All surfaces adapt to the active Executive Daylight theme
+   UNIVERSAL COMPONENT MAPPING (ANTI-SLOP)
+   Ensures legacy tailwind classes map to the new theme.
    ========================================================= */
 
+/* Surface Level 1 (Main Page) */
 body, html {
-  background-color: var(--theme-bg-page) !important;
-  color: var(--theme-text-primary) !important;
+  background-color: var(--theme-bg-page);
+  color: var(--theme-text-primary);
 }
 
-/* Header & sticky top bars */
+/* Surface Level 2 (Headers & Sidebars) */
 header, nav, .theme-navbar {
-  background-color: var(--theme-bg-header) !important;
-  border-color: var(--theme-border) !important;
-  color: var(--theme-text-primary) !important;
+  background-color: var(--theme-bg-header);
+  border-color: var(--theme-border);
+  backdrop-filter: blur(16px);
 }
 
-/* Modal Backdrops - Daylight frosted glass overlay instead of dark blackout */
-.fixed.inset-0.bg-black\/80,
-.fixed.inset-0.bg-black\/70,
-.fixed.inset-0.bg-black\/60,
-.fixed.inset-0.bg-black\/50,
-.fixed.inset-0.bg-slate-900\/50 {
-  background-color: rgba(15, 23, 42, 0.45) !important;
-  backdrop-filter: blur(6px) !important;
-}
-
-/* Card & container surfaces across all views (Crypto, Nifty, Forex, Indices, Modals) */
+/* Surface Level 3 (Cards & Modals) */
 .bg-white,
-body .bg-neutral-900, html .bg-neutral-900,
-body .bg-neutral-900\/95, html .bg-neutral-900\/95,
-body .bg-neutral-900\/90, html .bg-neutral-900\/90,
-body .bg-neutral-900\/80, html .bg-neutral-900\/80,
-body .bg-neutral-900\/70, html .bg-neutral-900\/70,
-body .bg-neutral-900\/60, html .bg-neutral-900\/60,
-body .bg-slate-900, html .bg-slate-900 {
+.bg-neutral-900,
+.bg-slate-900,
+.bg-zinc-900,
+.bg-gray-900 {
   background-color: var(--theme-bg-card) !important;
   border-color: var(--theme-border) !important;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04), 0 1px 2px -1px rgba(0, 0, 0, 0.04);
 }
 
-/* Deep inner containers, sub-panels & wells */
-body .bg-neutral-950, html .bg-neutral-950,
-body .bg-neutral-950\/90, html .bg-neutral-950\/90,
-body .bg-neutral-950\/80, html .bg-neutral-950\/80,
-body .bg-neutral-950\/60, html .bg-neutral-950\/60,
-body .bg-slate-950, html .bg-slate-950,
-.bg-slate-50, .bg-slate-50\/80, .bg-slate-50\/50 {
+.bg-neutral-950,
+.bg-slate-950,
+.bg-zinc-950,
+.bg-gray-950,
+.bg-slate-50,
+.bg-neutral-50 {
   background-color: var(--theme-bg-card-subtle) !important;
   border-color: var(--theme-border-subtle) !important;
 }
 
-/* Table headers, tab pills & secondary badges */
-body .bg-neutral-850, body .bg-neutral-800, html .bg-neutral-800,
-body .bg-neutral-800\/80, html .bg-neutral-800\/80,
-body .bg-neutral-800\/60, html .bg-neutral-800\/60,
-body .bg-slate-800, html .bg-slate-800,
-.bg-slate-100, .bg-slate-100\/80 {
-  background-color: var(--theme-bg-card-subtle) !important;
-  color: var(--theme-text-primary) !important;
-  border-color: var(--theme-border-subtle) !important;
-}
-
-/* Hover states */
-body .hover\:bg-neutral-800:hover, html .hover\:bg-neutral-800:hover,
-body .hover\:bg-neutral-750:hover, html .hover\:bg-neutral-750:hover,
-body .hover\:bg-slate-100:hover, html .hover\:bg-slate-100:hover,
-body .hover\:bg-slate-200:hover, html .hover\:bg-slate-200:hover {
-  background-color: var(--theme-border) !important;
-  color: var(--theme-text-primary) !important;
-}
-
-/* Borders across whole page */
-body .border-neutral-900, html .border-neutral-900,
-body .border-neutral-800, html .border-neutral-800,
-body .border-neutral-700, html .border-neutral-700,
-body .border-slate-800, html .border-slate-800,
-body .border-slate-700, html .border-slate-700,
-body .border-slate-200, html .border-slate-200,
-body .border-slate-300, html .border-slate-300 {
+/* Grid Borders */
+.border,
+.border-t,
+.border-b,
+.border-l,
+.border-r,
+.border-neutral-900,
+.border-neutral-800,
+.border-neutral-700,
+.border-slate-800,
+.border-slate-700,
+.border-zinc-800,
+.border-zinc-700 {
   border-color: var(--theme-border) !important;
 }
 
-/* High-contrast typography */
-body .text-white, html .text-white,
-body .text-neutral-100, html .text-neutral-100,
-body .text-slate-900, html .text-slate-900,
-body .text-neutral-900, html .text-neutral-900 {
+/* Type Hierarchy */
+.text-slate-900,
+.text-neutral-900,
+.text-white {
   color: var(--theme-text-primary) !important;
 }
 
-body .text-neutral-200, html .text-neutral-200,
-body .text-neutral-300, html .text-neutral-300,
-body .text-slate-700, html .text-slate-700,
-body .text-slate-600, html .text-slate-600 {
+.text-slate-700,
+.text-slate-600,
+.text-neutral-400,
+.text-zinc-400,
+.text-gray-400 {
   color: var(--theme-text-secondary) !important;
 }
 
-body .text-neutral-400, html .text-neutral-400,
-body .text-neutral-500, html .text-neutral-500,
-body .text-slate-500, html .text-slate-500,
-body .text-slate-400, html .text-slate-400 {
+.text-slate-500,
+.text-slate-400,
+.text-neutral-500,
+.text-zinc-500,
+.text-gray-500 {
   color: var(--theme-text-muted) !important;
 }
 
-/* Form input styling in daylight */
-input[type="text"],
-input[type="number"],
-input[type="search"],
-select,
-textarea {
-  background-color: var(--theme-bg-card) !important;
+/* Emerald Accents (No Gloom) */
+.text-emerald-500,
+.text-green-500 {
+  color: var(--theme-accent) !important;
+}
+
+.bg-emerald-500,
+.bg-green-500 {
+  background-color: var(--theme-accent) !important;
+}
+
+/* Zero Glow / High Fidelity Shadows */
+.shadow-lg, .shadow-xl, .shadow-2xl {
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* Inputs & Form Controls */
+input, select, textarea {
+  background-color: var(--theme-bg-card-subtle) !important;
   color: var(--theme-text-primary) !important;
   border-color: var(--theme-border) !important;
+  border-radius: 4px !important;
+  font-size: 0.875rem !important;
 }
 
-input[type="text"]:focus,
-input[type="number"]:focus,
-input[type="search"]:focus,
-select:focus,
-textarea:focus {
+input:focus {
   border-color: var(--theme-accent) !important;
-  box-shadow: 0 0 0 2px var(--theme-accent-light) !important;
+  outline: none !important;
+  box-shadow: 0 0 0 1px var(--theme-accent) !important;
 }
 
-/* Daylight warning/info boxes */
-.bg-rose-950\/20, .bg-rose-950\/30, .bg-rose-950\/40 {
-  background-color: #fef2f2 !important;
-  border-color: #fecaca !important;
-}
-.text-rose-300, .text-rose-200 {
-  color: #b91c1c !important;
-}
-.bg-rose-900\/60, .bg-rose-900\/40 {
-  background-color: #fee2e2 !important;
-  color: #991b1b !important;
+/* Clean Transitions */
+button, a {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.bg-amber-950\/20, .bg-amber-950\/30, .bg-amber-950\/40 {
-  background-color: #fffbeb !important;
-  border-color: #fde68a !important;
-}
-.text-amber-300, .text-amber-200 {
-  color: #b45309 !important;
-}
-
-.bg-cyan-950\/20, .bg-cyan-950\/30, .bg-cyan-950\/40 {
-  background-color: #ecfeff !important;
-  border-color: #a5f3fc !important;
-}
-.text-cyan-300, .text-cyan-200 {
-  color: #0e7490 !important;
-}
-
-.bg-emerald-950\/20, .bg-emerald-950\/30, .bg-emerald-950\/40 {
-  background-color: #f0fdf4 !important;
-  border-color: #bbf7d0 !important;
-}
-.text-emerald-300, .text-emerald-200 {
-  color: #15803d !important;
-}
-
-/* =========================================================
-   EXECUTIVE DAYLIGHT THEME FLAVORS - CSS VARIABLE DEFINITIONS
-   ========================================================= */
-
-/* 1. Executive Platinum Daylight (Default) */
-:root,
-html.theme-executive,
-body.theme-executive {
-  --theme-bg-page: #f8fafc;
-  --theme-bg-header: rgba(255, 255, 255, 0.95);
-  --theme-bg-card: #ffffff;
-  --theme-bg-card-subtle: #f1f5f9;
-  --theme-border: #e2e8f0;
-  --theme-border-subtle: #f1f5f9;
-  --theme-text-primary: #0f172a;
-  --theme-text-secondary: #475569;
-  --theme-text-muted: #94a3b8;
-  --theme-accent: #2563eb;
-  --theme-accent-hover: #1d4ed8;
-  --theme-accent-light: #eff6ff;
-  --theme-accent-border: #bfdbfe;
-}
-
-/* 2. Alpine Clean Daylight */
-html.theme-alpine,
-body.theme-alpine {
-  --theme-bg-page: #ffffff;
-  --theme-bg-header: rgba(248, 250, 252, 0.95);
-  --theme-bg-card: #f8fafc;
-  --theme-bg-card-subtle: #f1f5f9;
-  --theme-border: #e2e8f0;
-  --theme-border-subtle: #f1f5f9;
-  --theme-text-primary: #0f172a;
-  --theme-text-secondary: #334155;
-  --theme-text-muted: #64748b;
-  --theme-accent: #059669;
-  --theme-accent-hover: #047857;
-  --theme-accent-light: #ecfdf5;
-  --theme-accent-border: #a7f3d0;
-}
-
-/* 3. Bloomberg Ivory Terminal */
-html.theme-ivory,
-body.theme-ivory {
-  --theme-bg-page: #faf8f5;
-  --theme-bg-header: rgba(250, 248, 245, 0.95);
-  --theme-bg-card: #ffffff;
-  --theme-bg-card-subtle: #f5efe6;
-  --theme-border: #e8e0d5;
-  --theme-border-subtle: #f2ede4;
-  --theme-text-primary: #1c1917;
-  --theme-text-secondary: #57534e;
-  --theme-text-muted: #78716c;
-  --theme-accent: #d97706;
-  --theme-accent-hover: #b45309;
-  --theme-accent-light: #fffbeb;
-  --theme-accent-border: #fde68a;
-}
-
-/* 4. Nordic Dawn & Linen */
-html.theme-nordic,
-body.theme-nordic {
-  --theme-bg-page: #f4f4f7;
-  --theme-bg-header: rgba(244, 244, 247, 0.95);
-  --theme-bg-card: #ffffff;
-  --theme-bg-card-subtle: #ebebf0;
-  --theme-border: #e2e2e8;
-  --theme-border-subtle: #ededf2;
-  --theme-text-primary: #18181b;
-  --theme-text-secondary: #52525b;
-  --theme-text-muted: #71717a;
-  --theme-accent: #4f46e5;
-  --theme-accent-hover: #4338ca;
-  --theme-accent-light: #eef2ff;
-  --theme-accent-border: #c7d2fe;
-}
-
-/* 5. Royal Azure Daylight */
-html.theme-azure,
-body.theme-azure {
-  --theme-bg-page: #f0f7ff;
-  --theme-bg-header: rgba(240, 247, 255, 0.95);
-  --theme-bg-card: #ffffff;
-  --theme-bg-card-subtle: #e0f0fe;
-  --theme-border: #bae6fd;
-  --theme-border-subtle: #e0f2fe;
-  --theme-text-primary: #0c4a6e;
-  --theme-text-secondary: #0369a1;
-  --theme-text-muted: #38bdf8;
-  --theme-accent: #0284c7;
-  --theme-accent-hover: #0369a1;
-  --theme-accent-light: #f0f9ff;
-  --theme-accent-border: #bae6fd;
-}
-
-/* 6. Executive Sage Daylight */
-html.theme-sage,
-body.theme-sage {
-  --theme-bg-page: #f2f7f4;
-  --theme-bg-header: rgba(242, 247, 244, 0.95);
-  --theme-bg-card: #ffffff;
-  --theme-bg-card-subtle: #e2f1e8;
-  --theme-border: #a7f3d0;
-  --theme-border-subtle: #d1fae5;
-  --theme-text-primary: #064e3b;
-  --theme-text-secondary: #047857;
-  --theme-text-muted: #10b981;
-  --theme-accent: #059669;
-  --theme-accent-hover: #047857;
-  --theme-accent-light: #f0fdf4;
-  --theme-accent-border: #a7f3d0;
+/* Selection */
+::selection {
+  background: rgba(16, 185, 129, 0.2);
+  color: #F1F5F9;
 }

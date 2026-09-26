@@ -1,6 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Sparkles, ChevronUp, ChevronDown, Activity, CheckCircle2, TrendingUp, TrendingDown } from 'lucide-react';
+import { 
+  Sparkles, 
+  ChevronUp, 
+  ChevronDown, 
+  Activity, 
+  CheckCircle2, 
+  TrendingUp, 
+  TrendingDown,
+  HardDrive,
+  CloudOff,
+  RefreshCw,
+  Clock
+} from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
+import { subscribeSyncStatus, SyncStatusInfo } from '../services/simulatorSyncService';
 
 interface Props {
   totalPnL: number;
@@ -9,8 +22,14 @@ interface Props {
 }
 
 export const AccountPulseWidget: React.FC<Props> = ({ totalPnL, winRate, totalTrades = 0 }) => {
-  const { isLight, theme } = useTheme();
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
+  const [syncInfo, setSyncInfo] = useState<SyncStatusInfo | null>(null);
+
+  // Subscribe to B2 Sync status
+  useEffect(() => {
+    const unsubscribe = subscribeSyncStatus(setSyncInfo);
+    return () => unsubscribe();
+  }, []);
 
   const getInitialStatus = () => {
     if (totalTrades === 0 || (Math.abs(totalPnL) < 0.01 && winRate === 0)) {
@@ -61,20 +80,52 @@ export const AccountPulseWidget: React.FC<Props> = ({ totalPnL, winRate, totalTr
   const isProfit = totalPnL > 0;
   const isDrawdown = totalPnL < 0;
 
+  const renderSyncIndicator = () => {
+    if (!syncInfo) return null;
+
+    const { status, lastSyncedAt } = syncInfo;
+    
+    let colorClass = 'text-neutral-400';
+    let label = 'B2 Idle';
+    let Icon = HardDrive;
+    let isSpinning = false;
+
+    if (status === 'syncing') {
+      colorClass = 'text-amber-500';
+      label = 'Syncing...';
+      Icon = RefreshCw;
+      isSpinning = true;
+    } else if (status === 'success') {
+      colorClass = 'text-emerald-500';
+      label = lastSyncedAt ? `Synced ${new Date(lastSyncedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'B2 Active';
+      Icon = CheckCircle2;
+    } else if (status === 'error') {
+      colorClass = 'text-rose-500';
+      label = 'B2 Error';
+      Icon = CloudOff;
+    }
+
+    return (
+      <div 
+        className="flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold border transition-all bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]"
+        title={`B2 Institutional Sync Status: ${status.toUpperCase()}${syncInfo.error ? ` - ${syncInfo.error}` : ''}`}
+      >
+        <Icon className={`w-3 h-3 ${colorClass} ${isSpinning ? 'animate-spin' : ''}`} />
+        <span className={colorClass}>{label}</span>
+      </div>
+    );
+  };
+
   if (isCollapsed) {
     return (
       <div className="flex justify-end -mt-1 -mb-1">
         <button
           type="button"
           onClick={() => setIsCollapsed(false)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all shadow-xs ${
-            isLight
-              ? 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
-              : 'bg-amber-500/10 text-amber-300 border-amber-500/30 hover:bg-amber-500/20'
-          }`}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-semibold border transition-all shadow-xs bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
           title="Expand Account Pulse Status"
         >
-          <Sparkles className="w-3 h-3 text-amber-500" />
+          <Activity className="w-3 h-3 text-emerald-500" />
           <span>Account Pulse</span>
           <ChevronDown className="w-3 h-3 opacity-70" />
         </button>
@@ -83,45 +134,42 @@ export const AccountPulseWidget: React.FC<Props> = ({ totalPnL, winRate, totalTr
   }
 
   return (
-    <div className="px-3 py-1.5 rounded-xl border bg-amber-50/90 border-amber-200 text-amber-950 flex items-center justify-between gap-3 text-xs transition-colors shadow-xs">
+    <div className="px-3 py-1.5 rounded-md border bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)] flex items-center justify-between gap-3 text-xs transition-colors">
       <div className="flex items-center gap-2.5 min-w-0 flex-1">
-        <div className="p-1 rounded-md bg-amber-500/20 text-amber-700 shrink-0">
+        <div className="p-1 rounded-sm bg-emerald-500/10 text-emerald-500 shrink-0">
           {isProfit ? (
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+            <TrendingUp className="w-3.5 h-3.5" />
           ) : isDrawdown ? (
-            <TrendingDown className="w-3.5 h-3.5 text-rose-600" />
+            <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
           ) : (
-            <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+            <Activity className="w-3.5 h-3.5" />
           )}
         </div>
-        <p className="font-medium text-[11px] sm:text-xs truncate leading-snug">
+        <p className="font-medium text-[11px] sm:text-xs truncate leading-snug tracking-tight">
           {summary}
         </p>
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {/* B2 Sync Indicator */}
+        {renderSyncIndicator()}
+
         <div
-          className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-mono font-bold border ${
-            isLight
-              ? 'bg-white/80 border-amber-200 text-slate-800'
-              : 'bg-neutral-900/60 border-neutral-700/60 text-neutral-300'
-          }`}
+          className="hidden md:flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-[10px] font-mono font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[var(--theme-text-secondary)]"
         >
-          <span>PnL:</span>
-          <span className={totalPnL > 0 ? 'text-emerald-500 font-bold' : totalPnL < 0 ? 'text-rose-400 font-bold' : ''}>
+          <span>PNL:</span>
+          <span className={totalPnL > 0 ? 'text-emerald-500' : totalPnL < 0 ? 'text-rose-400' : ''}>
             {totalPnL >= 0 ? '+' : ''}${totalPnL.toFixed(2)}
           </span>
-          <span className="opacity-40">|</span>
-          <span>Win: {winRate.toFixed(1)}%</span>
+          <span className="opacity-10">/</span>
+          <span>WIN: {winRate.toFixed(1)}%</span>
         </div>
 
         <button
           type="button"
           onClick={() => setIsCollapsed(true)}
-          className={`p-1 rounded-md transition-colors ${
-            isLight ? 'hover:bg-amber-100 text-amber-800' : 'hover:bg-amber-500/20 text-amber-300'
-          }`}
-          title="Minimize to maximize trading screen area"
+          className="p-1 rounded-sm transition-colors hover:bg-[var(--theme-border)] text-[var(--theme-text-muted)]"
+          title="Minimize"
         >
           <ChevronUp className="w-3.5 h-3.5" />
         </button>

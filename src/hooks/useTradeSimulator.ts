@@ -12,16 +12,16 @@ import {
 } from '../types/trading';
 import { INITIAL_ASSETS, fetchLiveMarketData } from '../services/marketData';
 import { liveWebSocketFeed } from '../services/liveWebSocketFeed';
-import { usePersistentSymbols } from '../services/symbolPersistenceService';
 import { updateRememberedPrice, getHydratedPrice } from '../services/priceMemoryStore';
-import {
-  saveSimulatorStateToFirestore,
-  loadSimulatorStateFromFirestore,
-  scheduleSimulatorSync,
-  subscribeSyncStatus,
+import { 
+  saveSimulatorStateToB2, 
+  loadSimulatorStateFromB2, 
+  scheduleSimulatorSync, 
+  subscribeSyncStatus, 
   getSimulatorId,
-  SyncStatusInfo,
+  SyncStatusInfo
 } from '../services/simulatorSyncService';
+import { usePersistentSymbols } from '../services/symbolPersistenceService';
 
 const DEFAULT_CONFIG: SimulatorConfig = {
   initialBalance: 100,
@@ -190,7 +190,7 @@ export function useTradeSimulator() {
     }
   }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts]);
 
-  // Firestore Synchronization Status & Hydration across Page Refreshes
+  // B2 Storage Synchronization Status & Hydration across Page Refreshes
   const [syncInfo, setSyncInfo] = useState<SyncStatusInfo>(() => ({
     status: 'idle',
     lastSyncedAt: null,
@@ -200,12 +200,12 @@ export function useTradeSimulator() {
   }));
   const [isHydrated, setIsHydrated] = useState<boolean>(false);
 
-  // Subscribe to status updates & hydrate simulator state from Firestore on mount
+  // Subscribe to status updates & hydrate simulator state from B2 Storage on mount
   useEffect(() => {
     const unsub = subscribeSyncStatus(setSyncInfo);
 
-    loadSimulatorStateFromFirestore()
-      .then((cloudState) => {
+    loadSimulatorStateFromB2()
+      .then((cloudState: any) => {
         if (cloudState) {
           if (typeof cloudState.cashBalance === 'number') {
             setCashBalance(cloudState.cashBalance);
@@ -231,7 +231,7 @@ export function useTradeSimulator() {
           if (cloudState.assets && Object.keys(cloudState.assets).length > 0) {
             setAssets((prev) => {
               const merged = { ...prev };
-              Object.entries(cloudState.assets!).forEach(([sym, val]) => {
+              Object.entries(cloudState.assets!).forEach(([sym, val]: [string, any]) => {
                 if (merged[sym] && val && val.price) {
                   merged[sym] = {
                     ...merged[sym],
@@ -251,7 +251,7 @@ export function useTradeSimulator() {
         setIsHydrated(true);
       })
       .catch((err) => {
-        console.warn('[Simulator] Firestore initial hydration warning:', err);
+        console.warn('[Simulator] B2 Storage initial hydration warning:', err);
         setIsHydrated(true);
       });
 
@@ -260,7 +260,7 @@ export function useTradeSimulator() {
     };
   }, []);
 
-  // Synchronize state with Firestore whenever balances, positions, orders, or config change
+  // Synchronize state with B2 Storage whenever balances, positions, orders, or config change
   useEffect(() => {
     if (!isHydrated) return;
 
@@ -276,8 +276,7 @@ export function useTradeSimulator() {
         priceAlerts,
         config,
         updatedAt: new Date().toISOString(),
-      },
-      false
+      }
     );
   }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts, config, isHydrated]);
 
@@ -299,7 +298,7 @@ export function useTradeSimulator() {
 
   const { prices: persistentPrices } = usePersistentSymbols();
 
-  // Instant update from Firestore persistent store
+  // Instant update from B2 Storage persistent store
   useEffect(() => {
     if (!persistentPrices || Object.keys(persistentPrices).length === 0) return;
 
@@ -319,7 +318,7 @@ export function useTradeSimulator() {
           };
 
           // Stable Price Ref Mechanism:
-          // Update ONLY if incoming Firestore data is newer (based on dataTimestamp) AND differs from last recorded price
+          // Update ONLY if incoming Cloud Storage data is newer (based on dataTimestamp) AND differs from last recorded price
           const isNewer = incomingTimestamp > stable.dataTimestamp;
           const isPriceDifferent = p.price !== stable.price;
 
@@ -357,7 +356,7 @@ export function useTradeSimulator() {
     });
   }, [persistentPrices]);
 
-  // Initial REST fetch & relaxed background fallback (Firestore handles real-time persistence)
+  // Initial REST fetch & relaxed background fallback (Cloud Storage handles real-time persistence)
   const refreshPrices = useCallback(async () => {
     try {
       const updated = await fetchLiveMarketData(assetsRef.current);
@@ -1216,7 +1215,7 @@ export function useTradeSimulator() {
   });
   const goldHedgeRatio = totalEquity > 0 ? (totalGoldValue / totalEquity) * 100 : 0;
 
-  // Manual Firestore Sync helper
+  // Manual B2 Storage Sync helper
   const syncSimulatorToCloud = useCallback(async (immediate = true) => {
     const data = {
       simulatorId: getSimulatorId(),
@@ -1233,14 +1232,14 @@ export function useTradeSimulator() {
       updatedAt: new Date().toISOString(),
     };
     if (immediate) {
-      return await saveSimulatorStateToFirestore(data);
+      return await saveSimulatorStateToB2(data);
     }
-    scheduleSimulatorSync(data, false);
+    scheduleSimulatorSync(data);
     return true;
   }, [tradeHistory, totalEquity, totalRealizedPnL]);
 
   const reloadSimulatorFromCloud = useCallback(async () => {
-    const cloudState = await loadSimulatorStateFromFirestore();
+    const cloudState = await loadSimulatorStateFromB2();
     if (cloudState) {
       if (typeof cloudState.cashBalance === 'number') setCashBalance(cloudState.cashBalance);
       if (Array.isArray(cloudState.positions)) setPositions(cloudState.positions);
@@ -1275,7 +1274,7 @@ export function useTradeSimulator() {
     winRate,
     totalTrades,
     goldHedgeRatio,
-    // Firestore Simulator Synchronization
+    // B2 Storage Simulator Synchronization
     cloudSyncStatus: syncInfo.status,
     lastCloudSync: syncInfo.lastSyncedAt,
     syncSource: syncInfo.source,
