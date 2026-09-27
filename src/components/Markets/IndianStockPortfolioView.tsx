@@ -53,13 +53,19 @@ export const IndianStockPortfolioView: React.FC = () => {
   const [subTab, setSubTab] = useState<'HOLDINGS' | 'ANALYSIS' | 'TRANSACTIONS'>('HOLDINGS');
 
   // Find selected stock details
-  const currentStock = stocks.find((s) => s.symbol === selectedSymbol) || stocks[0];
+  const currentStock = stocks.find((s) => s && s.symbol === selectedSymbol) || stocks[0] || {
+    symbol: 'RELIANCE',
+    name: 'Reliance Industries Ltd',
+    price: 2980.50,
+    change1d: 0.85
+  };
 
-  const totalInvested = holdings.reduce((acc, h) => acc + h.investedValue, 0);
+  const totalInvested = holdings.reduce((acc, h) => acc + (h?.investedValue || 0), 0);
   const currentMarketValue = holdings.reduce((acc, h) => {
-    const stock = stocks.find((s) => s.symbol === h.symbol);
-    const livePrice = stock ? stock.price : h.avgPrice;
-    return acc + h.qty * livePrice;
+    if (!h) return acc;
+    const stock = stocks.find((s) => s && s.symbol === h.symbol);
+    const livePrice = stock ? stock.price : (h.avgPrice || 0);
+    return acc + (h.qty || 0) * livePrice;
   }, 0);
 
   const totalPnL = currentMarketValue - totalInvested;

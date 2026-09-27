@@ -15,16 +15,10 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
+import { subscribeMarketTable, fetchMarketTable, MASTER_INDIAN_INDICES } from '../../services/marketDataTables';
 import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
 import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
-
-export const MASTER_INDIAN_INDICES = [
-  { id: 'nifty50', name: 'NIFTY 50', symbol: 'NIFTY 50', price: 24320.50, change1d: 0.45, change1dPts: 108.20, category: 'Benchmark' },
-  { id: 'banknifty', name: 'NIFTY BANK', symbol: 'BANKNIFTY', price: 51240.30, change1d: -0.15, change1dPts: -76.40, category: 'Benchmark' },
-  { id: 'niftyit', name: 'NIFTY IT', symbol: 'NIFTY IT', price: 38450.20, change1d: 1.20, change1dPts: 456.10, category: 'Sectoral' },
-  { id: 'midcap100', name: 'NIFTY MIDCAP 100', symbol: 'MIDCAP100', price: 58200.00, change1d: 0.85, change1dPts: 492.30, category: 'Broad Market' },
-];
 
 export interface NiftyIndexItem {
   id: string;
@@ -47,6 +41,8 @@ const NIFTY_YAHOO_MAP: Record<string, string> = {
   'NIFTY50': '^NSEI',
   'BANKNIFTY': '^NSEBANK',
   'NIFTY BANK': '^NSEBANK',
+  'NIFTY 500': '^CRN500',
+  'NIFTY500': '^CRN500',
   'SENSEX': '^BSESN',
   'NIFTY IT': '^CNXIT',
   'NIFTY MIDCAP': '^NSEMDCP50',
@@ -85,9 +81,9 @@ export const NiftyIndicesView: React.FC = () => {
         price: hydrated.price,
         change1d: hydrated.change1d ?? m.change1d,
         change1dPts: m.change1dPts || 0,
-        high24h: (m as any).high24h || hydrated.price,
-        low24h: (m as any).low24h || hydrated.price,
-        peRatio: (m as any).peRatio || 22.5,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
+        peRatio: m.peRatio || 22.5,
         currency: 'INR',
       };
     })
@@ -95,12 +91,13 @@ export const NiftyIndicesView: React.FC = () => {
 
   const loadRealQuotes = async () => {
     setIsLoadingLive(true);
-    const symbolsToFetch = indices.map((i) => i.yahooSymbol || i.symbol);
+    const symbolsToFetch = indices.filter(i => i && (i.yahooSymbol || i.symbol)).map((i) => i.yahooSymbol || i.symbol);
     const liveMap = await fetchBatchLiveQuotes(symbolsToFetch);
 
     if (Object.keys(liveMap).length > 0) {
       setIndices((prev) =>
         prev.map((idx) => {
+          if (!idx || !idx.symbol) return idx;
           const targetKey = idx.yahooSymbol || idx.symbol;
           const live = liveMap[targetKey] || liveMap[idx.symbol] || liveMap[idx.id];
           if (live && live.price > 0) {
@@ -302,7 +299,7 @@ export const NiftyIndicesView: React.FC = () => {
                 {/* Price & Change */}
                 <div className="flex items-baseline justify-between font-mono pt-1">
                   <span className="text-xl font-black">
-                    ₹{idx.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                    ₹{(idx.price || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                   </span>
 
                   <div
@@ -313,15 +310,15 @@ export const NiftyIndicesView: React.FC = () => {
                     }`}
                   >
                     {isUp ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-                    <span>{isUp ? '+' : ''}{idx.change1dPts.toFixed(1)} ({isUp ? '+' : ''}{idx.change1d.toFixed(2)}%)</span>
+                    <span>{isUp ? '+' : ''}{(idx.change1dPts || 0).toFixed(1)} ({isUp ? '+' : ''}{(idx.change1d || 0).toFixed(2)}%)</span>
                   </div>
                 </div>
 
                 {/* High / Low Bar */}
                 <div className="space-y-1 font-mono text-[10px] pt-1 border-t" style={{ borderColor: 'var(--theme-border-subtle)' }}>
                   <div className="flex justify-between" style={{ color: 'var(--theme-text-secondary)' }}>
-                    <span>Day Low: ₹{idx.low24h.toLocaleString('en-IN')}</span>
-                    <span>Day High: ₹{idx.high24h.toLocaleString('en-IN')}</span>
+                    <span>Day Low: ₹{(idx.low24h || 0).toLocaleString('en-IN')}</span>
+                    <span>Day High: ₹{(idx.high24h || 0).toLocaleString('en-IN')}</span>
                   </div>
                   <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden">
                     <div
@@ -329,7 +326,7 @@ export const NiftyIndicesView: React.FC = () => {
                       style={{
                         width: `${Math.min(
                           100,
-                          Math.max(10, ((idx.price - idx.low24h) / (idx.high24h - idx.low24h || 1)) * 100)
+                          Math.max(10, (((idx.price || 0) - (idx.low24h || 0)) / ((idx.high24h || 0) - (idx.low24h || 0) || 1)) * 100)
                         )}%`,
                       }}
                     />

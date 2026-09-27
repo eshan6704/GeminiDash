@@ -99,16 +99,16 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [orderType, setOrderType] = useState<OrderType>('MARKET');
   
   // Shark Exchange broker rules
-  const maxLeverage = getBrokerMaxLeverage(asset.symbol);
-  const defaultSize = getBrokerDefaultSize(asset.symbol);
+  const maxLeverage = asset?.symbol ? getBrokerMaxLeverage(asset.symbol) : 25;
+  const defaultSize = asset?.symbol ? getBrokerDefaultSize(asset.symbol) : 1;
 
   // Sizing mode: By Lot Size vs By Margin (USDT)
   const [sizingMode, setSizingMode] = useState<'LOT' | 'MARGIN'>('LOT');
   const [lotInput, setLotInput] = useState<string>(defaultSize.toString());
   const [leverage, setLeverage] = useState<number>(() => {
     // Default initial leverage based on asset rules
-    if (asset.symbol === 'BTC') return 50;
-    if (asset.category === 'gold') return 25;
+    if (asset?.symbol === 'BTC') return 50;
+    if (asset?.category === 'gold') return 25;
     return 10;
   });
 
@@ -150,13 +150,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   // Margin on tradevalue = price * qty purchase
   // Initial margin calculated directly from (price * defaultQty) / leverage
   const [marginInput, setMarginInput] = useState<string>(() => {
+    if (!asset) return '100.00';
     const lev = asset.symbol === 'BTC' ? 50 : asset.category === 'gold' ? 25 : 10;
-    const initialTradeVal = defaultSize * asset.price;
+    const initialTradeVal = defaultSize * (asset.price || 100);
     return (initialTradeVal / lev).toFixed(2);
   });
 
   // When asset or trade mode changes, synchronize lot and margin
   useEffect(() => {
+    if (!asset?.symbol) return;
     const assetDefault = getBrokerDefaultSize(asset.symbol);
     setLotInput(assetDefault.toString());
 
@@ -285,7 +287,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (numericMargin <= 0) return;
+    if (numericMargin <= 0 || !asset?.symbol) return;
 
     onPlaceOrder({
       symbol: asset.symbol,
@@ -301,9 +303,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     });
   };
 
-  const isGold = asset.category === 'gold';
-  const isBtc = asset.symbol === 'BTC';
+  const isGold = asset?.category === 'gold';
+  const isBtc = asset?.symbol === 'BTC';
 
+  if (!asset) return null;
   return (
     <div
       className="rounded-md p-4 flex flex-col space-y-4 border transition-colors bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)]"

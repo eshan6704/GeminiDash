@@ -34,11 +34,14 @@ export const AiFundamentalAnalystPanel: React.FC<AiFundamentalAnalystPanelProps>
   onOpenFullModal,
 }) => {
   const { isLight } = useTheme();
+
   const [aiReportText, setAiReportText] = useState<string>('');
   const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
   const [aiEngineSource, setAiEngineSource] = useState<string>('');
+  const [reportGeneratedFor, setReportGeneratedFor] = useState<string>('');
 
   const fetchAiReport = async (s: StockConstituentItem) => {
+    if (!s || !s.symbol) return;
     setIsAiLoading(true);
     try {
       const res = await fetch('/api/stock/ai-summary', {
@@ -57,6 +60,7 @@ export const AiFundamentalAnalystPanel: React.FC<AiFundamentalAnalystPanelProps>
       if (data.success && data.summary) {
         setAiReportText(data.summary);
         setAiEngineSource(data.source || 'Gemini 3.6 Flash');
+        setReportGeneratedFor(s.symbol);
       }
     } catch (err) {
       console.warn('AI report fetch error:', err);
@@ -65,11 +69,15 @@ export const AiFundamentalAnalystPanel: React.FC<AiFundamentalAnalystPanelProps>
     }
   };
 
+  const hasReport = reportGeneratedFor === stock.symbol && aiReportText;
+
   useEffect(() => {
-    if (stock) {
+    if (stock && stock.symbol && reportGeneratedFor !== stock.symbol) {
       fetchAiReport(stock);
     }
-  }, [stock.symbol]);
+  }, [stock?.symbol]);
+
+  if (!stock) return null;
 
   const isUp = stock.change1d >= 0;
   const healthScore = Math.min(96, Math.max(72, Math.round(82 + (stock.change1d > 0 ? 5 : -2) + (stock.peRatio < 30 ? 4 : -3))));
@@ -103,25 +111,7 @@ export const AiFundamentalAnalystPanel: React.FC<AiFundamentalAnalystPanelProps>
           </div>
         </div>
 
-        {/* STOCK SELECTOR DROPDOWN */}
         <div className="flex items-center gap-2">
-          <select
-            value={stock.symbol}
-            onChange={(e) => {
-              const selected = stocksList.find((st) => st.symbol === e.target.value);
-              if (selected) onSelectStock(selected);
-            }}
-            className={`px-3 py-1.5 rounded-xl border text-xs font-mono font-bold focus:outline-none focus:border-amber-500 ${
-              isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-neutral-950 border-neutral-800 text-amber-300'
-            }`}
-          >
-            {stocksList.map((st) => (
-              <option key={st.id} value={st.symbol}>
-                {st.symbol} ({st.name}) - ₹{st.price}
-              </option>
-            ))}
-          </select>
-
           <button
             onClick={() => fetchAiReport(stock)}
             disabled={isAiLoading}
@@ -182,7 +172,7 @@ export const AiFundamentalAnalystPanel: React.FC<AiFundamentalAnalystPanelProps>
             <Zap className="w-4 h-4 text-amber-400 animate-pulse" />
             <span>AI Executive Fundamental Analysis Summary</span>
           </span>
-          {aiEngineSource && (
+          {aiEngineSource && hasReport && (
             <span className="text-[10px] text-cyan-300 font-mono bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/30">
               Engine: {aiEngineSource}
             </span>
@@ -194,15 +184,26 @@ export const AiFundamentalAnalystPanel: React.FC<AiFundamentalAnalystPanelProps>
             <RefreshCw className="w-4 h-4 animate-spin text-amber-400" />
             <span>Gemini AI is generating fundamental report for {stock.name}...</span>
           </div>
-        ) : (
+        ) : hasReport ? (
           <div className="text-xs text-neutral-200 font-sans leading-relaxed whitespace-pre-line space-y-2">
-            {aiReportText || (
-              <>
-                • <strong>FINANCIAL HEALTH & BALANCE SHEET:</strong> {stock.name} demonstrates a robust balance sheet with healthy interest coverage and manageable debt-to-equity. Capital return metrics (ROCE & ROE) remain in the top quartile for the {stock.sector} sector.<br />
-                • <strong>RECENT QUARTERLY TRAJECTORY:</strong> Revenue growth is expanding with resilient operating EBITDA margins. Cash flow conversion from operations remains strong.<br />
-                • <strong>MARKET SENTIMENT & VERDICT:</strong> Institutional sentiment is positive, supported by high delivery volume accumulation. Overall rating: <strong>OUTPERFORM</strong>.
-              </>
-            )}
+            {aiReportText}
+          </div>
+        ) : (
+          <div className="py-8 flex flex-col items-center justify-center space-y-4">
+            <div className="p-4 rounded-full bg-amber-500/10 border border-amber-500/20">
+              <Sparkles className="w-8 h-8 text-amber-400" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-sm font-bold text-white">AI Analysis Ready for {stock.name}</p>
+              <p className="text-[11px] text-neutral-400 max-w-md">Click the button below to trigger the Gemini 3.8 Flash engine for a deep fundamental synthesis on {stock.symbol}.</p>
+            </div>
+            <button
+              onClick={() => fetchAiReport(stock)}
+              className="px-6 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs flex items-center gap-2 transition-all shadow-lg shadow-amber-500/20"
+            >
+              <Zap className="w-4 h-4" />
+              <span>Generate AI Fundamental Report</span>
+            </button>
           </div>
         )}
       </div>

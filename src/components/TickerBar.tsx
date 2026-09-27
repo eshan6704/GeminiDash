@@ -19,7 +19,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
   // Track last valid non-zero prices per symbol to ensure no flickering to null or hardcoded values
   const lastValidPricesRef = React.useRef<Record<string, number>>({});
   assetList.forEach((asset) => {
-    if (asset.price && typeof asset.price === 'number' && asset.price > 0) {
+    if (asset && asset.symbol && asset.price && typeof asset.price === 'number' && asset.price > 0) {
       lastValidPricesRef.current[asset.symbol] = asset.price;
     }
   });
@@ -30,6 +30,7 @@ export const TickerBar: React.FC<TickerBarProps> = ({
     >
       <div className="flex items-center gap-2.5 min-w-max">
         {assetList.map((asset) => {
+          if (!asset || !asset.symbol) return null;
           const isSelected = asset.symbol === selectedSymbol;
           const isPositive = asset.change24h >= 0;
           const isGold = asset.category === 'gold';

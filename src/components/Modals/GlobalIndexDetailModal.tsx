@@ -80,6 +80,7 @@ export const GlobalIndexDetailModal: React.FC<Props> = ({ isOpen, onClose, item 
   const [aiInsights, setAiInsights] = useState<IndexAiInsights | null>(null);
   const [isLoadingAi, setIsLoadingAi] = useState<boolean>(false);
   const [aiSource, setAiSource] = useState<string>('');
+  const [insightsGeneratedFor, setInsightsGeneratedFor] = useState<string>('');
 
   // Fetch historical trend candles
   const fetchHistoricalData = async (targetSymbol: string, tf: string) => {
@@ -124,6 +125,7 @@ export const GlobalIndexDetailModal: React.FC<Props> = ({ isOpen, onClose, item 
         if (json.insights) {
           setAiInsights(json.insights);
           setAiSource(json.source || 'Gemini 3.8 Flash Institutional AI');
+          setInsightsGeneratedFor(targetItem.symbol);
         }
       }
     } catch (err) {
@@ -137,7 +139,7 @@ export const GlobalIndexDetailModal: React.FC<Props> = ({ isOpen, onClose, item 
     if (isOpen && item) {
       const sym = item.yahooSymbol || item.symbol;
       fetchHistoricalData(sym, timeframe);
-      fetchAiInsights(item);
+      // Removed automatic AI fetch
     }
   }, [isOpen, item]);
 
@@ -510,7 +512,7 @@ export const GlobalIndexDetailModal: React.FC<Props> = ({ isOpen, onClose, item 
                   Executing quantitative macro model on {item.name}...
                 </p>
               </div>
-            ) : aiInsights ? (
+            ) : (insightsGeneratedFor === item.symbol && aiInsights) ? (
               <div className="space-y-4">
                 {/* Executive Summary Card */}
                 <div className="p-3.5 rounded-xl bg-purple-50/70 border border-purple-200 text-slate-800 space-y-1.5 shadow-2xs">
@@ -602,7 +604,24 @@ export const GlobalIndexDetailModal: React.FC<Props> = ({ isOpen, onClose, item 
                   </p>
                 </div>
               </div>
-            ) : null}
+            ) : (
+              <div className="py-12 flex flex-col items-center justify-center space-y-4 bg-slate-50/50 rounded-xl border border-dashed border-slate-300">
+                <div className="p-4 rounded-full bg-purple-500/10 border border-purple-200">
+                  <Sparkles className="w-10 h-10 text-purple-600" />
+                </div>
+                <div className="text-center space-y-1">
+                  <h4 className="text-sm font-black text-slate-800">Trigger Institutional AI Macro Analysis</h4>
+                  <p className="text-xs text-slate-500 max-w-sm">Synthesize real-time macro drivers, support/resistance pivots, and institutional catalysts for {item.name}.</p>
+                </div>
+                <button
+                  onClick={() => fetchAiInsights(item)}
+                  className="px-8 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-black text-xs flex items-center gap-2 transition-all shadow-lg shadow-purple-600/20"
+                >
+                  <Zap className="w-4 h-4" />
+                  <span>Generate Gemini AI Insights</span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

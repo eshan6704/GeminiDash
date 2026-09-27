@@ -99,6 +99,7 @@ export default function App() {
 
   // Stores metadata when user selects any coin from the 250-coin table or search bar
   const [selectedCoinMeta, setSelectedCoinMeta] = useState<CryptoCoinItem | null>(null);
+  const [searchedStockSymbol, setSearchedStockSymbol] = useState<string | null>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -161,15 +162,15 @@ export default function App() {
   // Resolve active selected coin (defaults to BTC if no coin is selected)
   const activeAsset: MarketAsset = useMemo(() => {
     const sym = (selectedSymbol || 'BTC').toUpperCase();
-    if (assets[sym]) {
+    if (assets && assets[sym]) {
       return assets[sym];
     }
-    if (selectedCoinMeta && selectedCoinMeta.symbol.toUpperCase() === sym) {
+    if (selectedCoinMeta && selectedCoinMeta.symbol && selectedCoinMeta.symbol.toUpperCase() === sym) {
       const p = selectedCoinMeta.price || 100;
       return {
         id: selectedCoinMeta.id || sym.toLowerCase(),
         symbol: sym,
-        name: selectedCoinMeta.name,
+        name: selectedCoinMeta.name || sym,
         pair: `${sym}/USDT`,
         price: p,
         change24h: selectedCoinMeta.change24h || 0,
@@ -177,16 +178,30 @@ export default function App() {
         low24h: p * 0.968,
         volume24h: selectedCoinMeta.volume24h || p * 25000,
         category: selectedCoinMeta.category === 'Gold & RWA' ? 'gold' : 'crypto',
-        description: `${selectedCoinMeta.name} (${sym}) Digital Asset`,
+        description: `${selectedCoinMeta.name || sym} (${sym}) Digital Asset`,
         color: '#059669',
         lastUpdated: Date.now(),
         dataTimestamp: Date.now(),
       };
     }
-    return assets.BTC || Object.values(assets)[0];
+    return (assets && assets.BTC) || (assets && Object.values(assets).find(a => a && a.symbol)) || {
+      id: 'bitcoin',
+      symbol: 'BTC',
+      name: 'Bitcoin',
+      pair: 'BTC/USDT',
+      price: 96500,
+      change24h: 1.25,
+      high24h: 98000,
+      low24h: 95000,
+      volume24h: 42000000000,
+      category: 'crypto',
+      description: 'Bitcoin',
+      lastUpdated: Date.now(),
+      dataTimestamp: Date.now(),
+    } as MarketAsset;
   }, [assets, selectedSymbol, selectedCoinMeta]);
 
-  const currentSpotHolding = spotHoldings.find((h) => h.symbol === activeAsset.symbol);
+  const currentSpotHolding = spotHoldings.find((h) => h && activeAsset && h.symbol === activeAsset.symbol);
   const currentSpotAmount = currentSpotHolding ? currentSpotHolding.amount : 0;
 
   // Handler when a coin is selected from the 250-coin Market Table
@@ -242,13 +257,15 @@ export default function App() {
       return;
     }
     if (asset.category === 'INDIAN_STOCK') {
+      setSearchedStockSymbol(asset.symbol);
       setMainMarketTab('STOCK_CONSTITUENTS');
-      addNotification('info', 'Stock Constituents', `Navigated to ${asset.name} (${asset.symbol}).`);
+      addNotification('info', 'Stocks Research', `Loaded ${asset.name} (${asset.symbol}) into 9-Tab Deep Research Station.`);
       return;
     }
     if (asset.category === 'INDIAN_INDEX') {
-      setMainMarketTab('NIFTY_INDICES');
-      addNotification('info', 'Nifty & Indian Indices', `Viewing ${asset.name} (${asset.symbol}).`);
+      setMainMarketTab('MARKET_OVERVIEW');
+      setMarketOverviewSubTab('INDIAN_INDICES');
+      addNotification('info', 'Indian Indices', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'GLOBAL_INDEX') {
@@ -270,8 +287,9 @@ export default function App() {
       return;
     }
     if (asset.category === 'US_STOCK') {
+      setSearchedStockSymbol(asset.symbol);
       setMainMarketTab('STOCK_CONSTITUENTS');
-      addNotification('info', 'Global Tech MegaCaps', `Viewing ${asset.name} (${asset.symbol}).`);
+      addNotification('info', 'Stocks Research', `Loaded ${asset.name} (${asset.symbol}) into 9-Tab Deep Research Station.`);
       return;
     }
   };
@@ -339,8 +357,8 @@ export default function App() {
     {
       id: 'TICKS_AND_CHART',
       num: '2',
-      label: `(a) Tick u12_5.7, d15_5.6 & (b) Current Chart (${activeAsset.symbol})`,
-      subtitle: 'Live Up/Down Tick Impulse Signature + Candlestick Chart',
+      label: `(a) Tick Pattern u12_6.7, d15_5.6 (u1d1/Flat Filter) & (b) Current Chart (${activeAsset.symbol})`,
+      subtitle: 'Consecutive Tick Runs, 500-Tick Bullish/Bearish/Flat/Flip Score + Chart',
       icon: <Activity className="w-4 h-4 text-emerald-600" />,
     },
     {
@@ -400,7 +418,12 @@ export default function App() {
       {/* Top Navigation with Master Page Dropdown */}
       <Navbar
         mainMarketTab={mainMarketTab}
-        onSelectMarketTab={setMainMarketTab}
+        onSelectMarketTab={(tab) => {
+          if (tab === 'STOCK_CONSTITUENTS') {
+            setSearchedStockSymbol(null);
+          }
+          setMainMarketTab(tab);
+        }}
         optionsSubTab={optionsSubTab}
         onSelectOptionsSubTab={setOptionsSubTab}
         equityHubSubTab={equityHubSubTab}
@@ -427,6 +450,9 @@ export default function App() {
         {/* NON-CRYPTO MARKET DESKS */}
         {mainMarketTab === 'MARKET_OVERVIEW' && (
           <div className="space-y-6">
+            {(marketOverviewSubTab === 'INDIAN_INDICES' || marketOverviewSubTab === 'ALL') && (
+              <NiftyIndicesView />
+            )}
             {(marketOverviewSubTab === 'GLOBAL_INDICES' || marketOverviewSubTab === 'ALL') && (
               <GlobalIndicesView />
             )}
@@ -439,7 +465,9 @@ export default function App() {
           </div>
         )}
         {mainMarketTab === 'NIFTY_INDICES' && <NiftyIndicesView />}
-        {mainMarketTab === 'STOCK_CONSTITUENTS' && <StockConstituentsView />}
+        {mainMarketTab === 'STOCK_CONSTITUENTS' && (
+          <StockConstituentsView externalSymbol={searchedStockSymbol} />
+        )}
 
         {mainMarketTab === 'OPTIONS_HUB' && (
           <div className="space-y-6">

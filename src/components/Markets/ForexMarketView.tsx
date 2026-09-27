@@ -115,12 +115,13 @@ export const ForexMarketView: React.FC = () => {
 
   const loadRealForexQuotes = async () => {
     setIsLoadingLive(true);
-    const symbolsToFetch = pairs.map((p) => p.yahooSymbol);
+    const symbolsToFetch = pairs.filter(p => p && p.yahooSymbol).map((p) => p.yahooSymbol);
     const liveMap = await fetchBatchLiveQuotes(symbolsToFetch);
 
     if (Object.keys(liveMap).length > 0) {
       setPairs((prev) =>
         prev.map((p) => {
+          if (!p) return p;
           const live = liveMap[p.yahooSymbol];
           if (live && live.price > 0) {
             const mid = live.price;
@@ -371,6 +372,12 @@ export const ForexMarketView: React.FC = () => {
                           {p.category}
                         </span>
                         <ArrowUpRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-emerald-600" />
+                        {p.isRealLive && (
+                          <span className="flex items-center gap-0.5 text-[9px] font-black text-blue-600 uppercase tracking-tighter ml-1">
+                            <Zap className="w-2.5 h-2.5 fill-current" />
+                            Live
+                          </span>
+                        )}
                       </div>
                     </td>
 

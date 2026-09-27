@@ -131,7 +131,10 @@ export function usePriceAlerts(
     // If no pending alerts exist, avoid any evaluation or state checks
     if (!alertsRef.current.some((a: PriceAlert) => !a.triggered)) return;
 
-    const pool = allAssetsRef.current || { [assetRef.current.symbol]: assetRef.current };
+    const currentSymbol = assetRef.current?.symbol;
+    if (!currentSymbol) return;
+
+    const pool = allAssetsRef.current || { [currentSymbol]: assetRef.current };
 
     setAlerts((prevAlerts) => {
       let changed = false;

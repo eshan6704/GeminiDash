@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React from 'react';
 import {
   Globe,
   ExternalLink,
@@ -14,23 +14,25 @@ import {
   Box,
   Star,
   SlidersHorizontal,
-  ChevronDown,
-  Check,
 } from 'lucide-react';
-import { GlobalSymbolSearch } from './Search/GlobalSymbolSearch';
 import { TrackedAsset } from '../services/allTrackedAssets';
 
 export type MainMarketTab =
-  | 'CRYPTO'
   | 'MARKET_OVERVIEW'
   | 'NIFTY_INDICES'
+  | 'OPTIONS_HUB'
   | 'STOCK_CONSTITUENTS'
-  | 'EQUITY_HUB'
-  | 'OPTIONS_HUB';
+  | 'CRYPTO'
+  | 'EQUITY_HUB';
 
 export type OptionsSubTab = 'INDEX' | 'STOCK' | 'BOTH';
 export type EquityHubSubTab = 'PORTFOLIO' | 'WATCHLIST' | 'SCREENER' | 'ALL';
-export type MarketOverviewSubTab = 'ALL' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES';
+export type MarketOverviewSubTab =
+  | 'ALL'
+  | 'INDIAN_INDICES'
+  | 'GLOBAL_INDICES'
+  | 'FOREX'
+  | 'COMMODITIES';
 
 interface NavbarProps {
   mainMarketTab: MainMarketTab;
@@ -48,45 +50,33 @@ interface NavbarProps {
 
 const MASTER_PAGES: {
   id: MainMarketTab;
-  label: string;
-  badge: string;
+  num: string;
+  shortLabel: string;
   icon: React.ReactNode;
 }[] = [
   {
-    id: 'CRYPTO',
-    label: 'Crypto & Gold Terminal (AurumX)',
-    badge: 'Default · Spot & Perp',
-    icon: <Coins className="w-4 h-4 text-emerald-600" />,
-  },
-  {
     id: 'MARKET_OVERVIEW',
-    label: 'Market Overview (Indices · Futures · Forex · Commodities)',
-    badge: 'Global Macro Hub',
-    icon: <Globe className="w-4 h-4 text-emerald-600" />,
+    num: '1',
+    shortLabel: 'Market Overview',
+    icon: <Globe className="w-3.5 h-3.5" />,
   },
   {
     id: 'OPTIONS_HUB',
-    label: 'Options Chain (Index & Stock)',
-    badge: 'NIFTY · BANKNIFTY · F&O',
-    icon: <Waves className="w-4 h-4 text-emerald-600" />,
-  },
-  {
-    id: 'EQUITY_HUB',
-    label: 'Portfolio · Watchlist · Screener',
-    badge: '3-in-1 Equity Suite',
-    icon: <Briefcase className="w-4 h-4 text-emerald-600" />,
-  },
-  {
-    id: 'NIFTY_INDICES',
-    label: 'Indian Indices (NSE / BSE)',
-    badge: 'Benchmarks & Sectors',
-    icon: <BarChart3 className="w-4 h-4 text-emerald-600" />,
+    num: '2',
+    shortLabel: 'Option Chain',
+    icon: <Waves className="w-3.5 h-3.5" />,
   },
   {
     id: 'STOCK_CONSTITUENTS',
-    label: 'NIFTY 500 Stocks',
-    badge: 'Live Constituents',
-    icon: <Building className="w-4 h-4 text-emerald-600" />,
+    num: '3',
+    shortLabel: 'Stocks',
+    icon: <Building className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'CRYPTO',
+    num: '4',
+    shortLabel: 'Crypto',
+    icon: <Coins className="w-3.5 h-3.5" />,
   },
 ];
 
@@ -100,92 +90,42 @@ export const Navbar: React.FC<NavbarProps> = ({
   marketOverviewSubTab = 'ALL',
   onSelectMarketOverviewSubTab,
   onOpenStorage,
-  onSelectAsset,
 }) => {
-  const [isPageDropdownOpen, setIsPageDropdownOpen] = useState<boolean>(false);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setIsPageDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const activePageObj =
-    MASTER_PAGES.find((p) => p.id === mainMarketTab) || MASTER_PAGES[0];
-
   return (
     <header className="border-b sticky top-0 z-40 backdrop-blur-xl transition-colors bg-[var(--theme-bg-header)] border-[var(--theme-border)] text-[var(--theme-text-primary)]">
       <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-3">
-        {/* Left: Dropdown Page Selection Button (Replaces Institutional Terminal title) */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative" ref={dropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsPageDropdownOpen((prev) => !prev)}
-              className="inline-flex items-center justify-between gap-2.5 min-w-[240px] sm:min-w-[285px] px-3 py-1.5 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
-            >
-              <span className="flex items-center gap-2 truncate">
-                {activePageObj.icon}
-                <span className="truncate">{activePageObj.label}</span>
-              </span>
-              <span className="flex items-center gap-1.5 shrink-0">
-                <span className="text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded bg-emerald-600/10 text-emerald-700 border border-emerald-600/20 hidden md:inline">
-                  {activePageObj.badge}
-                </span>
-                <ChevronDown
-                  className={`w-4 h-4 text-[var(--theme-text-muted)] transition-transform duration-150 ${
-                    isPageDropdownOpen ? 'rotate-180' : ''
+        {/* Left: Main Market Tab Buttons + Active Desk Sub-Filters */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Primary Tab Bar: 1-Market Overview, 2-Option Chain, 3-Stocks, 4-Crypto */}
+          <div className="flex items-center gap-1 p-1 rounded-xl border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] flex-wrap">
+            {MASTER_PAGES.map((page) => {
+              const isSelected = mainMarketTab === page.id;
+              return (
+                <button
+                  key={page.id}
+                  type="button"
+                  onClick={() => onSelectMarketTab(page.id)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-elevated)] hover:text-[var(--theme-text-primary)]'
                   }`}
-                />
-              </span>
-            </button>
-
-            {isPageDropdownOpen && (
-              <div className="absolute left-0 mt-1.5 w-[310px] sm:w-[350px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1.5 divide-y divide-[var(--theme-border-subtle)]">
-                {MASTER_PAGES.map((page) => {
-                  const isSelected = mainMarketTab === page.id;
-                  return (
-                    <button
-                      key={page.id}
-                      type="button"
-                      onClick={() => {
-                        onSelectMarketTab(page.id);
-                        setIsPageDropdownOpen(false);
-                      }}
-                      className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                        isSelected
-                          ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
-                          : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        {page.icon}
-                        <div className="min-w-0">
-                          <div className="text-xs font-semibold truncate">{page.label}</div>
-                          <div className="text-[10px] font-mono text-[var(--theme-text-muted)] truncate">
-                            {page.badge}
-                          </div>
-                        </div>
-                      </div>
-                      {isSelected && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                >
+                  {page.icon}
+                  <span className="font-mono text-[10px] opacity-80">{page.num}.</span>
+                  <span>{page.shortLabel}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Inline Sub-Mode Switcher for Market Overview (Indices & Futures / Forex / Commodities) */}
+          {/* Inline Sub-Mode Switcher for Market Overview (All / Indian Indices / Global Indices & Futures / Forex / Commodities) */}
           {mainMarketTab === 'MARKET_OVERVIEW' && onSelectMarketOverviewSubTab && (
             <div className="flex items-center gap-1 flex-wrap">
               {[
                 { id: 'ALL', label: 'All Macro', icon: <Activity className="w-3.5 h-3.5" /> },
-                { id: 'GLOBAL_INDICES', label: 'Indices & Futures', icon: <Globe className="w-3.5 h-3.5" /> },
+                { id: 'INDIAN_INDICES', label: 'Indian Indices', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+                { id: 'GLOBAL_INDICES', label: 'Global Indices & Futures', icon: <Globe className="w-3.5 h-3.5" /> },
                 { id: 'FOREX', label: 'Forex', icon: <DollarSign className="w-3.5 h-3.5" /> },
                 { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
               ].map((sub) => (
@@ -193,7 +133,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={sub.id}
                   type="button"
                   onClick={() => onSelectMarketOverviewSubTab(sub.id as MarketOverviewSubTab)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border whitespace-nowrap ${
                     marketOverviewSubTab === sub.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
@@ -218,7 +158,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={sub.id}
                   type="button"
                   onClick={() => onSelectOptionsSubTab(sub.id as OptionsSubTab)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border whitespace-nowrap ${
                     optionsSubTab === sub.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
@@ -244,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={sub.id}
                   type="button"
                   onClick={() => onSelectEquityHubSubTab(sub.id as EquityHubSubTab)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border whitespace-nowrap ${
                     equityHubSubTab === sub.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
@@ -257,13 +197,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           )}
         </div>
-
-        {/* Center: Global Symbol Search Bar */}
-        {onSelectAsset && (
-          <div className="flex-1 max-w-sm mx-1 min-w-[200px] order-last sm:order-none w-full sm:w-auto">
-            <GlobalSymbolSearch onSelectAsset={onSelectAsset} />
-          </div>
-        )}
 
         {/* Right: Quick Launch & Gateways */}
         <div className="flex items-center gap-2 flex-wrap">

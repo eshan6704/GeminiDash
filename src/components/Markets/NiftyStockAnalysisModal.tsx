@@ -44,12 +44,14 @@ interface NiftyStockAnalysisModalProps {
   isOpen: boolean;
   stock: StockConstituentItem | null;
   onClose: () => void;
+  inline?: boolean;
 }
 
 export const NiftyStockAnalysisModal: React.FC<NiftyStockAnalysisModalProps> = ({
   isOpen,
   stock,
   onClose,
+  inline = false,
 }) => {
   const { isLight } = useTheme();
   const [activeTab, setActiveTab] = useState<
@@ -176,9 +178,17 @@ export const NiftyStockAnalysisModal: React.FC<NiftyStockAnalysisModalProps> = (
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn font-mono">
+    <div
+      className={
+        inline
+          ? 'w-full font-mono'
+          : 'fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/85 backdrop-blur-md animate-fadeIn font-mono'
+      }
+    >
       <div
-        className={`relative w-full max-w-5xl max-h-[94vh] flex flex-col rounded-2xl shadow-2xl border overflow-hidden transition-colors ${
+        className={`relative w-full ${
+          inline ? '' : 'max-w-5xl max-h-[94vh]'
+        } flex flex-col rounded-2xl shadow-2xl border overflow-hidden transition-colors ${
           isLight
             ? 'bg-white border-slate-200 text-slate-800'
             : 'bg-neutral-900 border-neutral-800 text-neutral-100'
@@ -224,12 +234,14 @@ export const NiftyStockAnalysisModal: React.FC<NiftyStockAnalysisModalProps> = (
               </div>
             </div>
 
-            <button
-              onClick={onClose}
-              className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+            {!inline && (
+              <button
+                onClick={onClose}
+                className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
           </div>
         </div>
 

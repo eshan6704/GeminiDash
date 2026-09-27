@@ -73,12 +73,13 @@ export const CommoditiesMarketView: React.FC = () => {
 
   const loadRealCommodityQuotes = async () => {
     setIsLoadingLive(true);
-    const symbolsToFetch = commodities.map((c) => c.yahooSymbol);
+    const symbolsToFetch = commodities.filter(c => c && c.yahooSymbol).map((c) => c.yahooSymbol);
     const liveMap = await fetchBatchLiveQuotes(symbolsToFetch);
 
     if (Object.keys(liveMap).length > 0) {
       setCommodities((prev) =>
         prev.map((c) => {
+          if (!c) return c;
           const live = liveMap[c.yahooSymbol];
           if (live && live.price > 0) {
             return {
@@ -282,9 +283,17 @@ export const CommoditiesMarketView: React.FC = () => {
                     </div>
                   </div>
 
-                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                    {item.contractExpiry}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      {item.contractExpiry}
+                    </span>
+                    {item.isRealLive && (
+                      <span className="flex items-center gap-0.5 text-[9px] font-black text-blue-600 uppercase tracking-tighter">
+                        <Zap className="w-2.5 h-2.5 fill-current" />
+                        Live
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Price & Change */}

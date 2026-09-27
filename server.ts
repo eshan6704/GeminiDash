@@ -62,7 +62,58 @@ interface BatchUpdateResult {
   timestamp?: string;
 }
 
-const TOP_500_MULTI_ASSET_SYMBOLS: any[] = [];
+const TOP_500_MULTI_ASSET_SYMBOLS: any[] = [
+  // Crypto (Core)
+  { symbol: 'BTC', name: 'Bitcoin', category: 'crypto', currency: 'USD', basePrice: 96500 },
+  { symbol: 'ETH', name: 'Ethereum', category: 'crypto', currency: 'USD', basePrice: 3450 },
+  { symbol: 'SOL', name: 'Solana', category: 'crypto', currency: 'USD', basePrice: 210 },
+  { symbol: 'XRP', name: 'Ripple', category: 'crypto', currency: 'USD', basePrice: 1.85 },
+  { symbol: 'DOGE', name: 'Dogecoin', category: 'crypto', currency: 'USD', basePrice: 0.28 },
+  { symbol: 'PAXG', name: 'PAX Gold', category: 'gold', currency: 'USD', basePrice: 2650 },
+  
+  // Indices
+  { symbol: 'US500', name: 'S&P 500', category: 'index', currency: 'USD', basePrice: 5985 },
+  { symbol: 'US100', name: 'NASDAQ 100', category: 'index', currency: 'USD', basePrice: 21180 },
+  { symbol: 'US30', name: 'Dow Jones', category: 'index', currency: 'USD', basePrice: 44150 },
+  { symbol: 'US2000', name: 'Russell 2000', category: 'index', currency: 'USD', basePrice: 2385 },
+  { symbol: 'UK100', name: 'FTSE 100', category: 'index', currency: 'GBP', basePrice: 8295 },
+  { symbol: 'GER40', name: 'DAX 40', category: 'index', currency: 'EUR', basePrice: 19480 },
+  { symbol: 'FRA40', name: 'CAC 40', category: 'index', currency: 'EUR', basePrice: 7435 },
+  { symbol: 'EU50', name: 'Euro Stoxx 50', category: 'index', currency: 'EUR', basePrice: 4915 },
+  { symbol: 'JP225', name: 'Nikkei 225', category: 'index', currency: 'JPY', basePrice: 38940 },
+  { symbol: 'HK50', name: 'Hang Seng', category: 'index', currency: 'HKD', basePrice: 19860 },
+  { symbol: 'GIFTNIFTY', name: 'GIFT Nifty', category: 'index', currency: 'INR', basePrice: 24385 },
+  { symbol: 'NIFTY 500', name: 'Nifty 500', category: 'index', currency: 'INR', basePrice: 22850 },
+  
+  // Forex
+  { symbol: 'EUR/USD', name: 'EUR/USD', category: 'forex', currency: 'USD', basePrice: 1.0542 },
+  { symbol: 'USD/JPY', name: 'USD/JPY', category: 'forex', currency: 'JPY', basePrice: 154.28 },
+  { symbol: 'GBP/USD', name: 'GBP/USD', category: 'forex', currency: 'USD', basePrice: 1.2685 },
+  { symbol: 'USD/INR', name: 'USD/INR', category: 'forex', currency: 'INR', basePrice: 84.42 },
+  { symbol: 'EUR/INR', name: 'EUR/INR', category: 'forex', currency: 'INR', basePrice: 88.99 },
+  { symbol: 'GBP/INR', name: 'GBP/INR', category: 'forex', currency: 'INR', basePrice: 107.09 },
+  
+  // Commodities
+  { symbol: 'CL', name: 'Crude Oil WTI', category: 'commodity', currency: 'USD', basePrice: 71.45 },
+  { symbol: 'BZ', name: 'Brent Crude', category: 'commodity', currency: 'USD', basePrice: 75.28 },
+  { symbol: 'GC', name: 'Gold', category: 'commodity', currency: 'USD', basePrice: 2668.4 },
+  { symbol: 'SI', name: 'Silver', category: 'commodity', currency: 'USD', basePrice: 31.42 },
+  { symbol: 'NG', name: 'Natural Gas', category: 'commodity', currency: 'USD', basePrice: 2.84 },
+  { symbol: 'HG', name: 'Copper', category: 'commodity', currency: 'USD', basePrice: 4.18 },
+  { symbol: 'ZW', name: 'Wheat', category: 'commodity', currency: 'USD', basePrice: 562 },
+];
+
+// Helper to start background sync
+function startBackgroundPriceSync() {
+  // Sync core symbols every 30 seconds
+  setInterval(async () => {
+    try {
+      await processTop500BatchUpdate(false);
+    } catch (err) {
+      console.error('[BackgroundSync] Error:', err);
+    }
+  }, 30000);
+}
 
 // Firestore is no longer used
 const firestoreDb: any = null;
@@ -252,6 +303,10 @@ export const SYMBOL_TICKER_MAP: Record<string, { yahoo: string; google: string; 
   'RUSSELL2000': { yahoo: '^RUT', google: 'RUT:INDEXRUSSELL', name: 'Russell 2000', currency: 'USD', type: 'INDEX' },
   'US2000': { yahoo: '^RUT', google: 'RUT:INDEXRUSSELL', name: 'Russell 2000', currency: 'USD', type: 'INDEX' },
   '^RUT': { yahoo: '^RUT', google: 'RUT:INDEXRUSSELL', name: 'Russell 2000', currency: 'USD', type: 'INDEX' },
+  'VIX': { yahoo: '^VIX', google: 'VIX:INDEXCBOE', name: 'CBOE Volatility Index', currency: 'USD', type: 'INDEX' },
+  'TSX': { yahoo: '^GSPTSE', google: 'OSPTX:INDEXTSI', name: 'S&P/TSX Composite', currency: 'CAD', type: 'INDEX' },
+  'BVSP': { yahoo: '^BVSP', google: 'IBOV:INDEXBVMF', name: 'Bovespa Index', currency: 'BRL', type: 'INDEX' },
+  'MXX': { yahoo: '^MXX', google: 'ME:INDEXMEX', name: 'S&P/BMV IPC', currency: 'MXN', type: 'INDEX' },
   'FTSE100': { yahoo: '^FTSE', google: 'UKX:INDEXFTSE', name: 'FTSE 100 (London)', currency: 'GBP', type: 'INDEX' },
   'UK100': { yahoo: '^FTSE', google: 'UKX:INDEXFTSE', name: 'FTSE 100 (London)', currency: 'GBP', type: 'INDEX' },
   '^FTSE': { yahoo: '^FTSE', google: 'UKX:INDEXFTSE', name: 'FTSE 100 (London)', currency: 'GBP', type: 'INDEX' },
@@ -264,6 +319,14 @@ export const SYMBOL_TICKER_MAP: Record<string, { yahoo: string; google: string; 
   'EUROSTOXX50': { yahoo: '^STOXX50E', google: 'SX5E:INDEXSTOXX', name: 'Euro Stoxx 50', currency: 'EUR', type: 'INDEX' },
   'EU50': { yahoo: '^STOXX50E', google: 'SX5E:INDEXSTOXX', name: 'Euro Stoxx 50', currency: 'EUR', type: 'INDEX' },
   '^STOXX50E': { yahoo: '^STOXX50E', google: 'SX5E:INDEXSTOXX', name: 'Euro Stoxx 50', currency: 'EUR', type: 'INDEX' },
+  'SMI': { yahoo: '^SSMI', google: 'SMI:INDEXSWX', name: 'Swiss Market Index', currency: 'CHF', type: 'INDEX' },
+  'SWI20': { yahoo: '^SSMI', google: 'SMI:INDEXSWX', name: 'Swiss Market Index', currency: 'CHF', type: 'INDEX' },
+  'IBEX35': { yahoo: '^IBEX', google: 'IBEX:INDEXBME', name: 'IBEX 35', currency: 'EUR', type: 'INDEX' },
+  'ESP35': { yahoo: '^IBEX', google: 'IBEX:INDEXBME', name: 'IBEX 35', currency: 'EUR', type: 'INDEX' },
+  'FTSEMIB': { yahoo: 'FTSEMIB.MI', google: 'FTSEMIB:INDEXBIT', name: 'FTSE MIB', currency: 'EUR', type: 'INDEX' },
+  'ITA40': { yahoo: 'FTSEMIB.MI', google: 'FTSEMIB:INDEXBIT', name: 'FTSE MIB', currency: 'EUR', type: 'INDEX' },
+  'AEX': { yahoo: '^AEX', google: 'AEX:INDEXEuronext', name: 'AEX Index', currency: 'EUR', type: 'INDEX' },
+  'NED25': { yahoo: '^AEX', google: 'AEX:INDEXEuronext', name: 'AEX Index', currency: 'EUR', type: 'INDEX' },
   'NIKKEI225': { yahoo: '^N225', google: 'NI225:INDEXNIKKEI', name: 'Nikkei 225 (Tokyo)', currency: 'JPY', type: 'INDEX' },
   'JP225': { yahoo: '^N225', google: 'NI225:INDEXNIKKEI', name: 'Nikkei 225 (Tokyo)', currency: 'JPY', type: 'INDEX' },
   '^N225': { yahoo: '^N225', google: 'NI225:INDEXNIKKEI', name: 'Nikkei 225 (Tokyo)', currency: 'JPY', type: 'INDEX' },
@@ -281,7 +344,11 @@ export const SYMBOL_TICKER_MAP: Record<string, { yahoo: string; google: string; 
   'TAIEX': { yahoo: '^TWII', google: 'TAIEX:TPE', name: 'Taiwan TAIEX', currency: 'TWD', type: 'INDEX' },
   'TW50': { yahoo: '^TWII', google: 'TAIEX:TPE', name: 'Taiwan TAIEX', currency: 'TWD', type: 'INDEX' },
   '^TWII': { yahoo: '^TWII', google: 'TAIEX:TPE', name: 'Taiwan TAIEX', currency: 'TWD', type: 'INDEX' },
+  'STI': { yahoo: '^STI', google: 'STI:INDEXSGX', name: 'Straits Times Index', currency: 'SGD', type: 'INDEX' },
   'GIFTNIFTY': { yahoo: '^NSEI', google: 'NIFTY_50:INDEXNSE', name: 'GIFT Nifty (SGX Futures)', currency: 'INR', type: 'FUTURES' },
+  'NIFTY 500': { yahoo: '^CRN500', google: 'NIFTY_500:INDEXNSE', name: 'Nifty 500', currency: 'INR', type: 'INDEX' },
+  'NIFTY500': { yahoo: '^CRN500', google: 'NIFTY_500:INDEXNSE', name: 'Nifty 500', currency: 'INR', type: 'INDEX' },
+  '^CRN500': { yahoo: '^CRN500', google: 'NIFTY_500:INDEXNSE', name: 'Nifty 500', currency: 'INR', type: 'INDEX' },
 
   // Forex Currencies & Crosses
   'EUR/USD': { yahoo: 'EURUSD=X', google: 'EUR-USD', name: 'Euro / US Dollar', currency: 'USD', type: 'FOREX' },
@@ -327,40 +394,67 @@ export const SYMBOL_TICKER_MAP: Record<string, { yahoo: string; google: string; 
   'USDCNH': { yahoo: 'USDCNH=X', google: 'USD-CNH', name: 'US Dollar / Offshore Chinese Yuan', currency: 'CNH', type: 'FOREX' },
   'USD/SGD': { yahoo: 'USDSGD=X', google: 'USD-SGD', name: 'US Dollar / Singapore Dollar', currency: 'SGD', type: 'FOREX' },
   'USDSGD': { yahoo: 'USDSGD=X', google: 'USD-SGD', name: 'US Dollar / Singapore Dollar', currency: 'SGD', type: 'FOREX' },
+  'USD/MXN': { yahoo: 'USDMXN=X', google: 'USD-MXN', name: 'US Dollar / Mexican Peso', currency: 'MXN', type: 'FOREX' },
+  'USDMXN': { yahoo: 'USDMXN=X', google: 'USD-MXN', name: 'US Dollar / Mexican Peso', currency: 'MXN', type: 'FOREX' },
+  'USD/ZAR': { yahoo: 'USDZAR=X', google: 'USD-ZAR', name: 'US Dollar / South African Rand', currency: 'ZAR', type: 'FOREX' },
+  'USDZAR': { yahoo: 'USDZAR=X', google: 'USD-ZAR', name: 'US Dollar / South African Rand', currency: 'ZAR', type: 'FOREX' },
 
   // Commodities & Metals
   'CRUDE': { yahoo: 'CL=F', google: 'CL=F', name: 'Crude Oil WTI Futures', currency: 'USD', type: 'COMMODITY' },
   'WTI': { yahoo: 'CL=F', google: 'CL=F', name: 'Crude Oil WTI Futures', currency: 'USD', type: 'COMMODITY' },
+  'CL': { yahoo: 'CL=F', google: 'CL=F', name: 'Crude Oil WTI Futures', currency: 'USD', type: 'COMMODITY' },
   'CL=F': { yahoo: 'CL=F', google: 'CL=F', name: 'Crude Oil WTI Futures', currency: 'USD', type: 'COMMODITY' },
   'BRENT': { yahoo: 'BZ=F', google: 'BZ=F', name: 'Brent Crude Oil Futures', currency: 'USD', type: 'COMMODITY' },
+  'BZ': { yahoo: 'BZ=F', google: 'BZ=F', name: 'Brent Crude Oil Futures', currency: 'USD', type: 'COMMODITY' },
   'BZ=F': { yahoo: 'BZ=F', google: 'BZ=F', name: 'Brent Crude Oil Futures', currency: 'USD', type: 'COMMODITY' },
   'NATGAS': { yahoo: 'NG=F', google: 'NG=F', name: 'Natural Gas Futures', currency: 'USD', type: 'COMMODITY' },
+  'NG': { yahoo: 'NG=F', google: 'NG=F', name: 'Natural Gas Futures', currency: 'USD', type: 'COMMODITY' },
   'NG=F': { yahoo: 'NG=F', google: 'NG=F', name: 'Natural Gas Futures', currency: 'USD', type: 'COMMODITY' },
   'GOLD': { yahoo: 'GC=F', google: 'GC=F', name: 'Gold Comex Futures', currency: 'USD', type: 'COMMODITY' },
+  'GC': { yahoo: 'GC=F', google: 'GC=F', name: 'Gold Comex Futures', currency: 'USD', type: 'COMMODITY' },
   'GC=F': { yahoo: 'GC=F', google: 'GC=F', name: 'Gold Comex Futures', currency: 'USD', type: 'COMMODITY' },
   'SILVER': { yahoo: 'SI=F', google: 'SI=F', name: 'Silver Comex Futures', currency: 'USD', type: 'COMMODITY' },
+  'SI': { yahoo: 'SI=F', google: 'SI=F', name: 'Silver Comex Futures', currency: 'USD', type: 'COMMODITY' },
   'SI=F': { yahoo: 'SI=F', google: 'SI=F', name: 'Silver Comex Futures', currency: 'USD', type: 'COMMODITY' },
   'COPPER': { yahoo: 'HG=F', google: 'HG=F', name: 'Copper High Grade Futures', currency: 'USD', type: 'COMMODITY' },
+  'HG': { yahoo: 'HG=F', google: 'HG=F', name: 'Copper High Grade Futures', currency: 'USD', type: 'COMMODITY' },
   'HG=F': { yahoo: 'HG=F', google: 'HG=F', name: 'Copper High Grade Futures', currency: 'USD', type: 'COMMODITY' },
   'PLATINUM': { yahoo: 'PL=F', google: 'PL=F', name: 'Platinum Futures', currency: 'USD', type: 'COMMODITY' },
+  'PL': { yahoo: 'PL=F', google: 'PL=F', name: 'Platinum Futures', currency: 'USD', type: 'COMMODITY' },
   'PL=F': { yahoo: 'PL=F', google: 'PL=F', name: 'Platinum Futures', currency: 'USD', type: 'COMMODITY' },
   'PALLADIUM': { yahoo: 'PA=F', google: 'PA=F', name: 'Palladium Futures', currency: 'USD', type: 'COMMODITY' },
+  'PA': { yahoo: 'PA=F', google: 'PA=F', name: 'Palladium Futures', currency: 'USD', type: 'COMMODITY' },
   'PA=F': { yahoo: 'PA=F', google: 'PA=F', name: 'Palladium Futures', currency: 'USD', type: 'COMMODITY' },
+  'ALI': { yahoo: 'ALI=F', google: 'ALI=F', name: 'Aluminum Futures', currency: 'USD', type: 'COMMODITY' },
+  'ALI=F': { yahoo: 'ALI=F', google: 'ALI=F', name: 'Aluminum Futures', currency: 'USD', type: 'COMMODITY' },
+  'ZNC': { yahoo: 'ZNC=F', google: 'ZNC=F', name: 'Zinc Futures', currency: 'USD', type: 'COMMODITY' },
+  'ZNC=F': { yahoo: 'ZNC=F', google: 'ZNC=F', name: 'Zinc Futures', currency: 'USD', type: 'COMMODITY' },
+  'NICKEL': { yahoo: 'NICK=F', google: 'NICK=F', name: 'Nickel Futures', currency: 'USD', type: 'COMMODITY' },
+  'TIO': { yahoo: 'TIO=F', google: 'TIO=F', name: 'Iron Ore Futures', currency: 'USD', type: 'COMMODITY' },
+  'TIO=F': { yahoo: 'TIO=F', google: 'TIO=F', name: 'Iron Ore Futures', currency: 'USD', type: 'COMMODITY' },
   'WHEAT': { yahoo: 'ZW=F', google: 'ZW=F', name: 'Wheat Futures', currency: 'USD', type: 'COMMODITY' },
+  'ZW': { yahoo: 'ZW=F', google: 'ZW=F', name: 'Wheat Futures', currency: 'USD', type: 'COMMODITY' },
   'ZW=F': { yahoo: 'ZW=F', google: 'ZW=F', name: 'Wheat Futures', currency: 'USD', type: 'COMMODITY' },
   'CORN': { yahoo: 'ZC=F', google: 'ZC=F', name: 'Corn Futures', currency: 'USD', type: 'COMMODITY' },
+  'ZC': { yahoo: 'ZC=F', google: 'ZC=F', name: 'Corn Futures', currency: 'USD', type: 'COMMODITY' },
   'ZC=F': { yahoo: 'ZC=F', google: 'ZC=F', name: 'Corn Futures', currency: 'USD', type: 'COMMODITY' },
   'SOYBEANS': { yahoo: 'ZS=F', google: 'ZS=F', name: 'Soybeans Futures', currency: 'USD', type: 'COMMODITY' },
+  'ZS': { yahoo: 'ZS=F', google: 'ZS=F', name: 'Soybeans Futures', currency: 'USD', type: 'COMMODITY' },
   'ZS=F': { yahoo: 'ZS=F', google: 'ZS=F', name: 'Soybeans Futures', currency: 'USD', type: 'COMMODITY' },
   'COFFEE': { yahoo: 'KC=F', google: 'KC=F', name: 'Coffee Futures', currency: 'USD', type: 'COMMODITY' },
+  'KC': { yahoo: 'KC=F', google: 'KC=F', name: 'Coffee Futures', currency: 'USD', type: 'COMMODITY' },
   'KC=F': { yahoo: 'KC=F', google: 'KC=F', name: 'Coffee Futures', currency: 'USD', type: 'COMMODITY' },
   'COTTON': { yahoo: 'CT=F', google: 'CT=F', name: 'Cotton Futures', currency: 'USD', type: 'COMMODITY' },
+  'CT': { yahoo: 'CT=F', google: 'CT=F', name: 'Cotton Futures', currency: 'USD', type: 'COMMODITY' },
   'CT=F': { yahoo: 'CT=F', google: 'CT=F', name: 'Cotton Futures', currency: 'USD', type: 'COMMODITY' },
   'COCOA': { yahoo: 'CC=F', google: 'CC=F', name: 'Cocoa Futures', currency: 'USD', type: 'COMMODITY' },
+  'CC': { yahoo: 'CC=F', google: 'CC=F', name: 'Cocoa Futures', currency: 'USD', type: 'COMMODITY' },
   'CC=F': { yahoo: 'CC=F', google: 'CC=F', name: 'Cocoa Futures', currency: 'USD', type: 'COMMODITY' },
   'HEATOIL': { yahoo: 'HO=F', google: 'HO=F', name: 'Heating Oil Futures', currency: 'USD', type: 'COMMODITY' },
+  'HO': { yahoo: 'HO=F', google: 'HO=F', name: 'Heating Oil Futures', currency: 'USD', type: 'COMMODITY' },
   'HO=F': { yahoo: 'HO=F', google: 'HO=F', name: 'Heating Oil Futures', currency: 'USD', type: 'COMMODITY' },
   'GASOLINE': { yahoo: 'RB=F', google: 'RB=F', name: 'RBOB Gasoline Futures', currency: 'USD', type: 'COMMODITY' },
+  'RB': { yahoo: 'RB=F', google: 'RB=F', name: 'RBOB Gasoline Futures', currency: 'USD', type: 'COMMODITY' },
   'RB=F': { yahoo: 'RB=F', google: 'RB=F', name: 'RBOB Gasoline Futures', currency: 'USD', type: 'COMMODITY' },
 
   // Futures
@@ -370,16 +464,20 @@ export const SYMBOL_TICKER_MAP: Record<string, { yahoo: string; google: string; 
   'NQ1!': { yahoo: 'NQ=F', google: 'NQ=F', name: 'E-mini Nasdaq 100 Futures', currency: 'USD', type: 'FUTURES' },
   'YM_FUT': { yahoo: 'YM=F', google: 'YM=F', name: 'E-mini Dow Futures', currency: 'USD', type: 'FUTURES' },
   'YM1!': { yahoo: 'YM=F', google: 'YM=F', name: 'E-mini Dow Futures', currency: 'USD', type: 'FUTURES' },
-  'CL_FUT': { yahoo: 'CL=F', google: 'CL=F', name: 'Crude Oil WTI Futures', currency: 'USD', type: 'FUTURES' },
-  'CL1!': { yahoo: 'CL=F', google: 'CL=F', name: 'Crude Oil WTI Futures', currency: 'USD', type: 'FUTURES' },
-  'GC_FUT': { yahoo: 'GC=F', google: 'GC=F', name: 'Gold Comex Futures', currency: 'USD', type: 'FUTURES' },
-  'GC1!': { yahoo: 'GC=F', google: 'GC=F', name: 'Gold Comex Futures', currency: 'USD', type: 'FUTURES' },
-  'SI_FUT': { yahoo: 'SI=F', google: 'SI=F', name: 'Silver Comex Futures', currency: 'USD', type: 'FUTURES' },
-  'SI1!': { yahoo: 'SI=F', google: 'SI=F', name: 'Silver Comex Futures', currency: 'USD', type: 'FUTURES' },
-  'NG_FUT': { yahoo: 'NG=F', google: 'NG=F', name: 'Natural Gas Futures', currency: 'USD', type: 'FUTURES' },
-  'NG1!': { yahoo: 'NG=F', google: 'NG=F', name: 'Natural Gas Futures', currency: 'USD', type: 'FUTURES' },
-  'HG_FUT': { yahoo: 'HG=F', google: 'HG=F', name: 'Copper Futures', currency: 'USD', type: 'FUTURES' },
-  'HG1!': { yahoo: 'HG=F', google: 'HG=F', name: 'Copper Futures', currency: 'USD', type: 'FUTURES' },
+  'RTY_FUT': { yahoo: 'RTY=F', google: 'RTY=F', name: 'E-mini Russell 2000 Futures', currency: 'USD', type: 'FUTURES' },
+  'RTY1!': { yahoo: 'RTY=F', google: 'RTY=F', name: 'E-mini Russell 2000 Futures', currency: 'USD', type: 'FUTURES' },
+  'DX_FUT': { yahoo: 'DX-Y.NYB', google: 'DX-Y.NYB', name: 'US Dollar Index', currency: 'USD', type: 'FUTURES' },
+  'DX1!': { yahoo: 'DX-Y.NYB', google: 'DX-Y.NYB', name: 'US Dollar Index', currency: 'USD', type: 'FUTURES' },
+  'ZN_FUT': { yahoo: 'ZN=F', google: 'ZN=F', name: '10-Year T-Note Futures', currency: 'USD', type: 'FUTURES' },
+  'ZN1!': { yahoo: 'ZN=F', google: 'ZN=F', name: '10-Year T-Note Futures', currency: 'USD', type: 'FUTURES' },
+  'ZB_FUT': { yahoo: 'ZB=F', google: 'ZB=F', name: '30-Year T-Bond Futures', currency: 'USD', type: 'FUTURES' },
+  'ZB1!': { yahoo: 'ZB=F', google: 'ZB=F', name: '30-Year T-Bond Futures', currency: 'USD', type: 'FUTURES' },
+  'FDAX_FUT': { yahoo: '^GDAXI', google: 'DAX:INDEXDB', name: 'DAX Futures (Proxy)', currency: 'EUR', type: 'FUTURES' },
+  'FDAX1!': { yahoo: '^GDAXI', google: 'DAX:INDEXDB', name: 'DAX Futures (Proxy)', currency: 'EUR', type: 'FUTURES' },
+  'FESX_FUT': { yahoo: '^STOXX50E', google: 'SX5E:INDEXSTOXX', name: 'Euro Stoxx 50 Futures (Proxy)', currency: 'EUR', type: 'FUTURES' },
+  'FESX1!': { yahoo: '^STOXX50E', google: 'SX5E:INDEXSTOXX', name: 'Euro Stoxx 50 Futures (Proxy)', currency: 'EUR', type: 'FUTURES' },
+  'NKD_FUT': { yahoo: 'NKD=F', google: 'NKD=F', name: 'Nikkei 225 USD Futures', currency: 'USD', type: 'FUTURES' },
+  'NKD1!': { yahoo: 'NKD=F', google: 'NKD=F', name: 'Nikkei 225 USD Futures', currency: 'USD', type: 'FUTURES' },
   'BTC_CME': { yahoo: 'BTC=F', google: 'BTC=F', name: 'Bitcoin CME Futures', currency: 'USD', type: 'FUTURES' },
   'BTC1!': { yahoo: 'BTC=F', google: 'BTC=F', name: 'Bitcoin CME Futures', currency: 'USD', type: 'FUTURES' },
   'ETH_CME': { yahoo: 'ETH=F', google: 'ETH=F', name: 'Ethereum CME Futures', currency: 'USD', type: 'FUTURES' },
@@ -544,7 +642,53 @@ async function fetchYahooQuote(rawSymbol: string) {
     }
   }
 
-  // Strategy 1: Yahoo Finance Chart v8 Live API
+  // Strategy 1: Yahoo Finance v7 Quote API (More reliable for single/batch quotes)
+  const quoteHosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
+  for (const host of quoteHosts) {
+    try {
+      const url = `${host}/v7/finance/quote?symbols=${encodeURIComponent(yahooTargetSymbol)}`;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': randomUA },
+        signal: AbortSignal.timeout(3500),
+      });
+
+      if (response.ok) {
+        const json = await response.json();
+        const result = json?.quoteResponse?.result?.[0];
+        if (result) {
+          const sourceTime = result.regularMarketTime ? result.regularMarketTime * 1000 : Date.now();
+          const data = {
+            symbol: rawSymbol,
+            name: mapped?.name || result.shortName || result.longName || rawSymbol,
+            currency: result.currency || currency,
+            exchangeName: result.fullExchangeName || 'Live Global Exchange',
+            instrumentType: mapped?.type || result.quoteType || '',
+            price: Number((result.regularMarketPrice || result.postMarketPrice || 0).toFixed(rawSymbol.includes('/') || rawSymbol.includes('=X') ? 4 : 2)),
+            previousClose: Number((result.regularMarketPreviousClose || 0).toFixed(2)),
+            change: Number((result.regularMarketChange || 0).toFixed(2)),
+            changePct: Number((result.regularMarketChangePercent || 0).toFixed(2)),
+            high: Number((result.regularMarketDayHigh || 0).toFixed(2)),
+            low: Number((result.regularMarketDayLow || 0).toFixed(2)),
+            volume: result.regularMarketVolume || 0,
+            category: currency === 'INR' ? 'equity' : (mapped?.type?.toLowerCase() || 'index'),
+            source: 'Yahoo Finance Quote API',
+            updatedAt: new Date(sourceTime).toISOString(),
+            updatedAtMs: sourceTime,
+            dataTimestamp: sourceTime,
+          };
+
+          quoteCache.set(rawSymbol, { data, timestamp: Date.now() });
+          quoteCache.set(yahooTargetSymbol, { data, timestamp: Date.now() });
+          persistQuoteToFirestore(data).catch(() => {});
+          return data;
+        }
+      }
+    } catch (err: any) {
+      // Fallback to chart API
+    }
+  }
+
+  // Strategy 2: Yahoo Finance Chart v8 Live API (Fallback)
   const hosts = ['https://query1.finance.yahoo.com', 'https://query2.finance.yahoo.com'];
   for (const host of hosts) {
     try {
@@ -2121,6 +2265,9 @@ async function startServer() {
 
   app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 Full-Stack Market Terminal Server running on http://0.0.0.0:${PORT}`);
+    // Populate cache immediately then start interval
+    processTop500BatchUpdate(false).catch(err => console.error('[StartupSync] Error:', err));
+    startBackgroundPriceSync();
   });
 }
 

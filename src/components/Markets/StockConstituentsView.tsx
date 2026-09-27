@@ -18,7 +18,6 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { NiftyStockAnalysisModal } from './NiftyStockAnalysisModal';
-import { AiFundamentalAnalystPanel } from './AiFundamentalAnalystPanel';
 import { fetchBatchLiveQuotes, fetchLiveQuote } from '../../services/liveMarketService';
 import { subscribeMarketTable, fetchMarketTable, MASTER_NIFTY_500, MarketTableRow } from '../../services/marketDataTables';
 import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
@@ -44,20 +43,18 @@ export interface StockConstituentItem {
   isRealLive?: boolean;
 }
 
-export const StockConstituentsView: React.FC = () => {
+interface StockConstituentsViewProps {
+  externalSymbol?: string | null;
+}
+
+export const StockConstituentsView: React.FC<StockConstituentsViewProps> = ({
+  externalSymbol,
+}) => {
   const { isLight } = useTheme();
-  const [exchangeFilter, setExchangeFilter] = useState<'ALL' | 'NSE' | 'NASDAQ/NYSE'>('ALL');
-  const [tierFilter, setTierFilter] = useState<string>('ALL');
-  const [sectorFilter, setSectorFilter] = useState<string>('ALL');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortField, setSortField] = useState<keyof StockConstituentItem>('rank');
-  const [sortAsc, setSortAsc] = useState<boolean>(true);
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const [selectedStockForAnalysis, setSelectedStockForAnalysis] = useState<StockConstituentItem | null>(null);
   const [activeAnalystStock, setActiveAnalystStock] = useState<StockConstituentItem | null>(null);
   const [isLoadingLive, setIsLoadingLive] = useState<boolean>(false);
   const [lastRefreshed, setLastRefreshed] = useState<string>('');
-  const itemsPerPage = 25;
+  const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [stocks, setStocks] = useState<StockConstituentItem[]>(() =>
     MASTER_NIFTY_500.map((m) => {
@@ -77,7 +74,7 @@ export const StockConstituentsView: React.FC = () => {
         change1d: hydrated.change1d ?? m.change1d,
         high52w: m.high24h || Math.round(hydrated.price * 1.1),
         low52w: m.low24h || Math.round(hydrated.price * 0.9),
-        peRatio: m.peRatio || 25,
+        peRatio: Number(Number(m.peRatio || 25).toFixed(2)),
         marketCap: String(m.marketCap || '₹10,000 Cr'),
       };
     })
@@ -118,7 +115,7 @@ export const StockConstituentsView: React.FC = () => {
               change1d: m.change1d,
               high52w: m.high24h || Math.round(validPrice * 1.1),
               low52w: m.low24h || Math.round(validPrice * 0.9),
-              peRatio: m.peRatio || 25,
+              peRatio: Number(Number(m.peRatio || 25).toFixed(2)),
               marketCap: String(m.marketCap || '₹10,000 Cr'),
               isRealLive: true,
               updatedAtMs: incomingMs,
@@ -162,7 +159,7 @@ export const StockConstituentsView: React.FC = () => {
               change1d: m.change1d,
               high52w: m.high24h || Math.round(price * 1.1),
               low52w: m.low24h || Math.round(price * 0.9),
-              peRatio: m.peRatio || 25,
+              peRatio: Number(Number(m.peRatio || 25).toFixed(2)),
               marketCap: String(m.marketCap || '₹10,000 Cr'),
               isRealLive: true,
             };
@@ -184,58 +181,19 @@ export const StockConstituentsView: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const filteredStocks = useMemo(() => {
-    let list = stocks.filter((st) => {
-      const matchesExchange =
-        exchangeFilter === 'ALL' ||
-        (exchangeFilter === 'NSE' && st.exchange === 'NSE') ||
-        (exchangeFilter === 'NASDAQ/NYSE' && st.exchange !== 'NSE');
-      const matchesTier = tierFilter === 'ALL' || st.tier === tierFilter;
-      const matchesSector = sectorFilter === 'ALL' || st.sector === sectorFilter;
-      const matchesSearch =
-        st.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        st.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesExchange && matchesTier && matchesSector && matchesSearch;
-    });
-
-    list.sort((a, b) => {
-      const valA = a[sortField];
-      const valB = b[sortField];
-      if (typeof valA === 'number' && typeof valB === 'number') {
-        return sortAsc ? valA - valB : valB - valA;
-      }
-      if (typeof valA === 'string' && typeof valB === 'string') {
-        return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      }
-      return 0;
-    });
-
-    return list;
-  }, [stocks, exchangeFilter, tierFilter, sectorFilter, searchQuery, sortField, sortAsc]);
-
-  const totalPages = Math.ceil(filteredStocks.length / itemsPerPage) || 1;
-  const paginatedStocks = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
-    return filteredStocks.slice(start, start + itemsPerPage);
-  }, [filteredStocks, currentPage]);
-
-  const handleSort = (field: keyof StockConstituentItem) => {
-    if (sortField === field) setSortAsc(!sortAsc);
-    else {
-      setSortField(field);
-      setSortAsc(false);
+  const handleCustomSearchAnalysis = async (overrideSym?: string) => {
+    const rawSym = overrideSym ?? searchQuery;
+    if (!rawSym.trim()) return;
+    const sym = rawSym.trim().toUpperCase();
+    if (overrideSym) {
+      setSearchQuery(sym);
     }
-  };
-
-  const handleCustomSearchAnalysis = async () => {
-    if (!searchQuery.trim()) return;
-    const sym = searchQuery.trim().toUpperCase();
     const existing = stocks.find((s) => s.symbol.toUpperCase() === sym);
     if (existing) {
-      setSelectedStockForAnalysis(existing);
+      setActiveAnalystStock(existing);
     } else {
       setIsLoadingLive(true);
-      const yahooSym = sym.includes('.') ? sym : `${sym}.NS`;
+      const yahooSym = sym.includes('.') ? sym : `${yahooSymbolPrefix(sym)}`;
       const live = await fetchLiveQuote(yahooSym);
       
       const dynamicStock: StockConstituentItem = {
@@ -245,26 +203,37 @@ export const StockConstituentsView: React.FC = () => {
         symbol: sym,
         yahooSymbol: yahooSym,
         exchange: 'NSE',
-        tier: 'Nifty Midcap 150',
+        tier: 'Nifty 50',
         sector: 'Banking & Finance',
         price: live?.price || 845.50,
         currency: 'INR',
         weightagePct: 0.65,
-        change1d: live?.changePct || 2.15,
-        high52w: live?.high || 1020,
-        low52w: live?.low || 520,
-        peRatio: 32.5,
+        change1d: live?.changePct || 0,
+        high52w: live?.high || 0,
+        low52w: live?.low || 0,
+        peRatio: 24.5,
         marketCap: 'NSE Listed',
         isRealLive: Boolean(live?.price),
       };
-      setSelectedStockForAnalysis(dynamicStock);
+      setActiveAnalystStock(dynamicStock);
       setIsLoadingLive(false);
     }
   };
 
+  useEffect(() => {
+    if (externalSymbol && externalSymbol.trim()) {
+      handleCustomSearchAnalysis(externalSymbol);
+    }
+  }, [externalSymbol]);
+
+  const yahooSymbolPrefix = (sym: string) => {
+    if (sym.includes('.') || sym.startsWith('^')) return sym;
+    return `${sym}.NS`;
+  };
+
   return (
     <div
-      className={`rounded-2xl p-4 sm:p-5 shadow-xl border space-y-4 transition-colors ${
+      className={`rounded-2xl p-4 sm:p-5 shadow-xl border space-y-6 transition-colors ${
         isLight
           ? 'bg-white border-slate-200 text-slate-800 shadow-slate-200/50'
           : 'bg-neutral-900 border-neutral-800 text-neutral-100 shadow-black/50'
@@ -279,241 +248,141 @@ export const StockConstituentsView: React.FC = () => {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className={`text-base font-extrabold tracking-wide ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                🇮🇳 Nifty 500 & Global Stock Constituents Workstation
+                Stocks — 9-Tab Deep Research Workstation
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full bg-orange-500/20 text-orange-300 border border-orange-500/30 text-[10px] font-mono font-bold">
-                NSE Nifty 500 • Nifty Midcap • Smallcap
-              </span>
             </div>
             <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-              Search any Nifty stock symbol for instant technical indicators (RSI, Moving Averages), P/E valuations, shareholding pattern, and F&O derivatives analysis.
+              Enter any stock symbol (e.g., SBIN, RELIANCE, TCS) to launch the 9-Tab Deep Research Station.
             </p>
           </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
-          <a
-            href="https://eshan6704-marketapi2.hf.space/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-2.5 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 font-bold flex items-center gap-1.5 transition-all text-[11px]"
-            title="Direct NSE Market API powered by HuggingFace"
-          >
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-            <span>HF NSE Market API</span>
-          </a>
-
-          <a
-            href="https://crypto.eshanpatel.in/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-2.5 py-1.5 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold flex items-center gap-1.5 transition-all text-[11px]"
-            title="Deployed Crypto Terminal & Web App"
-          >
-            <span>Crypto Terminal</span>
-          </a>
-
-          <button
-            onClick={loadRealStockQuotes}
-            disabled={isLoadingLive}
-            className="px-3 py-1.5 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/40 font-bold flex items-center gap-1.5 transition-all"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoadingLive ? 'animate-spin' : ''}`} />
-            <span>{isLoadingLive ? 'Syncing Real NSE...' : 'Refresh Quotes'}</span>
-            {lastRefreshed && <span className="text-[10px] text-orange-200/70">({lastRefreshed})</span>}
-          </button>
+          {activeAnalystStock && (
+            <button
+              onClick={() => {
+                setActiveAnalystStock(null);
+                setSearchQuery('');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 font-bold transition-all"
+            >
+              New Stock Search
+            </button>
+          )}
         </div>
       </div>
 
-      {/* FILTER & SEARCH TOOLBAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-        <div className="relative flex-1 min-w-[240px] flex gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
+      {/* SEARCH LANDING OR ANALYSIS */}
+      {!activeAnalystStock ? (
+        <div className="py-16 flex flex-col items-center justify-center space-y-8 max-w-2xl mx-auto text-center">
+          <div className="p-6 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400">
+            <Search className="w-12 h-12" />
+          </div>
+          
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black tracking-tight">Which stock symbol would you like to analyze?</h1>
+            <p className="text-sm text-neutral-400">
+              Enter any NSE/BSE or Global stock ticker to instantly generate the 9-Tab Deep Research Station (AI Live Summary, Company Profile, Fundamentals, Corporate Actions, Intraday & Historical, Technicals & Pivots, F&O Option Chain, Peers & Shareholding, and Direct HF API).
+            </p>
+          </div>
+
+          <div className="w-full relative group">
+            <Search className="w-6 h-6 absolute left-4 top-4 text-neutral-500 group-focus-within:text-orange-500 transition-colors" />
             <input
               type="text"
               value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setCurrentPage(1);
-              }}
+              onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleCustomSearchAnalysis()}
-              placeholder="Search or enter Nifty stock symbol (e.g., RELIANCE, HAL, CDSL, SUZLON, ZOMATO)..."
-              className={`w-full pl-9 pr-3 py-2 rounded-xl border focus:outline-none focus:border-amber-500 font-sans text-xs ${
+              placeholder="Enter symbol (e.g., SBIN, RELIANCE, HAL, TCS, HDFCBANK, ZOMATO)..."
+              className={`w-full pl-12 pr-36 py-4 rounded-2xl border-2 focus:outline-none focus:border-orange-500 font-sans text-lg font-bold shadow-2xl transition-all ${
                 isLight
-                  ? 'bg-slate-50 border-slate-300 text-slate-900'
+                  ? 'bg-slate-50 border-slate-200 text-slate-900'
                   : 'bg-neutral-950 border-neutral-800 text-neutral-100'
               }`}
             />
+            <button
+              onClick={() => handleCustomSearchAnalysis()}
+              disabled={isLoadingLive}
+              className="absolute right-3 top-2.5 px-6 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-400 text-neutral-950 font-black flex items-center gap-2 transition-all shadow-lg cursor-pointer"
+            >
+              {isLoadingLive ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+              <span>Analyze</span>
+            </button>
           </div>
-          <button
-            onClick={handleCustomSearchAnalysis}
-            className="px-3 py-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-400 hover:to-amber-400 text-neutral-950 font-black flex items-center gap-1.5 transition-all shadow-md shrink-0"
-          >
-            <Zap className="w-4 h-4" />
-            <span>Analyze Stock</span>
-          </button>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <span className="text-[10px] uppercase font-bold text-neutral-500 w-full mb-1">Instant 1-Click Stock Analysis</span>
+            {['SBIN', 'RELIANCE', 'TCS', 'HDFCBANK', 'INFY', 'HAL', 'TATAMOTORS', 'ZOMATO', 'SUZLON'].map((sym) => (
+              <button
+                key={sym}
+                onClick={() => handleCustomSearchAnalysis(sym)}
+                className="px-3.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-orange-500 hover:text-neutral-950 text-neutral-300 border border-neutral-700 text-xs font-mono font-bold transition-all cursor-pointer"
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
         </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Nifty Tier Filter */}
-          <select
-            value={tierFilter}
-            onChange={(e) => {
-              setTierFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className={`px-3 py-2 rounded-xl border font-sans text-xs font-bold focus:outline-none focus:border-amber-500 ${
-              isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-neutral-950 border-neutral-800 text-orange-400'
-            }`}
-          >
-            <option value="ALL">🇮🇳 Nifty Total Market (All Tiers)</option>
-            <option value="Nifty 50">Nifty 50 (LargeCap)</option>
-            <option value="Nifty Next 50">Nifty Next 50 (LargeCap)</option>
-            <option value="Nifty Midcap 150">Nifty Midcap 150 (MidCap)</option>
-            <option value="Nifty Smallcap 250">Nifty Smallcap 250 (SmallCap)</option>
-            <option value="Nifty Microcap 250">Nifty Microcap 250 (MicroCap)</option>
-            <option value="Global Tech">Global Tech MegaCaps</option>
-          </select>
-
-          {/* Sector Filter */}
-          <select
-            value={sectorFilter}
-            onChange={(e) => {
-              setSectorFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className={`px-3 py-2 rounded-xl border font-sans text-xs font-bold focus:outline-none focus:border-amber-500 ${
-              isLight ? 'bg-white border-slate-300 text-slate-800' : 'bg-neutral-950 border-neutral-800 text-amber-300'
-            }`}
-          >
-            <option value="ALL">All Sectors</option>
-            <option value="IT & Tech">IT & Tech</option>
-            <option value="Banking & Finance">Banking & Finance</option>
-            <option value="Defense & Aerospace">Defense & Aerospace</option>
-            <option value="Auto & EV">Auto & EV</option>
-            <option value="Energy & Power">Energy & Power</option>
-            <option value="FMCG & Consumer">FMCG & Consumer</option>
-            <option value="Pharma & Healthcare">Pharma & Healthcare</option>
-            <option value="Capital Goods">Capital Goods</option>
-            <option value="PSU & Railways">PSU & Railways</option>
-          </select>
-        </div>
-      </div>
-
-      {/* AI FUNDAMENTAL ANALYST PANEL */}
-      <AiFundamentalAnalystPanel
-        stock={activeAnalystStock || stocks[0]}
-        stocksList={stocks}
-        onSelectStock={setActiveAnalystStock}
-        onOpenFullModal={setSelectedStockForAnalysis}
-      />
-
-      {/* CONSTITUENTS TABLE */}
-      <div className="overflow-x-auto max-h-[480px] overflow-y-auto pr-1">
-        <table className="w-full text-left border-collapse text-xs font-mono">
-          <thead>
-            <tr className={`sticky top-0 z-10 text-[10px] uppercase font-bold tracking-wider border-b ${
-              isLight ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-neutral-950 text-neutral-400 border-neutral-800'
-            }`}>
-              <th onClick={() => handleSort('rank')} className="py-2.5 px-3 cursor-pointer hover:text-amber-400">
-                # <ArrowUpDown className="w-3 h-3 inline ml-0.5" />
-              </th>
-              <th onClick={() => handleSort('name')} className="py-2.5 px-3 cursor-pointer hover:text-amber-400">
-                Company & Symbol
-              </th>
-              <th onClick={() => handleSort('sector')} className="py-2.5 px-3 cursor-pointer hover:text-amber-400">
-                Sector & Index Tier
-              </th>
-              <th onClick={() => handleSort('price')} className="py-2.5 px-3 text-right cursor-pointer hover:text-amber-400">
-                Live Price
-              </th>
-              <th onClick={() => handleSort('change1d')} className="py-2.5 px-3 text-right cursor-pointer hover:text-amber-400">
-                1D Change
-              </th>
-              <th className="py-2.5 px-3 text-right">P/E Ratio</th>
-              <th className="py-2.5 px-3 text-right">Market Cap</th>
-              <th className="py-2.5 px-3 text-center">Analysis</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-neutral-800/40">
-            {paginatedStocks.map((st) => {
-              const isUp = st.change1d >= 0;
-              const isSelectedForAnalyst = activeAnalystStock?.symbol === st.symbol;
-
-              return (
-                <tr
-                  key={st.id}
-                  onClick={() => setActiveAnalystStock(st)}
-                  className={`transition-colors cursor-pointer ${
-                    isSelectedForAnalyst
-                      ? 'bg-amber-500/15 border-l-4 border-l-amber-500 font-bold'
-                      : 'hover:bg-neutral-800/30'
+      ) : (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          {/* QUICK SEARCH BAR AT TOP OF ACTIVE RESEARCH STATION */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setActiveAnalystStock(null)}
+              className="px-3 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 border border-neutral-700 flex items-center gap-1.5 text-xs font-bold transition-all cursor-pointer"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              <span>Back</span>
+            </button>
+            <div className="relative flex-1 min-w-[220px]">
+              <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCustomSearchAnalysis()}
+                placeholder="Enter another stock symbol (e.g., SBIN, RELIANCE, TCS)..."
+                className={`w-full pl-9 pr-28 py-2 rounded-xl border focus:outline-none focus:border-amber-500 font-sans text-xs font-bold ${
+                  isLight
+                    ? 'bg-slate-50 border-slate-300 text-slate-900'
+                    : 'bg-neutral-950 border-neutral-800 text-neutral-100'
+                }`}
+              />
+              <button
+                onClick={() => handleCustomSearchAnalysis()}
+                disabled={isLoadingLive}
+                className="absolute right-1.5 top-1 px-3 py-1 rounded-lg bg-orange-500 hover:bg-orange-400 text-neutral-950 font-black text-xs flex items-center gap-1 transition-all"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>Analyze</span>
+              </button>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {['SBIN', 'RELIANCE', 'TCS', 'HDFCBANK', 'HAL'].map((sym) => (
+                <button
+                  key={sym}
+                  onClick={() => handleCustomSearchAnalysis(sym)}
+                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer ${
+                    activeAnalystStock.symbol === sym
+                      ? 'bg-orange-500 text-neutral-950 border-orange-400'
+                      : 'bg-neutral-950 text-neutral-400 border-neutral-800 hover:text-white'
                   }`}
                 >
-                  <td className="py-2.5 px-3 text-neutral-400 font-bold">{st.rank}</td>
+                  {sym}
+                </button>
+              ))}
+            </div>
+          </div>
 
-                  <td className="py-2.5 px-3">
-                    <div className="flex items-center gap-2">
-                      <span className={`font-extrabold font-sans text-sm ${isLight ? 'text-slate-900' : 'text-white'}`}>
-                        {st.name}
-                      </span>
-                      <span className="px-1.5 py-0.5 rounded bg-orange-500/10 border border-orange-500/20 text-orange-400 text-[10px] font-bold">
-                        {st.symbol}
-                      </span>
-                    </div>
-                  </td>
-
-                  <td className="py-2.5 px-3">
-                    <div className="font-sans text-neutral-300">{st.sector}</div>
-                    <span className="text-[10px] text-amber-400/80 font-mono font-bold">{st.tier}</span>
-                  </td>
-
-                  <td className="py-2.5 px-3 text-right font-black text-white text-sm">
-                    {st.currency === 'INR' ? '₹' : '$'}{st.price.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
-                  </td>
-
-                  <td className="py-2.5 px-3 text-right">
-                    <span className={`inline-flex items-center gap-0.5 font-extrabold ${isUp ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {isUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                      {isUp ? '+' : ''}{st.change1d.toFixed(2)}%
-                    </span>
-                  </td>
-
-                  <td className="py-2.5 px-3 text-right text-purple-300 font-bold">
-                    {st.peRatio}x
-                  </td>
-
-                  <td className="py-2.5 px-3 text-right text-neutral-300 font-bold">
-                    {st.marketCap}
-                  </td>
-
-                  <td className="py-2.5 px-3 text-center">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveAnalystStock(st);
-                        setSelectedStockForAnalysis(st);
-                      }}
-                      className="px-2.5 py-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/40 text-orange-300 border border-orange-500/40 font-bold text-[11px] flex items-center gap-1 mx-auto transition-all"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>Analyze</span>
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-
-      {/* STOCK ANALYSIS MODAL */}
-      <NiftyStockAnalysisModal
-        isOpen={Boolean(selectedStockForAnalysis)}
-        stock={selectedStockForAnalysis}
-        onClose={() => setSelectedStockForAnalysis(null)}
-      />
+          {/* INLINE 9-TAB DEEP RESEARCH STATION */}
+          <NiftyStockAnalysisModal
+            isOpen={true}
+            inline={true}
+            stock={activeAnalystStock}
+            onClose={() => setActiveAnalystStock(null)}
+          />
+        </div>
+      )}
     </div>
   );
 };

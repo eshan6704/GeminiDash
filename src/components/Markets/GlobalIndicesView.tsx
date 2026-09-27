@@ -76,6 +76,8 @@ const GLOBAL_YAHOO_MAP: Record<string, string> = {
   'TAIEX': '^TWII',
   'STI': '^STI',
   'GIFTNIFTY': '^NSEI',
+  'SET': 'SET.BK',
+  'KLCI': '^KLSE',
   'ES1!': 'ES=F',
   'ES_FUT': 'ES=F',
   'NQ1!': 'NQ=F',
@@ -101,6 +103,9 @@ const GLOBAL_YAHOO_MAP: Record<string, string> = {
   'HG_FUT': 'HG=F',
   'BTC1!': 'BTC=F',
   'ETH1!': 'ETH=F',
+  'USD/BRL': 'USDBRL=X',
+  'USD/ZAR': 'USDZAR=X',
+  'USD/MXN': 'USDMXN=X',
 };
 
 export const GlobalIndicesView: React.FC = () => {
@@ -248,12 +253,13 @@ export const GlobalIndicesView: React.FC = () => {
 
   const loadRealGlobalQuotes = async () => {
     setIsLoadingLive(true);
-    const symbolsToFetch = indices.map((i) => i.yahooSymbol || i.symbol);
+    const symbolsToFetch = indices.filter(i => i && (i.yahooSymbol || i.symbol)).map((i) => i.yahooSymbol || i.symbol);
     const liveMap = await fetchBatchLiveQuotes(symbolsToFetch);
 
     if (Object.keys(liveMap).length > 0) {
       setIndices((prev) =>
         prev.map((idx) => {
+          if (!idx) return idx;
           const targetKey = idx.yahooSymbol || idx.symbol;
           const live = liveMap[targetKey] || liveMap[idx.symbol] || liveMap[idx.id];
           if (live && live.price > 0) {
@@ -489,15 +495,23 @@ export const GlobalIndicesView: React.FC = () => {
                     </div>
                   </div>
 
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold border ${
-                      idx.status === 'OPEN'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200 animate-pulse'
-                        : 'bg-slate-100 text-slate-600 border-slate-200'
-                    }`}
-                  >
-                    {idx.status}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-mono font-extrabold border ${
+                        idx.status === 'OPEN'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 animate-pulse'
+                          : 'bg-slate-100 text-slate-600 border-slate-200'
+                      }`}
+                    >
+                      {idx.status}
+                    </span>
+                    {idx.isRealLive && (
+                      <span className="flex items-center gap-1 text-[9px] font-black text-blue-600 uppercase tracking-tighter">
+                        <Zap className="w-2.5 h-2.5 fill-current" />
+                        Live Verified
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Price & Change */}

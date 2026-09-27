@@ -59,6 +59,7 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
 
   // Derived institutional metadata for any selected coin (defaults to BTC)
   const metrics = useMemo(() => {
+    if (!asset?.symbol) return null;
     const sym = asset.symbol.toUpperCase();
     const defaultCap =
       sym === 'BTC'
@@ -149,6 +150,8 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
     if (val >= 1e6) return `$${(val / 1e6).toFixed(2)}M`;
     return `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
   };
+
+  if (!asset || !metrics) return null;
 
   return (
     <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 space-y-5 shadow-sm">
@@ -444,15 +447,22 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
 };
 
 /* ============================================================================
-   2. (a) LIVE TICK IMPULSE (e.g. u12_5.7, d15_5.6) & (b) CURRENT CHART
+   2. (a) LIVE TICK IMPULSE (e.g. u12_6.7, d15_5.6) & (b) CURRENT CHART
+   - Pattern format: u12_6.7 -> 'u'/'d' = direction, 12 = consecutive count of
+     similar direction ticks, 6.7 = total net price change covered by those 12 ticks.
+   - Filters out 'u1d1' single-tick alternating flips and 'flat' (0-change) ticks
+     from consecutive trend runs, while counting Flat & Flipping ticks out of total
+     ticks (e.g. 500 ticks) to quantify Trend Quality.
    ============================================================================ */
 
-interface TickRecord {
+interface ConsecutiveRunRecord {
   id: string;
   dir: 'u' | 'd';
-  delta: number;
-  price: number;
+  count: number; // 1st number: consecutive count of similar pattern
+  netChange: number; // 2nd number after '_': total net change covered by count
+  endPrice: number;
   timestamp: number;
+  isFilteredFlip?: boolean; // true if count === 1 (u1d1 flip noise)
 }
 
 interface CoinTickAndChartProps {
@@ -464,161 +474,436 @@ export const CoinTickAndChartPanel: React.FC<CoinTickAndChartProps> = ({
   asset,
   positions,
 }) => {
-  const [upCount, setUpCount] = useState<number>(12);
-  const [upSum, setUpSum] = useState<number>(5.7);
-  const [downCount, setDownCount] = useState<number>(15);
-  const [downSum, setDownSum] = useState<number>(5.6);
-  const [recentTicks, setRecentTicks] = useState<TickRecord[]>([]);
+  // Latest consecutive run signatures (e.g., u12_6.7 and d15_5.6)
+  const [latestUpRun, setLatestUpRun] = useState<{ count: number; net: number }>({
+    count: 12,
+    net: 6.7,
+  });
+  const [latestDownRun, setLatestDownRun] = useState<{ count: number; net: number }>({
+    count: 15,
+    net: 5.6,
+  });
+
+  // 500-tick window distribution counters (seeded with the exact 500-tick benchmark example:
+  // Up = 150/500, Down = 50/500, Flat = 200/500, Flip (u1d1) = 100/500)
+  const [upTrendTicks, setUpTrendTicks] = useState<number>(150);
+  const [downTrendTicks, setDownTrendTicks] = useState<number>(50);
+  const [flatTicks, setFlatTicks] = useState<number>(200);
+  const [flipTicks, setFlipTicks] = useState<number>(100);
+
+  // Filter toggle: hide u1d1 single-tick flips & flat ticks from pattern tape
+  const [filterFlipsAndFlat, setFilterFlipsAndFlat] = useState<boolean>(true);
+
+  // Consecutive run history tape
+  const [patternRuns, setPatternRuns] = useState<ConsecutiveRunRecord[]>([
+    { id: 'seed-1', dir: 'u', count: 12, netChange: 6.7, endPrice: asset.price, timestamp: Date.now() - 25000 },
+    { id: 'seed-2', dir: 'd', count: 15, netChange: 5.6, endPrice: asset.price, timestamp: Date.now() - 20000 },
+    { id: 'seed-3', dir: 'u', count: 1, netChange: 0.2, endPrice: asset.price, timestamp: Date.now() - 18000, isFilteredFlip: true },
+    { id: 'seed-4', dir: 'd', count: 1, netChange: 0.1, endPrice: asset.price, timestamp: Date.now() - 16000, isFilteredFlip: true },
+    { id: 'seed-5', dir: 'u', count: 9, netChange: 4.8, endPrice: asset.price, timestamp: Date.now() - 12000 },
+    { id: 'seed-6', dir: 'd', count: 6, netChange: 2.4, endPrice: asset.price, timestamp: Date.now() - 8000 },
+    { id: 'seed-7', dir: 'u', count: 14, netChange: 8.1, endPrice: asset.price, timestamp: Date.now() - 3000 },
+  ]);
+
+  // Active ongoing run state ref for real-time incoming ticks
+  const activeRunRef = useRef<{ dir: 'u' | 'd' | null; count: number; netChange: number }>({
+    dir: 'u',
+    count: 12,
+    netChange: 6.7,
+  });
   const prevPriceRef = useRef<number>(asset.price);
   const prevSymbolRef = useRef<string>(asset.symbol);
 
-  // Reset baseline to realistic u12_5.7, d15_5.6 seed when switching coins
+  // Reset baseline to 500-tick distribution & u12_6.7 / d15_5.6 when switching coins
   useEffect(() => {
     if (prevSymbolRef.current !== asset.symbol) {
       prevSymbolRef.current = asset.symbol;
       prevPriceRef.current = asset.price;
-      setUpCount(12);
-      setUpSum(5.7);
-      setDownCount(15);
-      setDownSum(5.6);
-      setRecentTicks([]);
+      setLatestUpRun({ count: 12, net: 6.7 });
+      setLatestDownRun({ count: 15, net: 5.6 });
+      setUpTrendTicks(150);
+      setDownTrendTicks(50);
+      setFlatTicks(200);
+      setFlipTicks(100);
+      activeRunRef.current = { dir: 'u', count: 12, netChange: 6.7 };
+      setPatternRuns([
+        { id: `${asset.symbol}-1`, dir: 'u', count: 12, netChange: 6.7, endPrice: asset.price, timestamp: Date.now() - 15000 },
+        { id: `${asset.symbol}-2`, dir: 'd', count: 15, netChange: 5.6, endPrice: asset.price, timestamp: Date.now() - 10000 },
+        { id: `${asset.symbol}-3`, dir: 'u', count: 9, netChange: 4.8, endPrice: asset.price, timestamp: Date.now() - 5000 },
+      ]);
     }
   }, [asset.symbol, asset.price]);
 
-  // Track real live price changes + micro-tick feed
+  // Process incoming live price ticks into consecutive runs, flat ticks, and u1d1 flips
   useEffect(() => {
     const diff = asset.price - prevPriceRef.current;
-    if (Math.abs(diff) > 0) {
-      const isUp = diff > 0;
-      const absDelta = Math.abs(diff);
-      prevPriceRef.current = asset.price;
+    prevPriceRef.current = asset.price;
 
-      if (isUp) {
-        setUpCount((c) => c + 1);
-        setUpSum((s) => Number((s + absDelta).toFixed(4)));
+    // Flat threshold: 0 price change or ultra-micro noise (< 0.00001% of price)
+    const flatThreshold = asset.price * 0.000005;
+    if (Math.abs(diff) <= flatThreshold) {
+      setFlatTicks((f) => f + 1);
+      return;
+    }
+
+    const dir: 'u' | 'd' = diff > 0 ? 'u' : 'd';
+    const absDelta = Math.abs(diff);
+    const currentRun = activeRunRef.current;
+
+    if (currentRun.dir === dir) {
+      // Continues the same consecutive pattern run!
+      const newCount = currentRun.count + 1;
+      const newNet = Number((currentRun.netChange + absDelta).toFixed(4));
+      activeRunRef.current = { dir, count: newCount, netChange: newNet };
+
+      if (dir === 'u') {
+        setLatestUpRun({ count: newCount, net: newNet });
+        // If this just transitioned from 1 tick to 2 consecutive ticks, count both as trend ticks
+        setUpTrendTicks((u) => u + (newCount === 2 ? 2 : 1));
       } else {
-        setDownCount((c) => c + 1);
-        setDownSum((s) => Number((s + absDelta).toFixed(4)));
+        setLatestDownRun({ count: newCount, net: newNet });
+        setDownTrendTicks((d) => d + (newCount === 2 ? 2 : 1));
       }
 
-      setRecentTicks((prev) => [
-        {
-          id: `${Date.now()}-${Math.random()}`,
-          dir: isUp ? 'u' : 'd',
-          delta: absDelta,
-          price: asset.price,
+      // Update or prepend the active consecutive run in the tape
+      setPatternRuns((prev) => {
+        const updated: ConsecutiveRunRecord = {
+          id: prev[0] && prev[0].dir === dir && !prev[0].isFilteredFlip ? prev[0].id : `${Date.now()}-${Math.random()}`,
+          dir,
+          count: newCount,
+          netChange: newNet,
+          endPrice: asset.price,
           timestamp: Date.now(),
-        },
-        ...prev.slice(0, 19),
-      ]);
+          isFilteredFlip: false,
+        };
+        if (prev[0] && prev[0].dir === dir && !prev[0].isFilteredFlip) {
+          return [updated, ...prev.slice(1, 24)];
+        }
+        return [updated, ...prev.slice(0, 24)];
+      });
+    } else {
+      // Direction flipped! Check if the previous run was a single-tick flip (u1 or d1 -> u1d1 pattern)
+      if (currentRun.dir !== null && currentRun.count === 1) {
+        // Previous run only lasted 1 tick before flipping -> classify as u1d1 Flipping tick!
+        setFlipTicks((fl) => fl + 1);
+        setPatternRuns((prev) => [
+          {
+            id: `${Date.now()}-flip`,
+            dir: currentRun.dir!,
+            count: 1,
+            netChange: currentRun.netChange,
+            endPrice: asset.price,
+            timestamp: Date.now(),
+            isFilteredFlip: true,
+          },
+          ...prev.slice(0, 24),
+        ]);
+      }
+
+      // Start new run with count = 1
+      activeRunRef.current = { dir, count: 1, netChange: Number(absDelta.toFixed(4)) };
     }
   }, [asset.price]);
 
-  // Format tick metric cleanly (e.g. u12_5.7, d15_5.6)
+  // Format net change cleanly (e.g. u12_6.7, d15_5.6)
   const formatDeltaCompact = (val: number) => {
     if (val >= 100) return val.toFixed(1);
     if (val >= 1) return val.toFixed(1);
     return val.toFixed(3);
   };
 
-  const uCode = `u${upCount}_${formatDeltaCompact(upSum)}`;
-  const dCode = `d${downCount}_${formatDeltaCompact(downSum)}`;
-  const totalTicks = Math.max(1, upCount + downCount);
-  const upRatioPct = (upCount / totalTicks) * 100;
+  const uCode = `u${latestUpRun.count}_${formatDeltaCompact(latestUpRun.net)}`;
+  const dCode = `d${latestDownRun.count}_${formatDeltaCompact(latestDownRun.net)}`;
 
-  const handleResetTicks = () => {
-    setUpCount(0);
-    setUpSum(0);
-    setDownCount(0);
-    setDownSum(0);
-    setRecentTicks([]);
+  // Mutually exclusive tick buckets:
+  // - flatTicks: 0-change ticks
+  // - flipTicks: u1d1 single-tick alternating flips (NEVER counted in upTrendTicks or downTrendTicks)
+  // - upTrendTicks: consecutive up runs (count >= 2 only)
+  // - downTrendTicks: consecutive down runs (count >= 2 only)
+  const totalTicks = flatTicks + flipTicks + upTrendTicks + downTrendTicks;
+  const safeTotalTicks = Math.max(1, totalTicks);
+
+  // Step 1: Flat / Total Tick
+  const flatOverTotalPct = (flatTicks / safeTotalTicks) * 100;
+
+  // Step 2: Flip / (Total - Flat)
+  const totalMinusFlat = Math.max(0, totalTicks - flatTicks);
+  const safeTotalMinusFlat = Math.max(1, totalMinusFlat);
+  const flipOverNonFlatPct = totalMinusFlat > 0 ? (flipTicks / safeTotalMinusFlat) * 100 : 0;
+
+  // Step 3 & 4: Bullish / (Total - Flat - Flip) & Bearish / (Total - Flat - Flip)
+  // Since up/down ticks in u1d1 flipping are never counted in Bullish/Bearish,
+  // (Total - Flat - Flip) equals pure consecutive trend ticks (upTrendTicks + downTrendTicks).
+  const totalMinusFlatMinusFlip = Math.max(0, totalTicks - flatTicks - flipTicks);
+  const safePureTrendTicks = Math.max(1, totalMinusFlatMinusFlip);
+  const bullishOverTrendPct =
+    totalMinusFlatMinusFlip > 0 ? (upTrendTicks / safePureTrendTicks) * 100 : 0;
+  const bearishOverTrendPct =
+    totalMinusFlatMinusFlip > 0 ? (downTrendTicks / safePureTrendTicks) * 100 : 0;
+
+  // Overall noise vs pure trend for verdict
+  const noiseTicks = flatTicks + flipTicks;
+  const noisePct = (noiseTicks / safeTotalTicks) * 100;
+
+  const netDirectionalTicks = upTrendTicks - downTrendTicks;
+  const dominantBias =
+    upTrendTicks > downTrendTicks * 1.25
+      ? 'BULLISH TREND'
+      : downTrendTicks > upTrendTicks * 1.25
+      ? 'BEARISH TREND'
+      : 'NEUTRAL / BALANCED';
+
+  const trendQualityLabel =
+    flatOverTotalPct <= 35 && flipOverNonFlatPct <= 30
+      ? 'HIGH TREND QUALITY (Low Flat & Low Flip Ratio)'
+      : flatOverTotalPct <= 50 && flipOverNonFlatPct <= 45
+      ? 'MODERATE TREND QUALITY (Filtered u1d1 & Flat)'
+      : 'LOW TREND QUALITY (High Flat / Flipping Chop)';
+
+  const visibleRuns = filterFlipsAndFlat
+    ? patternRuns.filter((r) => !r.isFilteredFlip && r.count >= 2)
+    : patternRuns;
+
+  const handleResetBenchmark500 = () => {
+    setLatestUpRun({ count: 12, net: 6.7 });
+    setLatestDownRun({ count: 15, net: 5.6 });
+    setUpTrendTicks(150);
+    setDownTrendTicks(50);
+    setFlatTicks(200);
+    setFlipTicks(100);
+    activeRunRef.current = { dir: 'u', count: 12, netChange: 6.7 };
+  };
+
+  const handleZeroReset = () => {
+    setLatestUpRun({ count: 0, net: 0 });
+    setLatestDownRun({ count: 0, net: 0 });
+    setUpTrendTicks(0);
+    setDownTrendTicks(0);
+    setFlatTicks(0);
+    setFlipTicks(0);
+    setPatternRuns([]);
+    activeRunRef.current = { dir: null, count: 0, netChange: 0 };
   };
 
   return (
     <div className="space-y-4">
-      {/* (a) LIVE TICK IMPULSE MONITOR: u12_5.7, d15_5.6 */}
-      <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 shadow-sm space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {/* (a) LIVE CONSECUTIVE TICK PATTERN & HIERARCHICAL TREND QUALITY ANALYZER */}
+      <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 shadow-sm space-y-4">
+        {/* Header & Active Consecutive Pattern Signatures (u12_6.7, d15_5.6) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border-subtle)]">
           <div className="flex items-center gap-2.5">
             <Activity className="w-4 h-4 text-emerald-600" />
             <div>
               <h3 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
-                (a) Live Micro-Tick Impulse Signature ({asset.symbol}/USDT)
+                (a) Consecutive Tick Pattern & Hierarchical Trend Filter ({asset.symbol}/USDT)
               </h3>
               <p className="text-[11px] text-[var(--theme-text-muted)]">
-                Real-time uptick vs downtick count & cumulative price excursion
+                1st: <code className="font-mono font-bold">Flat / Total</code> · 2nd: <code className="font-mono font-bold">Flip / (Total - Flat)</code> · 3rd: <code className="font-mono font-bold">Bullish / (Total - Flat - Flip)</code> · 4th: <code className="font-mono font-bold">Bearish / (Total - Flat - Flip)</code> · Up/Down in flipping never counted in Bullish/Bearish
               </p>
             </div>
           </div>
 
-          {/* Primary Compact Signature Display: u12_5.7, d15_5.6 */}
-          <div className="flex items-center gap-2.5 flex-wrap font-mono">
-            <div className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 font-black text-sm tracking-tight">
+          {/* Primary Consecutive Run Badges + Filter Controls */}
+          <div className="flex items-center gap-2 flex-wrap font-mono">
+            <div
+              className="px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 font-black text-sm tracking-tight"
+              title="Consecutive Up-Tick Run: u{consecutive_count}_{net_change_covered}"
+            >
               {uCode}
             </div>
             <span className="text-[var(--theme-text-muted)] font-bold">,</span>
-            <div className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 font-black text-sm tracking-tight">
+            <div
+              className="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 font-black text-sm tracking-tight"
+              title="Consecutive Down-Tick Run: d{consecutive_count}_{net_change_covered}"
+            >
               {dCode}
             </div>
+
             <button
               type="button"
-              onClick={handleResetTicks}
+              onClick={() => setFilterFlipsAndFlat((prev) => !prev)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-all ${
+                filterFlipsAndFlat
+                  ? 'bg-emerald-600 text-white border-emerald-600'
+                  : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border)]'
+              }`}
+              title="Toggle filtering of u1d1 single-tick flipping noise and flat ticks"
+            >
+              <Sliders className="w-3 h-3" />
+              <span>{filterFlipsAndFlat ? 'u1d1 & Flat Filtered: ON' : 'Showing Raw u1d1 Flips'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleResetBenchmark500}
               className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[11px] font-semibold text-[var(--theme-text-secondary)] cursor-pointer"
-              title="Reset tick counter window"
+              title="Load 500-Tick Benchmark (200 Flat, 100 Flip, 150 Bullish, 50 Bearish)"
+            >
+              <span>500-Tick Sample</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleZeroReset}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[11px] font-semibold text-[var(--theme-text-secondary)] cursor-pointer"
+              title="Clear all tick counters to zero"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Reset Window</span>
+              <span>Clear</span>
             </button>
           </div>
         </div>
 
-        {/* Up vs Down Tick Ratio Bar & Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center pt-1">
-          <div className="p-2.5 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex items-center justify-between font-mono text-xs">
-            <span className="text-[var(--theme-text-muted)]">Up-Ticks (u):</span>
-            <span className="font-bold text-emerald-600">
-              {upCount} ticks · +{formatDeltaCompact(upSum)} pts
-            </span>
-          </div>
-          <div className="p-2.5 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex items-center justify-between font-mono text-xs">
-            <span className="text-[var(--theme-text-muted)]">Down-Ticks (d):</span>
-            <span className="font-bold text-rose-600">
-              {downCount} ticks · -{formatDeltaCompact(downSum)} pts
-            </span>
-          </div>
-          <div className="space-y-1 font-mono">
-            <div className="flex justify-between text-[10px] text-[var(--theme-text-muted)]">
-              <span>Up Impulse {upRatioPct.toFixed(0)}%</span>
-              <span>Net: {(upSum - downSum >= 0 ? '+' : '') + (upSum - downSum).toFixed(2)}</span>
-              <span>Down Impulse {(100 - upRatioPct).toFixed(0)}%</span>
+        {/* 4-Card Hierarchical Tick Score Breakdown:
+            1. Flat / Total Tick
+            2. Flip / (Total - Flat)
+            3. Bullish / (Total - Flat - Flip)
+            4. Bearish / (Total - Flat - Flip) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 font-mono">
+          {/* 1st: FLAT / TOTAL TICK */}
+          <div className="p-3 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
+                1. FLAT / TOTAL TICK
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-[var(--theme-bg-elevated)] text-[var(--theme-text-primary)] text-[10px] font-bold">
+                {flatOverTotalPct.toFixed(1)}%
+              </span>
             </div>
-            <div className="w-full h-2 rounded-full bg-rose-500/30 overflow-hidden flex">
-              <div
-                className="h-full bg-emerald-600 transition-all duration-300"
-                style={{ width: `${upRatioPct}%` }}
-              />
+            <div className="text-lg font-black text-[var(--theme-text-primary)]">
+              {flatTicks}/{totalTicks}
+            </div>
+            <div className="text-[10px] text-[var(--theme-text-muted)]">
+              Formula: <strong>Flat / Total</strong> · Remaining active (Total - Flat): <strong>{totalMinusFlat}</strong>
+            </div>
+          </div>
+
+          {/* 2nd: FLIP / (TOTAL - FLAT) */}
+          <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/25 space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-sans font-bold text-amber-600">
+                2. FLIP / (TOTAL - FLAT)
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 text-[10px] font-bold">
+                {flipOverNonFlatPct.toFixed(1)}%
+              </span>
+            </div>
+            <div className="text-lg font-black text-amber-600">
+              {flipTicks}/{totalMinusFlat}
+            </div>
+            <div className="text-[10px] text-[var(--theme-text-muted)]">
+              <code className="font-mono">u1d1</code> flips out of ({totalTicks} - {flatTicks}) · Pure trend left: <strong>{totalMinusFlatMinusFlip}</strong>
+            </div>
+          </div>
+
+          {/* 3rd: BULLISH / (TOTAL - FLAT - FLIP) */}
+          <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/25 space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-sans font-bold text-emerald-700">
+                3. BULLISH / (TOTAL - FLAT - FLIP)
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 text-[10px] font-bold">
+                {bullishOverTrendPct.toFixed(1)}%
+              </span>
+            </div>
+            <div className="text-lg font-black text-emerald-600">
+              {upTrendTicks}/{totalMinusFlatMinusFlip}
+            </div>
+            <div className="text-[10px] text-[var(--theme-text-muted)]">
+              Excludes <code className="font-mono">u1</code> flips · Latest: <strong>{uCode}</strong> (+{formatDeltaCompact(latestUpRun.net)} net)
+            </div>
+          </div>
+
+          {/* 4th: BEARISH / (TOTAL - FLAT - FLIP) */}
+          <div className="p-3 rounded-xl bg-rose-500/5 border border-rose-500/25 space-y-1">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="font-sans font-bold text-rose-600">
+                4. BEARISH / (TOTAL - FLAT - FLIP)
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 text-[10px] font-bold">
+                {bearishOverTrendPct.toFixed(1)}%
+              </span>
+            </div>
+            <div className="text-lg font-black text-rose-600">
+              {downTrendTicks}/{totalMinusFlatMinusFlip}
+            </div>
+            <div className="text-[10px] text-[var(--theme-text-muted)]">
+              Excludes <code className="font-mono">d1</code> flips · Latest: <strong>{dCode}</strong> (-{formatDeltaCompact(latestDownRun.net)} net)
             </div>
           </div>
         </div>
 
-        {/* Scrolling Live Tick Sequence Tape */}
-        {recentTicks.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto py-1 text-[11px] font-mono no-scrollbar">
-            <span className="text-[var(--theme-text-muted)] shrink-0 mr-1">Recent Ticks:</span>
-            {recentTicks.map((t) => (
+        {/* Hierarchical Ratio Bar & Trend Quality Verdict */}
+        <div className="p-3 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] space-y-2 font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-sans font-extrabold text-[var(--theme-text-primary)]">
+                Trend Verdict:
+              </span>
               <span
-                key={t.id}
-                className={`px-2 py-0.5 rounded shrink-0 font-bold ${
-                  t.dir === 'u'
-                    ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20'
-                    : 'bg-rose-500/10 text-rose-600 border border-rose-500/20'
+                className={`px-2 py-0.5 rounded text-[11px] font-bold ${
+                  dominantBias === 'BULLISH TREND'
+                    ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30'
+                    : dominantBias === 'BEARISH TREND'
+                    ? 'bg-rose-500/15 text-rose-600 border border-rose-500/30'
+                    : 'bg-[var(--theme-bg-elevated)] text-[var(--theme-text-secondary)]'
                 }`}
               >
-                {t.dir}_{t.delta < 1 ? t.delta.toFixed(3) : t.delta.toFixed(2)}
+                {dominantBias} (Bullish {upTrendTicks}/{totalMinusFlatMinusFlip} vs Bearish {downTrendTicks}/{totalMinusFlatMinusFlip})
               </span>
-            ))}
+              <span className="text-[11px] text-[var(--theme-text-secondary)] font-sans font-semibold">
+                · {trendQualityLabel}
+              </span>
+            </div>
+            <div className="text-[11px] text-[var(--theme-text-muted)]">
+              Pure Trend Pool (Total - Flat - Flip): <strong className="text-emerald-600">{totalMinusFlatMinusFlip} ticks</strong> · Up/Down in Flipping (<strong className="text-amber-600">{flipTicks}</strong>) never counted in Bullish/Bearish
+            </div>
           </div>
-        )}
+
+          {/* Pure Trend Split Bar: Bullish / (Total - Flat - Flip) vs Bearish / (Total - Flat - Flip) */}
+          <div className="w-full h-3 rounded-full overflow-hidden flex bg-[var(--theme-bg-elevated)]">
+            <div
+              className="h-full bg-emerald-600 transition-all duration-300"
+              style={{ width: `${bullishOverTrendPct}%` }}
+              title={`Bullish / (Total - Flat - Flip): ${upTrendTicks}/${totalMinusFlatMinusFlip} (${bullishOverTrendPct.toFixed(1)}%)`}
+            />
+            <div
+              className="h-full bg-rose-600 transition-all duration-300"
+              style={{ width: `${bearishOverTrendPct}%` }}
+              title={`Bearish / (Total - Flat - Flip): ${downTrendTicks}/${totalMinusFlatMinusFlip} (${bearishOverTrendPct.toFixed(1)}%)`}
+            />
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--theme-text-muted)]">
+            <span>1️⃣ Flat / Total: <strong>{flatTicks}/{totalTicks} ({flatOverTotalPct.toFixed(1)}%)</strong></span>
+            <span>2️⃣ Flip / (Total - Flat): <strong>{flipTicks}/{totalMinusFlat} ({flipOverNonFlatPct.toFixed(1)}%)</strong></span>
+            <span>3️⃣ Bullish / (Total - Flat - Flip): <strong className="text-emerald-600">{upTrendTicks}/{totalMinusFlatMinusFlip} ({bullishOverTrendPct.toFixed(1)}%)</strong></span>
+            <span>4️⃣ Bearish / (Total - Flat - Flip): <strong className="text-rose-600">{downTrendTicks}/{totalMinusFlatMinusFlip} ({bearishOverTrendPct.toFixed(1)}%)</strong></span>
+          </div>
+        </div>
+
+        {/* Consecutive Pattern Runs Stream (Filtered of u1d1 & Flat by default) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto py-1 text-[11px] font-mono no-scrollbar">
+          <span className="text-[var(--theme-text-muted)] shrink-0 mr-1 font-bold">
+            {filterFlipsAndFlat ? 'Filtered Consecutive Runs (count ≥ 2):' : 'All Pattern Runs (incl. u1d1 flips):'}
+          </span>
+          {visibleRuns.map((run) => (
+            <span
+              key={run.id}
+              className={`px-2.5 py-0.5 rounded shrink-0 font-bold ${
+                run.isFilteredFlip
+                  ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30 line-through opacity-75'
+                  : run.dir === 'u'
+                  ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/25'
+                  : 'bg-rose-500/10 text-rose-600 border border-rose-500/25'
+              }`}
+              title={`${run.dir === 'u' ? 'Up' : 'Down'} consecutive count: ${run.count} ticks | Total net change covered: ${formatDeltaCompact(run.netChange)}`}
+            >
+              {run.dir}
+              {run.count}_{formatDeltaCompact(run.netChange)}
+            </span>
+          ))}
+        </div>
       </div>
 
       {/* (b) CURRENT CHART */}

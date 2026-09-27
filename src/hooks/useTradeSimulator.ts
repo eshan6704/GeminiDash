@@ -65,7 +65,9 @@ export function useTradeSimulator() {
   const [assets, setAssets] = useState<Record<string, MarketAsset>>(() => {
     const hydrated: Record<string, MarketAsset> = {};
     Object.entries(INITIAL_ASSETS).forEach(([sym, asset]) => {
-      hydrated[sym] = getHydratedPrice(asset);
+      if (sym && asset) {
+        hydrated[sym] = getHydratedPrice(asset);
+      }
     });
     return hydrated;
   });
@@ -81,10 +83,12 @@ export function useTradeSimulator() {
   // Keep ref synchronized on initial render
   if (Object.keys(stablePriceRef.current).length === 0 && Object.keys(assets).length > 0) {
     Object.entries(assets).forEach(([sym, asset]) => {
-      stablePriceRef.current[sym.toUpperCase()] = {
-        price: asset.price,
-        dataTimestamp: asset.dataTimestamp || asset.lastUpdated || 0,
-      };
+      if (sym && asset) {
+        stablePriceRef.current[sym.toUpperCase()] = {
+          price: asset.price,
+          dataTimestamp: asset.dataTimestamp || asset.lastUpdated || 0,
+        };
+      }
     });
   }
 
@@ -307,6 +311,7 @@ export function useTradeSimulator() {
       const next = { ...prev };
 
       Object.entries(persistentPrices).forEach(([sym, p]) => {
+        if (!sym || !p) return;
         const cleanSym = sym.toUpperCase();
         if (next[cleanSym] && p.price && typeof p.price === 'number') {
           const existing = next[cleanSym];
@@ -366,6 +371,7 @@ export function useTradeSimulator() {
         Object.entries(updated).forEach(([sym, newAsset]) => {
           if (newAsset && typeof newAsset.price === 'number' && !isNaN(newAsset.price) && newAsset.price > 0) {
             const existing = next[sym];
+            if (!existing && !sym) return;
             const incomingTimestamp = newAsset.dataTimestamp || newAsset.lastUpdated || 0;
             const stable = stablePriceRef.current[sym] || {
               price: existing?.price || 0,

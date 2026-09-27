@@ -262,10 +262,10 @@ export const OptionChainView: React.FC = () => {
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
             </div>
             <div className="text-base sm:text-lg font-black font-mono mt-0.5 text-slate-900" style={{ color: 'var(--theme-text-primary)' }}>
-              ₹{chainData.spotPrice.toLocaleString(undefined, { minimumFractionDigits: 1 })}
+              ₹{(chainData.spotPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
             </div>
             <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-              Futures: ₹{chainData.futuresPrice.toLocaleString(undefined, { minimumFractionDigits: 1 })}
+              Futures: ₹{(chainData.futuresPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 1 })}
             </div>
           </div>
 

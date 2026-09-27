@@ -1,3 +1,5 @@
+import { COMPLETE_NSE_FNO_STOCKS } from './fnoStocksList';
+
 export interface MarketTableRow {
   rank?: number;
   id: string;
@@ -53,6 +55,8 @@ export const MASTER_GLOBAL_INDICES: MarketTableRow[] = [
   { id: 'asx200', name: 'S&P/ASX 200 (Australia)', symbol: 'AU200', price: 8340.20, change1d: 0.29, change1dPts: 24.10, category: 'Cash Index', sector: 'Asia-Pacific', high24h: 8368.00, low24h: 8305.00, status: 'OPEN', currency: 'AUD' },
   { id: 'taiex', name: 'TAIEX Weighted (Taiwan)', symbol: 'TW50', price: 23190.50, change1d: 0.84, change1dPts: 193.20, category: 'Cash Index', sector: 'Asia-Pacific', high24h: 23280.00, low24h: 23010.00, status: 'OPEN', currency: 'TWD' },
   { id: 'sti', name: 'Straits Times Index (Singapore)', symbol: 'STI', price: 3742.80, change1d: 0.19, change1dPts: 7.10, category: 'Cash Index', sector: 'Asia-Pacific', high24h: 3756.00, low24h: 3728.00, status: 'OPEN', currency: 'SGD' },
+  { id: 'set_index', name: 'SET Index (Thailand)', symbol: 'SET', price: 1450.20, change1d: 0.12, change1dPts: 1.70, category: 'Cash Index', sector: 'Asia-Pacific', high24h: 1462.00, low24h: 1445.00, status: 'OPEN', currency: 'THB' },
+  { id: 'klci_index', name: 'FTSE Bursa Malaysia KLCI', symbol: 'KLCI', price: 1625.50, change1d: -0.05, change1dPts: -0.80, category: 'Cash Index', sector: 'Asia-Pacific', high24h: 1632.00, low24h: 1621.00, status: 'OPEN', currency: 'MYR' },
 ];
 
 export const MASTER_FUTURES: MarketTableRow[] = [
@@ -68,6 +72,9 @@ export const MASTER_FUTURES: MarketTableRow[] = [
   { id: 'fdax_fut', name: 'Eurex DAX Futures', symbol: 'FDAX1!', price: 19515.00, change1d: 0.61, change1dPts: 118.00, category: 'Futures', sector: 'Europe', high24h: 19580.00, low24h: 19380.00, status: 'OPEN', currency: 'EUR' },
   { id: 'fesx_fut', name: 'Eurex Euro Stoxx 50 Futures', symbol: 'FESX1!', price: 4928.00, change1d: 0.41, change1dPts: 20.00, category: 'Futures', sector: 'Europe', high24h: 4950.00, low24h: 4895.00, status: 'OPEN', currency: 'EUR' },
   { id: 'nkd_fut', name: 'CME Nikkei 225 USD Futures', symbol: 'NKD1!', price: 39020.00, change1d: 0.75, change1dPts: 290.00, category: 'Futures', sector: 'Asia-Pacific', high24h: 39210.00, low24h: 38720.00, status: 'OPEN', currency: 'USD' },
+  { id: 'cl_fut', name: 'Crude Oil WTI Futures', symbol: 'CL1!', price: 71.50, change1d: 0.90, change1dPts: 0.65, category: 'Futures', sector: 'Commodities', high24h: 72.30, low24h: 70.80, status: 'OPEN', currency: 'USD' },
+  { id: 'gc_fut', name: 'Gold Comex Futures', symbol: 'GC1!', price: 2675.00, change1d: 0.45, change1dPts: 12.00, category: 'Futures', sector: 'Commodities', high24h: 2690.00, low24h: 2660.00, status: 'OPEN', currency: 'USD' },
+  { id: 'si_fut', name: 'Silver Comex Futures', symbol: 'SI1!', price: 31.50, change1d: -0.25, change1dPts: -0.08, category: 'Futures', sector: 'Commodities', high24h: 31.90, low24h: 31.10, status: 'OPEN', currency: 'USD' },
 ];
 
 export const MASTER_FOREX: MarketTableRow[] = [
@@ -102,6 +109,8 @@ export const MASTER_FOREX: MarketTableRow[] = [
   { id: 'usdsgd', name: 'US Dollar / Singapore Dollar', symbol: 'USD/SGD', price: 1.3375, change1d: 0.12, category: 'Emerging', high24h: 1.3410, low24h: 1.3340 },
   { id: 'usdmxn', name: 'US Dollar / Mexican Peso', symbol: 'USD/MXN', price: 20.3450, change1d: 0.48, category: 'Emerging', high24h: 20.4800, low24h: 20.1900 },
   { id: 'usdzar', name: 'US Dollar / South African Rand', symbol: 'USD/ZAR', price: 18.1240, change1d: -0.26, category: 'Emerging', high24h: 18.2600, low24h: 18.0100 },
+  { id: 'usdbrl', name: 'US Dollar / Brazilian Real', symbol: 'USD/BRL', price: 5.4520, change1d: 0.15, category: 'Emerging', high24h: 5.4850, low24h: 5.4210 },
+  { id: 'usdmxn_pair', name: 'US Dollar / Mexican Peso', symbol: 'USD/MXN', price: 20.3540, change1d: 0.45, category: 'Emerging', high24h: 20.4800, low24h: 20.2100 },
 ];
 
 export const MASTER_COMMODITIES: MarketTableRow[] = [
@@ -130,17 +139,36 @@ export const MASTER_COMMODITIES: MarketTableRow[] = [
   { id: 'corn', name: 'Corn Futures (CBOT)', symbol: 'ZC', price: 428.75, change1d: 0.32, category: 'Agriculture', unit: 'USd / Bushel', high24h: 433.00, low24h: 425.00 },
   { id: 'soybeans', name: 'Soybeans Futures (CBOT)', symbol: 'ZS', price: 994.25, change1d: -0.18, category: 'Agriculture', unit: 'USd / Bushel', high24h: 1004.00, low24h: 988.00 },
   { id: 'coffee', name: 'Coffee Arabica (ICE)', symbol: 'KC', price: 284.60, change1d: 1.45, category: 'Agriculture', unit: 'USd / Lb', high24h: 288.50, low24h: 279.80 },
-  { id: 'sugar', name: 'Sugar #11 World (ICE)', symbol: 'SB', price: 21.65, change1d: 0.48, category: 'Agriculture', unit: 'USd / Lb', high24h: 21.92, low24h: 21.40 },
-  { id: 'cotton', name: 'Cotton #2 Futures (ICE)', symbol: 'CT', price: 71.20, change1d: -0.22, category: 'Agriculture', unit: 'USd / Lb', high24h: 71.85, low24h: 70.65 },
+  { id: 'sugar_ice', name: 'Sugar #11 World (ICE)', symbol: 'SB', price: 21.65, change1d: 0.48, category: 'Agriculture', unit: 'USd / Lb', high24h: 21.92, low24h: 21.40 },
+  { id: 'cotton_ice', name: 'Cotton #2 Futures (ICE)', symbol: 'CT', price: 71.20, change1d: -0.22, category: 'Agriculture', unit: 'USd / Lb', high24h: 71.85, low24h: 70.65 },
   { id: 'cocoa', name: 'Cocoa Futures (ICE)', symbol: 'CC', price: 8450.00, change1d: 1.82, category: 'Agriculture', unit: 'USD / Metric Ton', high24h: 8590.00, low24h: 8290.00 },
+  { id: 'sugar_fut', name: 'Sugar #11 Futures', symbol: 'SB', price: 21.65, change1d: 0.45, category: 'Agriculture', unit: 'USd / Lb', high24h: 21.95, low24h: 21.40 },
+  { id: 'cotton_fut', name: 'Cotton #2 Futures', symbol: 'CT', price: 71.20, change1d: -0.15, category: 'Agriculture', unit: 'USd / Lb', high24h: 71.85, low24h: 70.60 },
 ];
 
 export const MASTER_INDIAN_INDICES: MarketTableRow[] = [
   { id: 'nifty50', name: 'NIFTY 50', symbol: 'NIFTY 50', price: 24320.50, change1d: 0.45, change1dPts: 108.20, category: 'Benchmark', status: 'Active' },
   { id: 'banknifty', name: 'NIFTY BANK', symbol: 'BANKNIFTY', price: 51240.30, change1d: -0.15, change1dPts: -76.40, category: 'Benchmark', status: 'Active' },
+  { id: 'nifty500', name: 'NIFTY 500', symbol: 'NIFTY 500', price: 22850.40, change1d: 0.52, change1dPts: 118.50, category: 'Broad Market', status: 'Active' },
+  { id: 'midcap100', name: 'NIFTY MIDCAP 100', symbol: 'MIDCAP100', price: 58200.00, change1d: 0.85, change1dPts: 492.30, category: 'Broad Market', status: 'Active' },
+  { id: 'smallcap100', name: 'NIFTY SMALLCAP 100', symbol: 'SMALLCAP100', price: 18450.00, change1d: -0.24, change1dPts: -44.20, category: 'Broad Market', status: 'Active' },
 ];
 
-export const MASTER_NIFTY_500: MarketTableRow[] = [];
+export const MASTER_NIFTY_500: MarketTableRow[] = COMPLETE_NSE_FNO_STOCKS.map((s, idx) => ({
+  rank: idx + 1,
+  id: s.symbol.toLowerCase(),
+  name: s.name,
+  symbol: s.symbol,
+  price: s.defaultPrice,
+  change1d: 0.45,
+  exchange: 'NSE',
+  sector: s.sector as any,
+  tier: idx < 50 ? 'Nifty 50' : idx < 100 ? 'Nifty Next 50' : 'Nifty Midcap 150',
+  currency: 'INR',
+  marketCap: `₹${Math.round(100000 / (idx + 1))} Cr`,
+  peRatio: Number((20 + Math.random() * 15).toFixed(2)),
+}));
+
 export const MASTER_CRYPTO_250: MarketTableRow[] = [];
 
 export function subscribeMarketTable(
@@ -151,7 +179,14 @@ export function subscribeMarketTable(
 }
 
 export async function fetchMarketTable(
-  _tableName: string
+  tableName: string
 ): Promise<{ data: MarketTableRow[]; dataTimestamp?: number; updatedAtMs?: number; updatedAt?: string }> {
+  if (tableName === 'nifty_500') {
+    return { 
+      data: MASTER_NIFTY_500,
+      dataTimestamp: Date.now(),
+      updatedAtMs: Date.now()
+    };
+  }
   return { data: [] as MarketTableRow[] };
 }

@@ -45,7 +45,7 @@ export const VolatilityAlertBanner: React.FC<VolatilityAlertBannerProps> = ({
             ⚡ Volatility Alert ({change24h >= 0 ? '+' : ''}{change24h.toFixed(2)}%)
           </span>
           <span className="font-extrabold truncate">
-            {name} ({symbol}) is experiencing high volatility. Price: ₹{price.toLocaleString(undefined, { minimumFractionDigits: 2 })} (24h Range: ₹{low24h} - ₹{high24h}).
+            {name} ({symbol}) is experiencing high volatility. Price: ₹{(price || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} (24h Range: ₹{low24h || 0} - ₹{high24h || 0}).
           </span>
         </div>
       </div>
