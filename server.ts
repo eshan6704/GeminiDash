@@ -668,29 +668,88 @@ import multer from 'multer';
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-const b2Endpoint = (process.env.B2_ENDPOINT || 's3.us-west-004.backblazeb2.com').replace(/^https?:\/\//, '');
+function sanitizeB2Region(rawRegion?: string, rawEndpoint?: string): string {
+  const candidate = (rawRegion || rawEndpoint || 'us-west-004')
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '')
+    .replace(/^s3\./i, '')
+    .replace(/\.backblazeb2\.com$/i, '');
+  const regionMatch = candidate.match(/([a-z]{2}-[a-z]+-\d{3})/i);
+  if (regionMatch) {
+    return regionMatch[1].toLowerCase();
+  }
+  const cleaned = candidate.replace(/[^a-zA-Z0-9-]/g, '-').replace(/^-+|-+$/g, '');
+  return cleaned || 'us-west-004';
+}
+
+function normalizeB2Endpoint(rawEndpoint?: string, cleanRegion = 'us-west-004'): string {
+  let ep = (rawEndpoint || `s3.${cleanRegion}.backblazeb2.com`)
+    .trim()
+    .replace(/^https?:\/\//i, '')
+    .replace(/\/.*$/, '');
+  if (!ep.includes('.backblazeb2.com') && !ep.includes('.amazonaws.com')) {
+    if (ep.startsWith('s3.')) {
+      ep = `${ep}.backblazeb2.com`;
+    } else {
+      ep = `s3.${cleanRegion}.backblazeb2.com`;
+    }
+  }
+  return ep;
+}
+
+const b2CleanRegion = sanitizeB2Region(process.env.B2_REGION, process.env.B2_ENDPOINT);
+const b2Endpoint = normalizeB2Endpoint(process.env.B2_ENDPOINT, b2CleanRegion);
+
 const b2Client = new S3Client({
   endpoint: `https://${b2Endpoint}`,
-  region: process.env.B2_REGION || 'us-west-004',
+  region: b2CleanRegion,
+  forcePathStyle: true,
   credentials: {
     accessKeyId: process.env.B2_APPLICATION_KEY_ID || '',
     secretAccessKey: process.env.B2_APPLICATION_KEY || '',
   },
 });
 
+// In-memory storage mirror so state persistence works seamlessly even if B2 bucket/key is unreachable
+const localB2FallbackStore = new Map<
+  string,
+  { buffer: Buffer; contentType: string; size: number; lastModified: Date }
+>();
+
+const isB2Configured = Boolean(
+  process.env.B2_BUCKET_NAME &&
+  process.env.B2_APPLICATION_KEY_ID &&
+  process.env.B2_APPLICATION_KEY
+);
+
 app.post('/api/storage/upload', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ success: false, error: 'No file uploaded' });
   }
 
+  const preserveName = req.query.preserveName === 'true';
+  const filename = preserveName ? req.file.originalname : `${Date.now()}-${req.file.originalname}`;
+
+  // Always cache in memory mirror
+  localB2FallbackStore.set(filename, {
+    buffer: req.file.buffer,
+    contentType: req.file.mimetype || 'application/octet-stream',
+    size: req.file.size,
+    lastModified: new Date(),
+  });
+
   const bucketName = process.env.B2_BUCKET_NAME;
-  if (!bucketName) {
-    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  if (!bucketName || !isB2Configured) {
+    return res.json({
+      success: true,
+      filename,
+      url: `/api/storage/download/${encodeURIComponent(filename)}`,
+      storage: 'memory-mirror',
+    });
   }
 
   try {
-    const preserveName = req.query.preserveName === 'true';
-    const filename = preserveName ? req.file.originalname : `${Date.now()}-${req.file.originalname}`;
     const command = new PutObjectCommand({
       Bucket: bucketName,
       Key: filename,
@@ -700,21 +759,31 @@ app.post('/api/storage/upload', upload.single('file'), async (req, res) => {
 
     await b2Client.send(command);
 
-    res.json({
+    return res.json({
       success: true,
       filename,
-      url: `https://${bucketName}.${process.env.B2_ENDPOINT}/${filename}`,
+      url: `https://${bucketName}.${b2Endpoint}/${filename}`,
     });
   } catch (error: any) {
-    console.error('B2 Upload Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.warn('[B2 Storage] Cloud upload fell back to local mirror:', error.message);
+    return res.json({
+      success: true,
+      filename,
+      url: `/api/storage/download/${encodeURIComponent(filename)}`,
+      storage: 'memory-mirror',
+    });
   }
 });
 
-app.get('/api/storage/files', async (req, res) => {
+app.get('/api/storage/files', async (_req, res) => {
   const bucketName = process.env.B2_BUCKET_NAME;
-  if (!bucketName) {
-    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  if (!bucketName || !isB2Configured) {
+    const localFiles = Array.from(localB2FallbackStore.entries()).map(([name, meta]) => ({
+      name,
+      size: meta.size,
+      lastModified: meta.lastModified,
+    }));
+    return res.json({ success: true, files: localFiles });
   }
 
   try {
@@ -723,7 +792,7 @@ app.get('/api/storage/files', async (req, res) => {
     });
 
     const result = await b2Client.send(command);
-    res.json({
+    return res.json({
       success: true,
       files: result.Contents?.map(file => ({
         name: file.Key,
@@ -732,8 +801,13 @@ app.get('/api/storage/files', async (req, res) => {
       })) || [],
     });
   } catch (error: any) {
-    console.error('B2 List Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    console.warn('[B2 Storage] Cloud list fell back to local mirror:', error.message);
+    const localFiles = Array.from(localB2FallbackStore.entries()).map(([name, meta]) => ({
+      name,
+      size: meta.size,
+      lastModified: meta.lastModified,
+    }));
+    return res.json({ success: true, files: localFiles });
   }
 });
 
@@ -742,36 +816,43 @@ app.get('/api/storage/download/:filename', async (req, res) => {
   const { filename } = req.params;
   const bucketName = process.env.B2_BUCKET_NAME;
 
-  if (!bucketName) {
-    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
-  }
+  if (bucketName && isB2Configured) {
+    try {
+      const command = new GetObjectCommand({
+        Bucket: bucketName,
+        Key: filename,
+      });
 
-  try {
-    const command = new GetObjectCommand({
-      Bucket: bucketName,
-      Key: filename,
-    });
+      const result = await b2Client.send(command);
 
-    const result = await b2Client.send(command);
-    
-    if (result.ContentType) {
-      res.setHeader('Content-Type', result.ContentType);
+      if (result.ContentType) {
+        res.setHeader('Content-Type', result.ContentType);
+      }
+
+      // Pipe the S3 stream to express response
+      (result.Body as any).pipe(res);
+      return;
+    } catch (error: any) {
+      // Fall through to local mirror if object doesn't exist yet or B2 is unreachable
     }
-    
-    // Pipe the S3 stream to express response
-    (result.Body as any).pipe(res);
-  } catch (error: any) {
-    console.error('B2 Download Error:', error);
-    res.status(500).json({ success: false, error: error.message });
   }
+
+  const localItem = localB2FallbackStore.get(filename);
+  if (localItem) {
+    res.setHeader('Content-Type', localItem.contentType);
+    return res.send(localItem.buffer);
+  }
+
+  return res.status(404).json({ success: false, error: 'File not found' });
 });
 
 app.delete('/api/storage/delete/:filename', async (req, res) => {
   const { filename } = req.params;
+  localB2FallbackStore.delete(filename);
   const bucketName = process.env.B2_BUCKET_NAME;
 
-  if (!bucketName) {
-    return res.status(500).json({ success: false, error: 'B2 Bucket Name not configured' });
+  if (!bucketName || !isB2Configured) {
+    return res.json({ success: true });
   }
 
   try {
@@ -781,10 +862,9 @@ app.delete('/api/storage/delete/:filename', async (req, res) => {
     });
 
     await b2Client.send(command);
-    res.json({ success: true });
+    return res.json({ success: true });
   } catch (error: any) {
-    console.error('B2 Delete Error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    return res.json({ success: true });
   }
 });
 

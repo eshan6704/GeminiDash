@@ -35,6 +35,8 @@ interface OptionSummary {
 }
 
 interface DeribitOptionsChainProps {
+  selectedSymbol?: string;
+  selectedCoinPrice?: number;
   currentBtcPrice?: number;
   currentEthPrice?: number;
   currentSolPrice?: number;
@@ -43,6 +45,8 @@ interface DeribitOptionsChainProps {
 }
 
 export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
+  selectedSymbol,
+  selectedCoinPrice,
   currentBtcPrice = 96500,
   currentEthPrice = 3450,
   currentSolPrice = 210,
@@ -50,7 +54,20 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
   onSelectStrikePrice,
 }) => {
   const { isLight } = useTheme();
-  const [currency, setCurrency] = useState<'BTC' | 'ETH' | 'SOL' | 'PAXG'>('BTC');
+  const resolveCurrency = (sym?: string): 'BTC' | 'ETH' | 'SOL' | 'PAXG' => {
+    const upper = (sym || 'BTC').toUpperCase();
+    if (upper === 'ETH') return 'ETH';
+    if (upper === 'SOL') return 'SOL';
+    if (upper === 'PAXG' || upper === 'XAUT') return 'PAXG';
+    return 'BTC';
+  };
+  const [currency, setCurrency] = useState<'BTC' | 'ETH' | 'SOL' | 'PAXG'>(() => resolveCurrency(selectedSymbol));
+
+  useEffect(() => {
+    if (selectedSymbol) {
+      setCurrency(resolveCurrency(selectedSymbol));
+    }
+  }, [selectedSymbol]);
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [strikeFilter, setStrikeFilter] = useState<'ALL' | 'ATM' | 'ITM' | 'OTM'>('ATM');
   const [isLoading, setIsLoading] = useState<boolean>(false);

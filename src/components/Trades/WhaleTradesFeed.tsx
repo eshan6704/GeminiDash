@@ -29,6 +29,7 @@ interface TradeItem {
 interface WhaleTradesFeedProps {
   selectedSymbol: string;
   assets: Record<string, MarketAsset>;
+  mode?: 'ALL' | 'RECENT_ONLY' | 'WHALE_ONLY';
 }
 
 const BINANCE_MAP: Record<string, string> = {
@@ -44,11 +45,20 @@ const BINANCE_MAP: Record<string, string> = {
 export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
   selectedSymbol,
   assets,
+  mode = 'ALL',
 }) => {
   const { isLight } = useTheme();
 
   // Controls for Recent Trades Table
-  const [recentSymbolFilter, setRecentSymbolFilter] = useState<string>('ALL');
+  const [recentSymbolFilter, setRecentSymbolFilter] = useState<string>(
+    mode === 'RECENT_ONLY' ? selectedSymbol : 'ALL'
+  );
+
+  useEffect(() => {
+    if (mode === 'RECENT_ONLY' && selectedSymbol) {
+      setRecentSymbolFilter(selectedSymbol);
+    }
+  }, [mode, selectedSymbol]);
   
   // Controls for Whale Trades Table
   const [whaleThreshold, setWhaleThreshold] = useState<number>(10000);
@@ -270,6 +280,7 @@ export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
   return (
     <div className="space-y-4">
       {/* TABLE 1: BINANCE RECENT TRADES TABLE (ABOVE) */}
+      {mode !== 'WHALE_ONLY' && (
       <div
         className={`rounded-2xl p-4 shadow-lg border space-y-3 transition-colors ${
           isLight
@@ -393,8 +404,10 @@ export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
           </table>
         </div>
       </div>
+      )}
 
       {/* TABLE 2: INSTITUTIONAL WHALE ORDERS TABLE (BELOW) */}
+      {mode !== 'RECENT_ONLY' && (
       <div
         className={`rounded-2xl p-4 shadow-lg border space-y-3 transition-colors ${
           isLight
@@ -543,6 +556,7 @@ export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
           </table>
         </div>
       </div>
+      )}
     </div>
   );
 };

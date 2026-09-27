@@ -69,7 +69,7 @@ export function useTradeSimulator() {
     });
     return hydrated;
   });
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('PAXG');
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('BTC');
   const [isLiveConnected, setIsLiveConnected] = useState<boolean>(true);
   const [lastTickTime, setLastTickTime] = useState<number>(Date.now());
   const [notifications, setNotifications] = useState<AlertNotification[]>([]);

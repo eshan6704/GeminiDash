@@ -42,6 +42,8 @@ interface OrderFormProps {
   spotBalanceAmount: number;
   allAssets?: Record<string, MarketAsset>;
   positions?: Position[];
+  initialTab?: 'TRADE' | 'AUTOGRID' | 'ALERTS';
+  hideTabSwitcher?: boolean;
   onOpenWhatIf?: () => void;
   onClosePosition?: (positionId: string, percentage?: number) => void;
   onUpdateSLTP?: (positionId: string, stopLoss?: number, takeProfit?: number, trailingStopPercent?: number) => void;
@@ -67,13 +69,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   spotBalanceAmount,
   allAssets,
   positions = [],
+  initialTab = 'TRADE',
+  hideTabSwitcher = false,
   onOpenWhatIf,
   onClosePosition = () => {},
   onUpdateSLTP = () => {},
   onNotify,
   onPlaceOrder,
 }) => {
-  const [terminalTab, setTerminalTab] = useState<'TRADE' | 'AUTOGRID' | 'ALERTS'>('TRADE');
+  const [terminalTab, setTerminalTab] = useState<'TRADE' | 'AUTOGRID' | 'ALERTS'>(initialTab);
+
+  useEffect(() => {
+    setTerminalTab(initialTab);
+  }, [initialTab]);
   const alertEngine = usePriceAlerts(asset, allAssets, onNotify);
   const autoGrid = useAutoGridTrader(
     asset,
@@ -316,29 +324,31 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       </div>
 
       {/* Terminal View Switcher */}
-      <div
-        className="flex p-1 rounded-sm border gap-1 bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]"
-      >
-        {[ 
-          { id: 'TRADE', label: 'Direct Trade' },
-          { id: 'AUTOGRID', label: 'Auto Grid', icon: <Sparkles className="w-3 h-3" /> },
-          { id: 'ALERTS', label: 'Alerts', icon: <Bell className="w-3 h-3" /> }
-        ].map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setTerminalTab(tab.id as any)}
-            className={`flex-1 py-1.5 text-[9px] uppercase tracking-widest font-bold rounded-sm transition-all flex items-center justify-center gap-2 border border-transparent ${
-              terminalTab === tab.id
-                ? 'bg-[var(--theme-border)] text-emerald-500 border-[var(--theme-border-subtle)]'
-                : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-            }`}
-          >
-            {tab.icon}
-            <span>{tab.label}</span>
-          </button>
-        ))}
-      </div>
+      {!hideTabSwitcher && (
+        <div
+          className="flex p-1 rounded-sm border gap-1 bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]"
+        >
+          {[ 
+            { id: 'TRADE', label: 'Direct Trade' },
+            { id: 'AUTOGRID', label: 'Auto Grid', icon: <Sparkles className="w-3 h-3" /> },
+            { id: 'ALERTS', label: 'Alerts', icon: <Bell className="w-3 h-3" /> }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setTerminalTab(tab.id as any)}
+              className={`flex-1 py-1.5 text-[9px] uppercase tracking-widest font-bold rounded-sm transition-all flex items-center justify-center gap-2 border border-transparent ${
+                terminalTab === tab.id
+                  ? 'bg-[var(--theme-border)] text-emerald-500 border-[var(--theme-border-subtle)]'
+                  : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
+              }`}
+            >
+              {tab.icon}
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Render Selected View */}
       {terminalTab === 'AUTOGRID' ? (

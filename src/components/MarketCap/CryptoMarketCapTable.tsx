@@ -34,10 +34,12 @@ export interface CryptoCoinItem {
 }
 
 interface CryptoMarketCapTableProps {
-  onSelectCoinToTrade?: (symbol: string) => void;
+  selectedSymbol?: string;
+  onSelectCoinToTrade?: (symbol: string, coin?: CryptoCoinItem) => void;
 }
 
 export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
+  selectedSymbol = 'BTC',
   onSelectCoinToTrade,
 }) => {
   const { isLight } = useTheme();
@@ -403,11 +405,16 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
                 const is24Up = coin.change24h >= 0;
                 const is7dUp = coin.change7d >= 0;
 
+                const isSelectedCoin = coin.symbol.toUpperCase() === selectedSymbol.toUpperCase();
+
                 return (
                   <tr
                     key={coin.id}
-                    className={`transition-colors hover:bg-neutral-800/30 ${
-                      coin.isTradeableInSim
+                    onClick={() => onSelectCoinToTrade && onSelectCoinToTrade(coin.symbol, coin)}
+                    className={`transition-colors cursor-pointer hover:bg-emerald-500/10 ${
+                      isSelectedCoin
+                        ? 'bg-emerald-500/15 ring-1 ring-inset ring-emerald-500/40'
+                        : coin.isTradeableInSim
                         ? isLight ? 'bg-amber-50/40' : 'bg-amber-500/5'
                         : ''
                     }`}
@@ -476,17 +483,21 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
 
                     {/* Action Button */}
                     <td className="py-2 px-3 text-center">
-                      {coin.isTradeableInSim ? (
-                        <button
-                          onClick={() => onSelectCoinToTrade && onSelectCoinToTrade(coin.symbol)}
-                          className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 text-[10px] font-black tracking-wide shadow-sm transition-all flex items-center gap-1 mx-auto"
-                        >
-                          <Zap className="w-3 h-3 fill-current" />
-                          <span>TRADE</span>
-                        </button>
-                      ) : (
-                        <span className="text-[10px] text-neutral-500 italic">Watch Only</span>
-                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectCoinToTrade && onSelectCoinToTrade(coin.symbol, coin);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wide shadow-sm transition-all flex items-center gap-1 mx-auto cursor-pointer ${
+                          isSelectedCoin
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-amber-500 hover:bg-amber-400 text-neutral-950'
+                        }`}
+                      >
+                        <Zap className="w-3 h-3 fill-current" />
+                        <span>{isSelectedCoin ? 'SELECTED' : 'SELECT'}</span>
+                      </button>
                     </td>
                   </tr>
                 );
