@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useEffect } from 'react';
 
 /**
- * THEME: QUICKSTACK (Refined Institutional)
- * Inspired by 3DVC Quickstack template: clean grids, soft darks, high legibility.
- * This replaces the previous multi-theme architecture to reduce eye strain.
+ * THEME: DAYLIGHT EXECUTIVE
+ * High-contrast light slate greys, crisp structural borders, and deep slate ink
+ * engineered for maximum legibility under bright daylight conditions.
  */
 
 export interface ThemeColors {
@@ -19,15 +19,15 @@ export interface ThemeColors {
 }
 
 export const themeColors: ThemeColors = {
-  bgMain: '#0B0E14',      // Soft deep charcoal (less strain than pure black)
-  bgCard: '#12151C',      // Subtle elevation
-  borderCard: '#1E232D',  // Clean grid borders
-  textColor: '#F1F5F9',   // Off-white for readability
-  textMuted: '#94A3B8',   // Muted slate
-  primary: '#10B981',     // Institutional Emerald
-  accent: '#10B981',
-  accentLight: 'rgba(16, 185, 129, 0.08)',
-  accentBorder: 'rgba(16, 185, 129, 0.15)',
+  bgMain: '#F1F5F9',      // High-contrast light slate grey canvas (Slate 100)
+  bgCard: '#FFFFFF',      // Crisp pure white executive card surface
+  borderCard: '#CBD5E1',  // High-contrast structural slate border (Slate 300)
+  textColor: '#0F172A',   // Deep Slate 900 ink for daylight legibility
+  textMuted: '#334155',   // Slate 700 secondary text
+  primary: '#059669',     // Executive Emerald 600
+  accent: '#059669',
+  accentLight: 'rgba(5, 150, 105, 0.10)',
+  accentBorder: 'rgba(5, 150, 105, 0.30)',
 };
 
 interface ThemeContextType {
@@ -37,32 +37,34 @@ interface ThemeContextType {
 }
 
 const ThemeContext = createContext<ThemeContextType>({
-  theme: 'quickstack',
+  theme: 'daylight-executive',
   colors: themeColors,
-  isLight: false,
+  isLight: true,
 });
 
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   useEffect(() => {
     const root = document.documentElement;
-    
-    // Set global theme classes
-    root.className = 'dark';
-    document.body.className = 'dark antialiased selection:bg-emerald-500/30';
+
+    // Set global theme classes for Daylight Executive
+    root.className = 'light';
+    document.body.className = 'light antialiased selection:bg-emerald-600/20';
 
     // Propagate CSS variables for Tailwind and components
     const vars = {
       '--theme-bg-page': themeColors.bgMain,
-      '--theme-bg-header': 'rgba(11, 14, 20, 0.9)',
+      '--theme-bg-header': 'rgba(255, 255, 255, 0.95)',
       '--theme-bg-card': themeColors.bgCard,
-      '--theme-bg-card-subtle': '#161A23',
+      '--theme-bg-card-subtle': '#F8FAFC',
+      '--theme-bg-elevated': '#E2E8F0',
       '--theme-border': themeColors.borderCard,
-      '--theme-border-subtle': '#181C25',
+      '--theme-border-strong': '#94A3B8',
+      '--theme-border-subtle': '#E2E8F0',
       '--theme-text-primary': themeColors.textColor,
       '--theme-text-secondary': themeColors.textMuted,
       '--theme-text-muted': '#475569',
       '--theme-accent': themeColors.accent,
-      '--theme-accent-hover': '#059669',
+      '--theme-accent-hover': '#047857',
       '--theme-accent-light': themeColors.accentLight,
       '--theme-accent-border': themeColors.accentBorder,
     };
@@ -76,7 +78,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   return (
-    <ThemeContext.Provider value={{ theme: 'quickstack', colors: themeColors, isLight: false }}>
+    <ThemeContext.Provider value={{ theme: 'daylight-executive', colors: themeColors, isLight: true }}>
       {children}
     </ThemeContext.Provider>
   );

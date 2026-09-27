@@ -6,40 +6,51 @@
 }
 
 /* =========================================================
-   QUICKSTACK / 3DVC DESIGN CONSTITUTION
-   Optimized for high-density structure and zero eye strain.
-   Refined Institutional Dark: Soft deep charcoal & Slate accents.
+   DAYLIGHT EXECUTIVE DESIGN CONSTITUTION
+   High-contrast light slate greys, crisp structural borders,
+   and institutional legibility under bright daylight lighting.
    ========================================================= */
 
-:root {
-  /* Core Palette (3DVC Quickstack inspired) */
-  --theme-bg-page: #0B0E14;      /* Soft charcoal (reduces halation) */
-  --theme-bg-header: rgba(11, 14, 20, 0.92);
-  --theme-bg-card: #12151C;      /* Subtle elevation surface */
-  --theme-bg-card-subtle: #161A23;
-  
-  --theme-border: #1E232D;       /* Defined grid borders */
-  --theme-border-subtle: #181C25;
-  
-  --theme-text-primary: #F1F5F9;   /* High legibility off-white */
-  --theme-text-secondary: #94A3B8; /* Muted slate */
-  --theme-text-muted: #475569;
-  
-  --theme-accent: #10B981;       /* Institutional Emerald */
-  --theme-accent-hover: #059669;
-  --theme-accent-light: rgba(16, 185, 129, 0.08);
-  --theme-accent-border: rgba(16, 185, 129, 0.15);
-  
-  --color-success: #10B981;
-  --color-error: #EF4444;
-  --color-warning: #F59E0B;
-  --color-info: #3B82F6;
+:root,
+html,
+html.light,
+html.dark {
+  /* Core Palette — Daylight Executive */
+  --theme-bg-page: #F1F5F9;           /* High-contrast light slate grey canvas (Slate 100) */
+  --theme-bg-header: rgba(255, 255, 255, 0.95); /* Crisp executive header bar */
+  --theme-bg-card: #FFFFFF;           /* Pure high-contrast card surface */
+  --theme-bg-card-subtle: #F8FAFC;    /* Recessed slate surface (Slate 50) */
+  --theme-bg-elevated: #E2E8F0;       /* Interactive / hover slate surface (Slate 200) */
+
+  /* Structural Grid & Border Contrasts for Daylight Readability */
+  --theme-border: #CBD5E1;            /* High-contrast structural border (Slate 300) */
+  --theme-border-strong: #94A3B8;     /* Emphasized divider / active control border (Slate 400) */
+  --theme-border-subtle: #E2E8F0;     /* Clean hairline row & cell divider (Slate 200) */
+
+  /* Typographic Ink Hierarchy (WCAG AAA/AA Daylight Contrast) */
+  --theme-text-primary: #0F172A;      /* Deep Slate 900 ink (>15:1 contrast) */
+  --theme-text-secondary: #334155;    /* Slate 700 structural body text (>8.5:1 contrast) */
+  --theme-text-muted: #475569;        /* Slate 600 metadata & labels (>5.7:1 contrast) */
+
+  /* Executive Emerald Accent & Semantic Tokens */
+  --theme-accent: #059669;            /* Executive Emerald 600 for daylight contrast */
+  --theme-accent-hover: #047857;      /* Emerald 700 */
+  --theme-accent-light: rgba(5, 150, 105, 0.10);
+  --theme-accent-border: rgba(5, 150, 105, 0.30);
+
+  --color-success: #059669;
+  --color-error: #DC2626;
+  --color-warning: #D97706;
+  --color-info: #2563EB;
+
+  color-scheme: light;
 }
 
-body {
+body,
+html {
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
-  background-color: var(--theme-bg-page);
-  color: var(--theme-text-primary);
+  background-color: var(--theme-bg-page) !important;
+  color: var(--theme-text-primary) !important;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -47,51 +58,92 @@ body {
 }
 
 /* Institutional Tabular Data */
-code, pre, .font-mono, .tabular-nums {
+code,
+pre,
+.font-mono,
+.tabular-nums {
   font-family: 'JetBrains Mono', monospace;
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.01em;
 }
 
 /* =========================================================
-   UNIVERSAL COMPONENT MAPPING (ANTI-SLOP)
-   Ensures legacy tailwind classes map to the new theme.
+   UNIVERSAL DAYLIGHT COMPONENT MAPPING
+   Replaces legacy dark-mode charcoal backgrounds and muted
+   borders with high-contrast Daylight Executive surfaces.
    ========================================================= */
 
-/* Surface Level 1 (Main Page) */
-body, html {
-  background-color: var(--theme-bg-page);
-  color: var(--theme-text-primary);
-}
-
-/* Surface Level 2 (Headers & Sidebars) */
-header, nav, .theme-navbar {
-  background-color: var(--theme-bg-header);
-  border-color: var(--theme-border);
+/* Surface Level 1: Headers & Navigation */
+header,
+nav,
+.theme-navbar {
+  background-color: var(--theme-bg-header) !important;
+  border-color: var(--theme-border) !important;
+  color: var(--theme-text-primary) !important;
   backdrop-filter: blur(16px);
+  box-shadow: 0 1px 3px 0 rgba(15, 23, 42, 0.06);
 }
 
-/* Surface Level 3 (Cards & Modals) */
+/* Surface Level 2: Primary Cards, Panels & Modals */
 .bg-white,
 .bg-neutral-900,
 .bg-slate-900,
 .bg-zinc-900,
-.bg-gray-900 {
+.bg-gray-900,
+.bg-neutral-900\/90,
+.bg-neutral-900\/80,
+.bg-neutral-900\/60,
+.bg-slate-900\/90,
+.bg-slate-900\/80,
+.bg-slate-900\/60 {
   background-color: var(--theme-bg-card) !important;
   border-color: var(--theme-border) !important;
+  color: var(--theme-text-primary);
 }
 
+/* Surface Level 3: Subtle / Recessed Containers, Table Headers & Code Wells */
 .bg-neutral-950,
 .bg-slate-950,
 .bg-zinc-950,
 .bg-gray-950,
+.bg-neutral-950\/80,
+.bg-neutral-950\/60,
+.bg-neutral-950\/50,
+.bg-slate-950\/80,
+.bg-slate-950\/60,
+.bg-slate-950\/50,
 .bg-slate-50,
-.bg-neutral-50 {
+.bg-neutral-50,
+.bg-slate-100\/80 {
   background-color: var(--theme-bg-card-subtle) !important;
   border-color: var(--theme-border-subtle) !important;
 }
 
-/* Grid Borders */
+/* Interactive & Secondary Surface States */
+.bg-neutral-800,
+.bg-slate-800,
+.bg-zinc-800,
+.bg-gray-800,
+.bg-neutral-800\/80,
+.bg-neutral-800\/60,
+.bg-neutral-800\/50,
+.bg-slate-800\/80,
+.bg-slate-800\/60,
+.bg-slate-800\/50 {
+  background-color: var(--theme-bg-elevated) !important;
+  color: var(--theme-text-primary) !important;
+}
+
+.hover\:bg-neutral-800:hover,
+.hover\:bg-slate-800:hover,
+.hover\:bg-neutral-900:hover,
+.hover\:bg-slate-900:hover,
+.hover\:bg-neutral-800\/50:hover,
+.hover\:bg-slate-800\/50:hover {
+  background-color: var(--theme-bg-elevated) !important;
+}
+
+/* High-Contrast Structural Borders & Dividers */
 .border,
 .border-t,
 .border-b,
@@ -100,40 +152,101 @@ header, nav, .theme-navbar {
 .border-neutral-900,
 .border-neutral-800,
 .border-neutral-700,
+.border-slate-900,
 .border-slate-800,
 .border-slate-700,
 .border-zinc-800,
-.border-zinc-700 {
+.border-zinc-700,
+.border-gray-800,
+.border-gray-700,
+.border-slate-200,
+.border-slate-300 {
   border-color: var(--theme-border) !important;
 }
 
-/* Type Hierarchy */
+.divide-neutral-800 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-800 > :not([hidden]) ~ :not([hidden]),
+.divide-neutral-900 > :not([hidden]) ~ :not([hidden]),
+.divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--theme-border-subtle) !important;
+}
+
+/* Daylight Executive Typography Hierarchy */
 .text-slate-900,
 .text-neutral-900,
-.text-white {
+.text-slate-800,
+.text-neutral-800,
+.text-neutral-100,
+.text-slate-100,
+.text-zinc-100,
+.text-neutral-200,
+.text-slate-200 {
   color: var(--theme-text-primary) !important;
+}
+
+/* Map .text-white on neutral surfaces to primary dark ink while preserving white text on solid status buttons/badges */
+.text-white:not(.bg-emerald-500):not(.bg-emerald-600):not(.bg-rose-500):not(.bg-rose-600):not(.bg-red-500):not(.bg-red-600):not(.bg-blue-500):not(.bg-blue-600):not(.bg-indigo-600):not(.bg-amber-500):not(.bg-amber-600) {
+  color: var(--theme-text-primary) !important;
+}
+
+.bg-emerald-500.text-white,
+.bg-emerald-600.text-white,
+.bg-rose-500.text-white,
+.bg-rose-600.text-white,
+.bg-red-500.text-white,
+.bg-red-600.text-white,
+.bg-blue-500.text-white,
+.bg-blue-600.text-white,
+.bg-indigo-600.text-white,
+.bg-amber-600.text-white {
+  color: #FFFFFF !important;
 }
 
 .text-slate-700,
 .text-slate-600,
+.text-neutral-300,
+.text-slate-300,
+.text-zinc-300,
 .text-neutral-400,
+.text-slate-400,
 .text-zinc-400,
 .text-gray-400 {
   color: var(--theme-text-secondary) !important;
 }
 
 .text-slate-500,
-.text-slate-400,
 .text-neutral-500,
 .text-zinc-500,
 .text-gray-500 {
   color: var(--theme-text-muted) !important;
 }
 
-/* Emerald Accents (No Gloom) */
+/* Daylight Semantic Contrast Tuning (Emerald, Rose, Amber, Blue) */
+.text-emerald-400,
 .text-emerald-500,
+.text-green-400,
 .text-green-500 {
   color: var(--theme-accent) !important;
+}
+
+.text-rose-400,
+.text-rose-500,
+.text-red-400,
+.text-red-500 {
+  color: var(--color-error) !important;
+}
+
+.text-amber-400,
+.text-amber-500,
+.text-yellow-400,
+.text-yellow-500 {
+  color: var(--color-warning) !important;
+}
+
+.text-blue-400,
+.text-blue-500,
+.text-sky-400 {
+  color: var(--color-info) !important;
 }
 
 .bg-emerald-500,
@@ -141,33 +254,78 @@ header, nav, .theme-navbar {
   background-color: var(--theme-accent) !important;
 }
 
-/* Zero Glow / High Fidelity Shadows */
-.shadow-lg, .shadow-xl, .shadow-2xl {
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4) !important;
+/* Crisp Daylight Shadows (Soft Ambient Depth, No Dark Gloom) */
+.shadow-sm {
+  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.06) !important;
 }
 
-/* Inputs & Form Controls */
-input, select, textarea {
-  background-color: var(--theme-bg-card-subtle) !important;
+.shadow,
+.shadow-md {
+  box-shadow: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -2px rgba(15, 23, 42, 0.05) !important;
+}
+
+.shadow-lg,
+.shadow-xl,
+.shadow-2xl {
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 4px 10px -4px rgba(15, 23, 42, 0.04) !important;
+}
+
+/* Daylight Form Controls & Inputs */
+input,
+select,
+textarea {
+  background-color: #FFFFFF !important;
   color: var(--theme-text-primary) !important;
-  border-color: var(--theme-border) !important;
-  border-radius: 4px !important;
+  border: 1px solid var(--theme-border) !important;
+  border-radius: 6px !important;
   font-size: 0.875rem !important;
 }
 
-input:focus {
+input::placeholder,
+textarea::placeholder {
+  color: var(--theme-text-muted) !important;
+  opacity: 0.75;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
   border-color: var(--theme-accent) !important;
   outline: none !important;
-  box-shadow: 0 0 0 1px var(--theme-accent) !important;
+  box-shadow: 0 0 0 2px var(--theme-accent-light) !important;
 }
 
-/* Clean Transitions */
-button, a {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+/* Tables & Data Grids */
+table {
+  border-collapse: collapse;
 }
 
-/* Selection */
+thead,
+th {
+  background-color: var(--theme-bg-card-subtle);
+  color: var(--theme-text-secondary);
+  border-bottom: 1px solid var(--theme-border);
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--theme-border-subtle);
+}
+
+tbody tr:hover {
+  background-color: rgba(241, 245, 249, 0.7);
+}
+
+/* Clean Micro-Interaction Transitions */
+button,
+a {
+  transition: background-color 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+              border-color 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+              color 0.15s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Daylight Text Selection */
 ::selection {
-  background: rgba(16, 185, 129, 0.2);
-  color: #F1F5F9;
+  background: rgba(5, 150, 105, 0.18);
+  color: #0F172A;
 }

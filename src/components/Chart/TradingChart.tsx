@@ -95,12 +95,12 @@ export const TradingChart: React.FC<TradingChartProps> = ({
       chartInstanceRef.current = null;
     }
 
-    // Fixed Quickstack colors for the chart
+    // Daylight Executive colors for the chart canvas
     const colors = {
-      bg: '#0F1113', // Matches --theme-bg-main/card roughly
-      text: '#A1A1AA',
-      grid: '#1D1F23',
-      border: '#2A2D32'
+      bg: '#FFFFFF',
+      text: '#334155',
+      grid: '#F1F5F9',
+      border: '#CBD5E1'
     };
 
     const chart = createChart(containerRef.current, {

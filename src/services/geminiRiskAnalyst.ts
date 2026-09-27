@@ -1,4 +1,3 @@
-import { GoogleGenAI } from '@google/genai';
 import { Position, SpotHolding, MarketAsset } from '../types/trading';
 
 interface PortfolioSnapshot {
@@ -11,7 +10,7 @@ interface PortfolioSnapshot {
 }
 
 export async function analyzePortfolioRisk(snapshot: PortfolioSnapshot): Promise<string> {
-  const { equity, cash, unrealizedPnL, positions, spotHoldings, assets } = snapshot;
+  const { equity, cash, positions, spotHoldings, assets } = snapshot;
 
   // Calculate Gold allocation vs Crypto
   let goldVal = 0;
@@ -42,35 +41,34 @@ export async function analyzePortfolioRisk(snapshot: PortfolioSnapshot): Promise
   const cryptoRatio = totalNotional > 0 ? (cryptoVal / totalNotional) * 100 : 0;
   const maxLeverage = positions.length > 0 ? Math.max(...positions.map((p) => p.leverage)) : 1;
 
-  // Check if API key is available
-  const apiKey = (import.meta as any).env?.VITE_GEMINI_API_KEY || (typeof process !== 'undefined' ? process.env?.GEMINI_API_KEY : '');
+  try {
+    const res = await fetch('/api/gemini/risk-analysis', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        goldRatio,
+        cryptoRatio,
+        positions: positions.map((p) => ({
+          assetSymbol: p.assetSymbol,
+          leverage: p.leverage,
+          side: p.side,
+          entryPrice: p.entryPrice,
+          currentPrice: assets[p.assetSymbol]?.price || p.entryPrice,
+          liquidationPrice: p.liquidationPrice,
+          unrealizedPnL: p.unrealizedPnL,
+          unrealizedPnLPercent: p.unrealizedPnLPercent,
+        })),
+      }),
+    });
 
-  if (apiKey && apiKey !== 'MY_GEMINI_API_KEY') {
-    try {
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = `You are a professional multi-asset hedge fund risk manager specializing in digital assets and physical asset tokens (Tether Gold XAUT, PAXG, Bitcoin, Ethereum).
-Analyze this trader's paper simulation state and provide a concise, razor-sharp 3-part critique:
-1. Portfolio Risk Score (1-10) and Gold Hedge Efficiency (Currently ${goldRatio.toFixed(1)}% Gold, ${cryptoRatio.toFixed(1)}% Crypto).
-2. Immediate Liquidation & Margin Hazards:
-${positions.map((p) => `- ${p.assetSymbol} ${p.leverage}x ${p.side}: Entry $${p.entryPrice}, Current $${assets[p.assetSymbol]?.price || 'N/A'}, Liq Price $${p.liquidationPrice.toFixed(2)}, PnL $${p.unrealizedPnL.toFixed(2)} (${p.unrealizedPnLPercent.toFixed(1)}%)`).join('\n') || 'No open margin positions.'}
-3. Tactical Recommendation for Real-World Trading (e.g., fee minimization, stop-loss discipline, Tether Gold hedging benefit against macro crypto drawdowns).
-
-Keep tone professional, objective, actionable, and formatted in clean markdown bullet points (max 180 words).`;
-
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: prompt,
-      });
-
-      if (response.text) {
-        return response.text;
-      }
-    } catch (e: any) {
-      // Silently fallback to quantitative model on quota/rate-limit exhaustion
-      if (!e?.message?.includes('RESOURCE_EXHAUSTED') && !e?.message?.includes('quota')) {
-        console.warn('Gemini API call failed, using quantitative risk model fallback');
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.analysis) {
+        return data.analysis;
       }
     }
+  } catch {
+    // Fallback to quantitative rule-based risk engine below
   }
 
   // Quantitative Rule-Based Risk Engine Fallback

@@ -43,7 +43,18 @@ import { ShieldCheck, Flame, Info, ExternalLink, BarChart3, Zap, Coins, Activity
 
 export default function App() {
   const { isLight } = useTheme();
-  const [mainMarketTab, setMainMarketTab] = useState<'CRYPTO' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES' | 'NIFTY_INDICES' | 'STOCK_CONSTITUENTS' | 'INDIAN_PORTFOLIO' | 'INDIAN_WATCHLIST' | 'OPTION_CHAIN' | 'STOCK_OPTION_CHAIN' | 'MARKET_SCREENER'>('CRYPTO');
+  const [mainMarketTab, setMainMarketTab] = useState<
+    | 'CRYPTO'
+    | 'GLOBAL_INDICES'
+    | 'FOREX'
+    | 'COMMODITIES'
+    | 'NIFTY_INDICES'
+    | 'STOCK_CONSTITUENTS'
+    | 'EQUITY_HUB'
+    | 'OPTIONS_HUB'
+  >('CRYPTO');
+  const [optionsSubTab, setOptionsSubTab] = useState<'INDEX' | 'STOCK' | 'BOTH'>('INDEX');
+  const [equityHubSubTab, setEquityHubSubTab] = useState<'PORTFOLIO' | 'WATCHLIST' | 'SCREENER' | 'ALL'>('PORTFOLIO');
   const [show30DayBacktest, setShow30DayBacktest] = useState<boolean>(false);
   const [analysisTab, setAnalysisTab] = useState<'OPTIONS' | 'MARKETCAP' | 'ANALYTICS' | 'WHALES' | 'BACKTEST'>('OPTIONS');
 
@@ -101,7 +112,8 @@ export default function App() {
   // Global search asset selector handler
   const handleGlobalAssetSelect = (asset: TrackedAsset) => {
     if (asset.category === 'OPTION_CHAIN') {
-      setMainMarketTab('OPTION_CHAIN');
+      setMainMarketTab('OPTIONS_HUB');
+      setOptionsSubTab(asset.symbol === 'NIFTY' || asset.symbol === 'BANKNIFTY' || asset.symbol === 'FINNIFTY' ? 'INDEX' : 'STOCK');
       addNotification('info', 'Option Chain Loaded', `Opened ${asset.name} real-time F&O matrix.`);
       return;
     }
@@ -171,36 +183,121 @@ export default function App() {
           totalTrades={totalTrades}
         />
         
-        {/* PRIMARY MULTI-ASSET MARKET CATEGORY SELECTION BAR */}
-        <div className="p-1 rounded-md border bg-[var(--theme-bg-card)] border-[var(--theme-border)] flex flex-wrap items-center justify-between gap-2 transition-colors">
-          <div className="flex items-center gap-1.5 flex-wrap w-full lg:w-auto">
-            {[
-              { id: 'CRYPTO', label: 'AurumX Derivatives', icon: <Coins className="w-3.5 h-3.5" /> },
-              { id: 'GLOBAL_INDICES', label: 'Global Indices', icon: <Globe className="w-3.5 h-3.5" /> },
-              { id: 'FOREX', label: 'Forex Exchange', icon: <DollarSign className="w-3.5 h-3.5" /> },
-              { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
-              { id: 'NIFTY_INDICES', label: 'Indian Indices', icon: <BarChart3 className="w-3.5 h-3.5" /> },
-              { id: 'INDIAN_PORTFOLIO', label: 'Portfolio View', icon: <Briefcase className="w-3.5 h-3.5" /> },
-              { id: 'INDIAN_WATCHLIST', label: 'Watchlist', icon: <Star className="w-3.5 h-3.5" /> },
-              { id: 'STOCK_CONSTITUENTS', label: 'NIFTY 500 Stocks', icon: <Building className="w-3.5 h-3.5" /> },
-              { id: 'OPTION_CHAIN', label: 'Index Options', icon: <Waves className="w-3.5 h-3.5" /> },
-              { id: 'STOCK_OPTION_CHAIN', label: 'Stock Options', icon: <Briefcase className="w-3.5 h-3.5" /> },
-              { id: 'MARKET_SCREENER', label: 'Screener Pro', icon: <SlidersHorizontal className="w-3.5 h-3.5" /> },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setMainMarketTab(tab.id as any)}
-                className={`px-3 py-1.5 rounded-sm text-[9px] font-bold flex items-center gap-2 transition-all uppercase tracking-widest border border-transparent ${
-                  mainMarketTab === tab.id
-                    ? 'bg-[var(--theme-border)] text-emerald-500 border-[var(--theme-border-subtle)]'
-                    : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
-                }`}
-              >
-                {tab.icon}
-                <span>{tab.label}</span>
-              </button>
-            ))}
+        {/* REDESIGNED DAYLIGHT EXECUTIVE PAGE TAB NAVIGATION BAR */}
+        <div className="p-1.5 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-col gap-2 transition-colors">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap w-full">
+              {[
+                { id: 'CRYPTO', label: 'AurumX Derivatives', badge: 'Spot & Perp', icon: <Coins className="w-3.5 h-3.5" /> },
+                { id: 'OPTIONS_HUB', label: 'Options Chain', badge: 'Index & Stock', icon: <Waves className="w-3.5 h-3.5" /> },
+                { id: 'EQUITY_HUB', label: 'Portfolio · Watchlist · Screener', badge: '3-in-1 Suite', icon: <Briefcase className="w-3.5 h-3.5" /> },
+                { id: 'NIFTY_INDICES', label: 'Indian Indices', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+                { id: 'STOCK_CONSTITUENTS', label: 'NIFTY 500 Stocks', icon: <Building className="w-3.5 h-3.5" /> },
+                { id: 'GLOBAL_INDICES', label: 'Global Indices', icon: <Globe className="w-3.5 h-3.5" /> },
+                { id: 'FOREX', label: 'Forex', icon: <DollarSign className="w-3.5 h-3.5" /> },
+                { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
+              ].map((tab) => {
+                const isActive = mainMarketTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setMainMarketTab(tab.id as any)}
+                    className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+                      isActive
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)] hover:text-[var(--theme-text-primary)]'
+                    }`}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                    {tab.badge && (
+                      <span
+                        className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${
+                          isActive
+                            ? 'bg-white/20 text-white'
+                            : 'bg-[var(--theme-bg-card)] text-[var(--theme-text-muted)] border border-[var(--theme-border-subtle)]'
+                        }`}
+                      >
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
+
+          {/* Contextual Sub-Navigation Bar when Options Chain Hub is active */}
+          {mainMarketTab === 'OPTIONS_HUB' && (
+            <div className="pt-2 border-t border-[var(--theme-border-subtle)] flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[var(--theme-text-muted)] px-1">
+                  Options Desk Mode:
+                </span>
+                <div className="inline-flex p-1 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] gap-1">
+                  {[
+                    { id: 'INDEX', label: 'Index Options (NIFTY / BANKNIFTY / FINNIFTY)', icon: <Waves className="w-3.5 h-3.5" /> },
+                    { id: 'STOCK', label: 'Stock Options (Single-Stock F&O)', icon: <Building2 className="w-3.5 h-3.5" /> },
+                    { id: 'BOTH', label: 'Unified View (Index + Stock Options)', icon: <Activity className="w-3.5 h-3.5" /> },
+                  ].map((sub) => (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => setOptionsSubTab(sub.id as any)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        optionsSubTab === sub.id
+                          ? 'bg-[var(--theme-bg-card)] text-[var(--theme-text-primary)] shadow-sm border border-[var(--theme-border)]'
+                          : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
+                      }`}
+                    >
+                      {sub.icon}
+                      <span>{sub.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <span className="text-[11px] font-mono text-[var(--theme-text-muted)] hidden md:inline">
+                Black-Scholes Live Greeks · OI PCR · Max Pain
+              </span>
+            </div>
+          )}
+
+          {/* Contextual Sub-Navigation Bar when Portfolio / Watchlist / Screener Hub is active */}
+          {mainMarketTab === 'EQUITY_HUB' && (
+            <div className="pt-2 border-t border-[var(--theme-border-subtle)] flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-[var(--theme-text-muted)] px-1">
+                  Equity Workspace:
+                </span>
+                <div className="inline-flex p-1 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] gap-1 flex-wrap">
+                  {[
+                    { id: 'PORTFOLIO', label: 'Portfolio View', icon: <Briefcase className="w-3.5 h-3.5" /> },
+                    { id: 'WATCHLIST', label: 'Watchlist', icon: <Star className="w-3.5 h-3.5" /> },
+                    { id: 'SCREENER', label: 'Screener Pro', icon: <SlidersHorizontal className="w-3.5 h-3.5" /> },
+                    { id: 'ALL', label: 'All-in-One Workspace', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+                  ].map((sub) => (
+                    <button
+                      key={sub.id}
+                      type="button"
+                      onClick={() => setEquityHubSubTab(sub.id as any)}
+                      className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        equityHubSubTab === sub.id
+                          ? 'bg-[var(--theme-bg-card)] text-[var(--theme-text-primary)] shadow-sm border border-[var(--theme-border)]'
+                          : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-primary)]'
+                      }`}
+                    >
+                      {sub.icon}
+                      <span>{sub.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <span className="text-[11px] font-mono text-[var(--theme-text-muted)] hidden md:inline">
+                Integrated Portfolio · Watchlist · Multi-Factor Screener
+              </span>
+            </div>
+          )}
         </div>
 
         {/* MARKET CONTENT CONDITIONAL RENDERING */}
@@ -209,11 +306,25 @@ export default function App() {
         {mainMarketTab === 'COMMODITIES' && <CommoditiesMarketView />}
         {mainMarketTab === 'NIFTY_INDICES' && <NiftyIndicesView />}
         {mainMarketTab === 'STOCK_CONSTITUENTS' && <StockConstituentsView />}
-        {mainMarketTab === 'INDIAN_PORTFOLIO' && <IndianStockPortfolioView />}
-        {mainMarketTab === 'INDIAN_WATCHLIST' && <IndianStockWatchlistView />}
-        {mainMarketTab === 'OPTION_CHAIN' && <OptionChainView />}
-        {mainMarketTab === 'STOCK_OPTION_CHAIN' && <StockOptionChainView />}
-        {mainMarketTab === 'MARKET_SCREENER' && <AdvancedMarketScreenerView onSelectAsset={handleGlobalAssetSelect} />}
+
+        {/* UNIFIED OPTIONS CHAIN TAB (INDEX OPTIONS + STOCK OPTIONS) */}
+        {mainMarketTab === 'OPTIONS_HUB' && (
+          <div className="space-y-6">
+            {(optionsSubTab === 'INDEX' || optionsSubTab === 'BOTH') && <OptionChainView />}
+            {(optionsSubTab === 'STOCK' || optionsSubTab === 'BOTH') && <StockOptionChainView />}
+          </div>
+        )}
+
+        {/* UNIFIED EQUITY HUB TAB (PORTFOLIO + WATCHLIST + SCREENER) */}
+        {mainMarketTab === 'EQUITY_HUB' && (
+          <div className="space-y-6">
+            {(equityHubSubTab === 'PORTFOLIO' || equityHubSubTab === 'ALL') && <IndianStockPortfolioView />}
+            {(equityHubSubTab === 'WATCHLIST' || equityHubSubTab === 'ALL') && <IndianStockWatchlistView />}
+            {(equityHubSubTab === 'SCREENER' || equityHubSubTab === 'ALL') && (
+              <AdvancedMarketScreenerView onSelectAsset={handleGlobalAssetSelect} />
+            )}
+          </div>
+        )}
 
         {mainMarketTab === 'CRYPTO' && (
           <>
@@ -294,77 +405,37 @@ export default function App() {
         <div className="space-y-4 pt-2">
           {/* Workstation Navigation Bar */}
           <div
-            className="p-1.5 rounded-2xl border flex flex-wrap items-center justify-between gap-2 shadow-lg transition-colors"
+            className="p-1.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 shadow-sm transition-colors"
             style={{ backgroundColor: 'var(--theme-bg-card)', borderColor: 'var(--theme-border)' }}
           >
             <div className="flex items-center gap-1.5 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setAnalysisTab('OPTIONS')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                  analysisTab === 'OPTIONS'
-                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
-                    : 'text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <Zap className="w-4 h-4 fill-current" />
-                <span>Deribit Options Chain</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAnalysisTab('MARKETCAP')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                  analysisTab === 'MARKETCAP'
-                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
-                    : 'text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <Coins className="w-4 h-4" />
-                <span>Top 250 Crypto Market Cap</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAnalysisTab('ANALYTICS')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                  analysisTab === 'ANALYTICS'
-                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
-                    : 'text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <Activity className="w-4 h-4" />
-                <span>Macro & Volatility Analytics</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAnalysisTab('WHALES')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                  analysisTab === 'WHALES'
-                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
-                    : 'text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <Waves className="w-4 h-4" />
-                <span>Whale & Recent Trades</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAnalysisTab('BACKTEST')}
-                className={`px-3.5 py-2 rounded-xl text-xs font-extrabold flex items-center gap-2 transition-all ${
-                  analysisTab === 'BACKTEST'
-                    ? 'bg-emerald-500 text-neutral-950 font-black shadow-md'
-                    : 'text-neutral-300 hover:bg-neutral-800'
-                }`}
-              >
-                <BarChart3 className="w-4 h-4" />
-                <span>30D PnL Backtest</span>
-              </button>
+              {[
+                { id: 'OPTIONS', label: 'Deribit Options Chain', icon: <Zap className="w-3.5 h-3.5" /> },
+                { id: 'MARKETCAP', label: 'Top 250 Crypto Market Cap', icon: <Coins className="w-3.5 h-3.5" /> },
+                { id: 'ANALYTICS', label: 'Macro & Volatility Analytics', icon: <Activity className="w-3.5 h-3.5" /> },
+                { id: 'WHALES', label: 'Whale & Recent Trades', icon: <Waves className="w-3.5 h-3.5" /> },
+                { id: 'BACKTEST', label: '30D PnL Backtest', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+              ].map((tab) => {
+                const isActive = analysisTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setAnalysisTab(tab.id as any)}
+                    className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer border ${
+                      isActive
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-sm'
+                        : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)] hover:text-[var(--theme-text-primary)]'
+                    }`}
+                  >
+                    {tab.icon}
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="text-[11px] font-mono text-neutral-400 px-3 hidden lg:block">
+            <div className="text-[11px] font-mono text-[var(--theme-text-muted)] px-3 hidden lg:block">
               Institutional Market Workstation
             </div>
           </div>

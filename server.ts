@@ -1414,6 +1414,39 @@ setTimeout(() => {
   }, 45000);
 }, 2000);
 
+// Proxy for Gemini Portfolio Risk Analysis
+app.post('/api/gemini/risk-analysis', async (req, res) => {
+  const { goldRatio = 0, cryptoRatio = 0, positions = [] } = req.body;
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    return res.json({ success: false });
+  }
+
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+    const prompt = `You are a professional multi-asset hedge fund risk manager specializing in digital assets and physical asset tokens (Tether Gold XAUT, PAXG, Bitcoin, Ethereum).
+Analyze this trader's paper simulation state and provide a concise, razor-sharp 3-part critique:
+1. Portfolio Risk Score (1-10) and Gold Hedge Efficiency (Currently ${Number(goldRatio).toFixed(1)}% Gold, ${Number(cryptoRatio).toFixed(1)}% Crypto).
+2. Immediate Liquidation & Margin Hazards:
+${Array.isArray(positions) && positions.length > 0 ? positions.map((p: any) => `- ${p.assetSymbol} ${p.leverage}x ${p.side}: Entry $${p.entryPrice}, Current $${p.currentPrice || 'N/A'}, Liq Price $${Number(p.liquidationPrice || 0).toFixed(2)}, PnL $${Number(p.unrealizedPnL || 0).toFixed(2)} (${Number(p.unrealizedPnLPercent || 0).toFixed(1)}%)`).join('\n') : 'No open margin positions.'}
+3. Tactical Recommendation for Real-World Trading (e.g., fee minimization, stop-loss discipline, Tether Gold hedging benefit against macro crypto drawdowns).
+
+Keep tone professional, objective, actionable, and formatted in clean markdown bullet points (max 180 words).`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+    });
+    if (response.text) {
+      return res.json({ success: true, analysis: response.text });
+    }
+  } catch {
+    // Fallback handled by client
+  }
+  return res.json({ success: false });
+});
+
 // Proxy for Gemini Account Pulse
 app.post('/api/gemini/account-pulse', async (req, res) => {
   const { totalPnL = 0, winRate = 0, totalTrades = 0 } = req.body;
