@@ -22,9 +22,7 @@ import { TrackedAsset } from '../services/allTrackedAssets';
 
 export type MainMarketTab =
   | 'CRYPTO'
-  | 'GLOBAL_INDICES'
-  | 'FOREX'
-  | 'COMMODITIES'
+  | 'MARKET_OVERVIEW'
   | 'NIFTY_INDICES'
   | 'STOCK_CONSTITUENTS'
   | 'EQUITY_HUB'
@@ -32,6 +30,7 @@ export type MainMarketTab =
 
 export type OptionsSubTab = 'INDEX' | 'STOCK' | 'BOTH';
 export type EquityHubSubTab = 'PORTFOLIO' | 'WATCHLIST' | 'SCREENER' | 'ALL';
+export type MarketOverviewSubTab = 'ALL' | 'GLOBAL_INDICES' | 'FOREX' | 'COMMODITIES';
 
 interface NavbarProps {
   mainMarketTab: MainMarketTab;
@@ -40,6 +39,8 @@ interface NavbarProps {
   onSelectOptionsSubTab: (sub: OptionsSubTab) => void;
   equityHubSubTab: EquityHubSubTab;
   onSelectEquityHubSubTab: (sub: EquityHubSubTab) => void;
+  marketOverviewSubTab?: MarketOverviewSubTab;
+  onSelectMarketOverviewSubTab?: (sub: MarketOverviewSubTab) => void;
   onOpenStorage?: () => void;
   onOpenBatchModal?: () => void;
   onSelectAsset?: (asset: TrackedAsset) => void;
@@ -56,6 +57,12 @@ const MASTER_PAGES: {
     label: 'Crypto & Gold Terminal (AurumX)',
     badge: 'Default · Spot & Perp',
     icon: <Coins className="w-4 h-4 text-emerald-600" />,
+  },
+  {
+    id: 'MARKET_OVERVIEW',
+    label: 'Market Overview (Indices · Futures · Forex · Commodities)',
+    badge: 'Global Macro Hub',
+    icon: <Globe className="w-4 h-4 text-emerald-600" />,
   },
   {
     id: 'OPTIONS_HUB',
@@ -81,24 +88,6 @@ const MASTER_PAGES: {
     badge: 'Live Constituents',
     icon: <Building className="w-4 h-4 text-emerald-600" />,
   },
-  {
-    id: 'GLOBAL_INDICES',
-    label: 'Global Indices',
-    badge: 'US · EU · Asia',
-    icon: <Globe className="w-4 h-4 text-emerald-600" />,
-  },
-  {
-    id: 'FOREX',
-    label: 'Forex Exchange',
-    badge: 'Major & INR Pairs',
-    icon: <DollarSign className="w-4 h-4 text-emerald-600" />,
-  },
-  {
-    id: 'COMMODITIES',
-    label: 'Commodities & Energy',
-    badge: 'Metals · Crude · Agri',
-    icon: <Box className="w-4 h-4 text-emerald-600" />,
-  },
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -108,6 +97,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectOptionsSubTab,
   equityHubSubTab,
   onSelectEquityHubSubTab,
+  marketOverviewSubTab = 'ALL',
+  onSelectMarketOverviewSubTab,
   onOpenStorage,
   onSelectAsset,
 }) => {
@@ -188,6 +179,32 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
             )}
           </div>
+
+          {/* Inline Sub-Mode Switcher for Market Overview (Indices & Futures / Forex / Commodities) */}
+          {mainMarketTab === 'MARKET_OVERVIEW' && onSelectMarketOverviewSubTab && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {[
+                { id: 'ALL', label: 'All Macro', icon: <Activity className="w-3.5 h-3.5" /> },
+                { id: 'GLOBAL_INDICES', label: 'Indices & Futures', icon: <Globe className="w-3.5 h-3.5" /> },
+                { id: 'FOREX', label: 'Forex', icon: <DollarSign className="w-3.5 h-3.5" /> },
+                { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => onSelectMarketOverviewSubTab(sub.id as MarketOverviewSubTab)}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border ${
+                    marketOverviewSubTab === sub.id
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
+                  }`}
+                >
+                  {sub.icon}
+                  <span>{sub.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Inline Sub-Mode Switcher for Options Hub */}
           {mainMarketTab === 'OPTIONS_HUB' && (

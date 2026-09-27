@@ -13,17 +13,10 @@ import {
   ArrowUpRight,
 } from 'lucide-react';
 import { fetchBatchLiveQuotes } from '../../services/liveMarketService';
+import { MASTER_COMMODITIES } from '../../services/marketDataTables';
 import { updateRememberedPrice, getHydratedPrice, resolveLivePrice } from '../../services/priceMemoryStore';
 import { formatIndianTime } from '../../utils/indianTime';
 import { GlobalIndexDetailModal, GlobalIndexDetailItem } from '../Modals/GlobalIndexDetailModal';
-
-export const MASTER_COMMODITIES = [
-  { id: 'oil', name: 'Crude Oil WTI', symbol: 'CL', price: 71.45, change1d: 0.85, category: 'Energy' },
-  { id: 'gold', name: 'Gold Spot', symbol: 'GC', price: 2645.20, change1d: 0.12, category: 'Precious Metals' },
-  { id: 'silver', name: 'Silver Spot', symbol: 'SI', price: 31.15, change1d: -0.45, category: 'Precious Metals' },
-  { id: 'natgas', name: 'Natural Gas', symbol: 'NG', price: 2.34, change1d: -1.20, category: 'Energy' },
-  { id: 'copper', name: 'Copper', symbol: 'HG', price: 4.12, change1d: 0.55, category: 'Industrial Metals' },
-];
 
 export interface CommodityItem {
   id: string;
@@ -59,12 +52,20 @@ export const CommoditiesMarketView: React.FC = () => {
         name: m.name,
         symbol: m.symbol,
         yahooSymbol: `${m.symbol}=F`,
-        unit: m.category === 'Energy' ? 'USD / Barrel' : m.category === 'Precious Metals' ? 'USD / Troy Oz' : 'USD / Unit',
+        unit:
+          m.unit ||
+          (m.category === 'Energy'
+            ? 'USD / Barrel'
+            : m.category === 'Precious Metals'
+            ? 'USD / Troy Oz'
+            : m.category === 'Agriculture'
+            ? 'USd / Unit'
+            : 'USD / Unit'),
         category: (m.category as any) || 'Energy',
         price: hydrated.price,
         change1d: hydrated.change1d ?? m.change1d,
-        high24h: (m as any).high24h || hydrated.price,
-        low24h: (m as any).low24h || hydrated.price,
+        high24h: m.high24h || hydrated.price,
+        low24h: m.low24h || hydrated.price,
         contractExpiry: 'DEC 2026',
       };
     })

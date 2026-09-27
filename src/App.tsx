@@ -5,7 +5,13 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useTradeSimulator } from './hooks/useTradeSimulator';
-import { Navbar, MainMarketTab, OptionsSubTab, EquityHubSubTab } from './components/Navbar';
+import {
+  Navbar,
+  MainMarketTab,
+  OptionsSubTab,
+  EquityHubSubTab,
+  MarketOverviewSubTab,
+} from './components/Navbar';
 import { CryptoHeaderBar } from './components/CryptoHeaderBar';
 import { TickerBar } from './components/TickerBar';
 import { OrderForm } from './components/OrderForm/OrderForm';
@@ -78,6 +84,7 @@ export default function App() {
   const [mainMarketTab, setMainMarketTab] = useState<MainMarketTab>('CRYPTO');
   const [optionsSubTab, setOptionsSubTab] = useState<OptionsSubTab>('INDEX');
   const [equityHubSubTab, setEquityHubSubTab] = useState<EquityHubSubTab>('PORTFOLIO');
+  const [marketOverviewSubTab, setMarketOverviewSubTab] = useState<MarketOverviewSubTab>('ALL');
 
   // Section A & Section B single-selection dropdown states under Crypto Page
   // Only ONE default is selected on each section:
@@ -245,18 +252,21 @@ export default function App() {
       return;
     }
     if (asset.category === 'GLOBAL_INDEX') {
-      setMainMarketTab('GLOBAL_INDICES');
-      addNotification('info', 'Global Indices', `Viewing ${asset.name} (${asset.symbol}).`);
+      setMainMarketTab('MARKET_OVERVIEW');
+      setMarketOverviewSubTab('GLOBAL_INDICES');
+      addNotification('info', 'Market Overview · Global Indices', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'FOREX') {
-      setMainMarketTab('FOREX');
-      addNotification('info', 'Forex Exchange', `Viewing ${asset.name} (${asset.symbol}).`);
+      setMainMarketTab('MARKET_OVERVIEW');
+      setMarketOverviewSubTab('FOREX');
+      addNotification('info', 'Market Overview · Forex Exchange', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'COMMODITY') {
-      setMainMarketTab('COMMODITIES');
-      addNotification('info', 'Commodities & Energy', `Viewing ${asset.name} (${asset.symbol}).`);
+      setMainMarketTab('MARKET_OVERVIEW');
+      setMarketOverviewSubTab('COMMODITIES');
+      addNotification('info', 'Market Overview · Commodities', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'US_STOCK') {
@@ -395,6 +405,8 @@ export default function App() {
         onSelectOptionsSubTab={setOptionsSubTab}
         equityHubSubTab={equityHubSubTab}
         onSelectEquityHubSubTab={setEquityHubSubTab}
+        marketOverviewSubTab={marketOverviewSubTab}
+        onSelectMarketOverviewSubTab={setMarketOverviewSubTab}
         onOpenBatchModal={() => setIsBatchModalOpen(true)}
         onOpenStorage={() => setIsStorageOpen(true)}
         onSelectAsset={handleGlobalAssetSelect}
@@ -413,9 +425,19 @@ export default function App() {
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 space-y-5">
         {/* NON-CRYPTO MARKET DESKS */}
-        {mainMarketTab === 'GLOBAL_INDICES' && <GlobalIndicesView />}
-        {mainMarketTab === 'FOREX' && <ForexMarketView />}
-        {mainMarketTab === 'COMMODITIES' && <CommoditiesMarketView />}
+        {mainMarketTab === 'MARKET_OVERVIEW' && (
+          <div className="space-y-6">
+            {(marketOverviewSubTab === 'GLOBAL_INDICES' || marketOverviewSubTab === 'ALL') && (
+              <GlobalIndicesView />
+            )}
+            {(marketOverviewSubTab === 'FOREX' || marketOverviewSubTab === 'ALL') && (
+              <ForexMarketView />
+            )}
+            {(marketOverviewSubTab === 'COMMODITIES' || marketOverviewSubTab === 'ALL') && (
+              <CommoditiesMarketView />
+            )}
+          </div>
+        )}
         {mainMarketTab === 'NIFTY_INDICES' && <NiftyIndicesView />}
         {mainMarketTab === 'STOCK_CONSTITUENTS' && <StockConstituentsView />}
 
@@ -460,6 +482,7 @@ export default function App() {
                   <div className="relative" ref={dropdownARef}>
                     <button
                       type="button"
+                      title={activeOptionA.subtitle}
                       onClick={() => setIsDropdownAOpen((prev) => !prev)}
                       className="inline-flex items-center justify-between gap-3 min-w-[260px] sm:min-w-[340px] px-3.5 py-2 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
                     >
@@ -512,10 +535,28 @@ export default function App() {
                       </div>
                     )}
                   </div>
+
+                  {/* Non-intrusive Hover Tooltip for Section A Selected View */}
+                  <div
+                    className="relative group inline-flex items-center"
+                    title={activeOptionA.subtitle}
+                  >
+                    <span className="p-1.5 rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] hover:text-emerald-600 transition-colors cursor-help">
+                      <Info className="w-3.5 h-3.5" />
+                    </span>
+                    <div className="pointer-events-none absolute left-0 top-full mt-1.5 w-64 sm:w-72 p-2.5 rounded-lg border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                      <div className="text-[11px] font-bold text-[var(--theme-text-primary)]">
+                        {activeOptionA.num}. {activeOptionA.label}
+                      </div>
+                      <div className="text-[10px] font-mono text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
+                        {activeOptionA.subtitle}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="text-[11px] font-mono text-[var(--theme-text-muted)] hidden md:flex items-center gap-2">
-                  <span>Click any coin in table or search above to load in Section B</span>
+                  <span>{activeOptionA.subtitle}</span>
                 </div>
               </div>
 
@@ -603,6 +644,7 @@ export default function App() {
                   <div className="relative" ref={dropdownBRef}>
                     <button
                       type="button"
+                      title={activeOptionB.subtitle}
                       onClick={() => setIsDropdownBOpen((prev) => !prev)}
                       className="inline-flex items-center justify-between gap-3 min-w-[270px] sm:min-w-[390px] px-3.5 py-2 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
                     >
@@ -654,6 +696,24 @@ export default function App() {
                         })}
                       </div>
                     )}
+                  </div>
+
+                  {/* Non-intrusive Hover Tooltip for Section B Selected View */}
+                  <div
+                    className="relative group inline-flex items-center"
+                    title={activeOptionB.subtitle}
+                  >
+                    <span className="p-1.5 rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] hover:text-emerald-600 transition-colors cursor-help">
+                      <Info className="w-3.5 h-3.5" />
+                    </span>
+                    <div className="pointer-events-none absolute left-0 top-full mt-1.5 w-64 sm:w-72 p-2.5 rounded-lg border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
+                      <div className="text-[11px] font-bold text-[var(--theme-text-primary)]">
+                        {activeOptionB.num}. {activeOptionB.label}
+                      </div>
+                      <div className="text-[10px] font-mono text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
+                        {activeOptionB.subtitle}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
