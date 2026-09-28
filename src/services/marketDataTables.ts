@@ -169,7 +169,219 @@ export const MASTER_NIFTY_500: MarketTableRow[] = COMPLETE_NSE_FNO_STOCKS.map((s
   peRatio: Number((20 + Math.random() * 15).toFixed(2)),
 }));
 
-export const MASTER_CRYPTO_250: MarketTableRow[] = [];
+const BINANCE_CRYPTO_SEEDS: {
+  symbol: string;
+  name: string;
+  price: number;
+  marketCap: number;
+  category: string;
+}[] = [
+  { symbol: 'BTC', name: 'Bitcoin', price: 96500, marketCap: 1910000000000, category: 'Layer 1' },
+  { symbol: 'ETH', name: 'Ethereum', price: 3450, marketCap: 415000000000, category: 'Layer 1' },
+  { symbol: 'XRP', name: 'Ripple', price: 1.85, marketCap: 106000000000, category: 'Layer 1' },
+  { symbol: 'SOL', name: 'Solana', price: 210, marketCap: 98500000000, category: 'Layer 1' },
+  { symbol: 'BNB', name: 'Binance Coin', price: 620, marketCap: 91000000000, category: 'Layer 1' },
+  { symbol: 'DOGE', name: 'Dogecoin', price: 0.28, marketCap: 41200000000, category: 'Meme' },
+  { symbol: 'ADA', name: 'Cardano', price: 0.85, marketCap: 30200000000, category: 'Layer 1' },
+  { symbol: 'TRX', name: 'TRON', price: 0.24, marketCap: 20800000000, category: 'Layer 1' },
+  { symbol: 'AVAX', name: 'Avalanche', price: 38.4, marketCap: 15800000000, category: 'Layer 1' },
+  { symbol: 'SHIB', name: 'Shiba Inu', price: 0.000024, marketCap: 14100000000, category: 'Meme' },
+  { symbol: 'TON', name: 'Toncoin', price: 5.45, marketCap: 13800000000, category: 'Layer 1' },
+  { symbol: 'LINK', name: 'Chainlink', price: 18.6, marketCap: 11700000000, category: 'DeFi' },
+  { symbol: 'DOT', name: 'Polkadot', price: 7.4, marketCap: 10500000000, category: 'Layer 1' },
+  { symbol: 'SUI', name: 'Sui', price: 3.35, marketCap: 9600000000, category: 'Layer 1' },
+  { symbol: 'BCH', name: 'Bitcoin Cash', price: 465, marketCap: 9200000000, category: 'Layer 1' },
+  { symbol: 'LTC', name: 'Litecoin', price: 102.5, marketCap: 7700000000, category: 'Layer 1' },
+  { symbol: 'PEPE', name: 'Pepe', price: 0.000018, marketCap: 7600000000, category: 'Meme' },
+  { symbol: 'NEAR', name: 'NEAR Protocol', price: 5.85, marketCap: 7100000000, category: 'AI' },
+  { symbol: 'APT', name: 'Aptos', price: 11.4, marketCap: 6100000000, category: 'Layer 1' },
+  { symbol: 'UNI', name: 'Uniswap', price: 9.85, marketCap: 5950000000, category: 'DeFi' },
+  { symbol: 'ICP', name: 'Internet Computer', price: 10.9, marketCap: 5150000000, category: 'Web3' },
+  { symbol: 'RENDER', name: 'Render', price: 7.65, marketCap: 3950000000, category: 'AI' },
+  { symbol: 'POL', name: 'Polygon', price: 0.49, marketCap: 3900000000, category: 'Layer 2' },
+  { symbol: 'FET', name: 'Artificial Superintelligence', price: 1.46, marketCap: 3720000000, category: 'AI' },
+  { symbol: 'TAO', name: 'Bittensor', price: 485, marketCap: 3580000000, category: 'AI' },
+  { symbol: 'ETC', name: 'Ethereum Classic', price: 27.4, marketCap: 4100000000, category: 'Layer 1' },
+  { symbol: 'XLM', name: 'Stellar', price: 0.42, marketCap: 12100000000, category: 'Layer 1' },
+  { symbol: 'HBAR', name: 'Hedera', price: 0.26, marketCap: 9800000000, category: 'Layer 1' },
+  { symbol: 'FIL', name: 'Filecoin', price: 5.4, marketCap: 3300000000, category: 'Web3' },
+  { symbol: 'ATOM', name: 'Cosmos', price: 6.8, marketCap: 2650000000, category: 'Layer 1' },
+  { symbol: 'ARB', name: 'Arbitrum', price: 0.74, marketCap: 2950000000, category: 'Layer 2' },
+  { symbol: 'MNT', name: 'Mantle', price: 0.88, marketCap: 2920000000, category: 'Layer 2' },
+  { symbol: 'AAVE', name: 'Aave', price: 168, marketCap: 2520000000, category: 'DeFi' },
+  { symbol: 'WIF', name: 'dogwifhat', price: 2.42, marketCap: 2410000000, category: 'Meme' },
+  { symbol: 'OP', name: 'Optimism', price: 1.78, marketCap: 2280000000, category: 'Layer 2' },
+  { symbol: 'INJ', name: 'Injective', price: 23.5, marketCap: 2310000000, category: 'DeFi' },
+  { symbol: 'BONK', name: 'Bonk', price: 0.000031, marketCap: 2250000000, category: 'Meme' },
+  { symbol: 'STX', name: 'Stacks', price: 1.85, marketCap: 2750000000, category: 'Layer 2' },
+  { symbol: 'IMX', name: 'Immutable', price: 1.52, marketCap: 2540000000, category: 'Layer 2' },
+  { symbol: 'ONDO', name: 'Ondo Finance', price: 1.15, marketCap: 1650000000, category: 'Gold & RWA' },
+  { symbol: 'TIA', name: 'Celestia', price: 5.8, marketCap: 2480000000, category: 'Layer 1' },
+  { symbol: 'SEI', name: 'Sei', price: 0.48, marketCap: 1920000000, category: 'Layer 1' },
+  { symbol: 'FLOKI', name: 'Floki', price: 0.00019, marketCap: 1850000000, category: 'Meme' },
+  { symbol: 'GRT', name: 'The Graph', price: 0.21, marketCap: 2010000000, category: 'AI' },
+  { symbol: 'THETA', name: 'Theta Network', price: 1.95, marketCap: 1950000000, category: 'Web3' },
+  { symbol: 'RUNE', name: 'THORChain', price: 5.2, marketCap: 1760000000, category: 'DeFi' },
+  { symbol: 'ALGO', name: 'Algorand', price: 0.34, marketCap: 2820000000, category: 'Layer 1' },
+  { symbol: 'VET', name: 'VeChain', price: 0.042, marketCap: 3400000000, category: 'Layer 1' },
+  { symbol: 'LDO', name: 'Lido DAO', price: 1.62, marketCap: 1450000000, category: 'DeFi' },
+  { symbol: 'MKR', name: 'Maker', price: 1540, marketCap: 1380000000, category: 'DeFi' },
+  { symbol: 'AR', name: 'Arweave', price: 19.5, marketCap: 1280000000, category: 'Web3' },
+  { symbol: 'GALA', name: 'Gala', price: 0.036, marketCap: 1320000000, category: 'Web3' },
+  { symbol: 'STRK', name: 'Starknet', price: 0.54, marketCap: 1120000000, category: 'Layer 2' },
+  { symbol: 'JASMY', name: 'JasmyCoin', price: 0.028, marketCap: 1380000000, category: 'Web3' },
+  { symbol: 'PYTH', name: 'Pyth Network', price: 0.41, marketCap: 1480000000, category: 'DeFi' },
+  { symbol: 'JUP', name: 'Jupiter', price: 0.98, marketCap: 1320000000, category: 'DeFi' },
+  { symbol: 'ENA', name: 'Ethena', price: 0.68, marketCap: 1920000000, category: 'DeFi' },
+  { symbol: 'WLD', name: 'Worldcoin', price: 2.35, marketCap: 1650000000, category: 'AI' },
+  { symbol: 'AKT', name: 'Akash Network', price: 3.65, marketCap: 910000000, category: 'AI' },
+  { symbol: 'PENDLE', name: 'Pendle', price: 5.12, marketCap: 840000000, category: 'DeFi' },
+  { symbol: 'ZEC', name: 'Zcash', price: 48.5, marketCap: 790000000, category: 'Layer 1' },
+  { symbol: 'XAUT', name: 'Tether Gold', price: 2755, marketCap: 680000000, category: 'Gold & RWA' },
+  { symbol: 'PAXG', name: 'PAX Gold', price: 2750, marketCap: 520000000, category: 'Gold & RWA' },
+  { symbol: 'QNT', name: 'Quant', price: 98.0, marketCap: 1180000000, category: 'Layer 1' },
+  { symbol: 'EOS', name: 'EOS', price: 0.88, marketCap: 1340000000, category: 'Layer 1' },
+  { symbol: 'XTZ', name: 'Tezos', price: 1.28, marketCap: 1290000000, category: 'Layer 1' },
+  { symbol: 'FLOW', name: 'Flow', price: 0.85, marketCap: 1310000000, category: 'Layer 1' },
+  { symbol: 'EGLD', name: 'MultiversX', price: 36.5, marketCap: 1010000000, category: 'Layer 1' },
+  { symbol: 'NEO', name: 'Neo', price: 14.8, marketCap: 1040000000, category: 'Layer 1' },
+  { symbol: 'SAND', name: 'The Sandbox', price: 0.58, marketCap: 1410000000, category: 'Web3' },
+  { symbol: 'MANA', name: 'Decentraland', price: 0.54, marketCap: 1030000000, category: 'Web3' },
+  { symbol: 'AXS', name: 'Axie Infinity', price: 6.95, marketCap: 1060000000, category: 'Web3' },
+  { symbol: 'CHZ', name: 'Chiliz', price: 0.089, marketCap: 810000000, category: 'Web3' },
+  { symbol: 'CRV', name: 'Curve DAO Token', price: 0.72, marketCap: 910000000, category: 'DeFi' },
+  { symbol: 'SNX', name: 'Synthetix', price: 2.15, marketCap: 710000000, category: 'DeFi' },
+  { symbol: 'COMP', name: 'Compound', price: 68.5, marketCap: 610000000, category: 'DeFi' },
+  { symbol: '1INCH', name: '1inch Network', price: 0.39, marketCap: 510000000, category: 'DeFi' },
+  { symbol: 'DYDX', name: 'dYdX', price: 1.48, marketCap: 960000000, category: 'DeFi' },
+  { symbol: 'GMX', name: 'GMX', price: 29.4, marketCap: 290000000, category: 'DeFi' },
+  { symbol: 'CAKE', name: 'PancakeSwap', price: 2.65, marketCap: 760000000, category: 'DeFi' },
+  { symbol: 'SUSHI', name: 'SushiSwap', price: 1.18, marketCap: 310000000, category: 'DeFi' },
+  { symbol: 'YFI', name: 'yearn.finance', price: 7450, marketCap: 250000000, category: 'DeFi' },
+  { symbol: 'ZRO', name: 'LayerZero', price: 4.15, marketCap: 460000000, category: 'Layer 2' },
+  { symbol: 'ZK', name: 'ZKsync', price: 0.175, marketCap: 640000000, category: 'Layer 2' },
+  { symbol: 'METIS', name: 'Metis', price: 46.0, marketCap: 280000000, category: 'Layer 2' },
+  { symbol: 'MANTA', name: 'Manta Network', price: 0.98, marketCap: 380000000, category: 'Layer 2' },
+  { symbol: 'ORDI', name: 'ORDI', price: 38.5, marketCap: 810000000, category: 'Meme' },
+  { symbol: 'NOT', name: 'Notcoin', price: 0.0082, marketCap: 840000000, category: 'Web3' },
+  { symbol: 'DOGS', name: 'Dogs', price: 0.00072, marketCap: 370000000, category: 'Meme' },
+  { symbol: 'MEME', name: 'Memecoin', price: 0.014, marketCap: 420000000, category: 'Meme' },
+  { symbol: 'PEOPLE', name: 'ConstitutionDAO', price: 0.068, marketCap: 345000000, category: 'Meme' },
+  { symbol: 'TURBO', name: 'Turbo', price: 0.0092, marketCap: 630000000, category: 'Meme' },
+  { symbol: 'NEIRO', name: 'First Neiro On Ethereum', price: 0.0018, marketCap: 750000000, category: 'Meme' },
+  { symbol: 'PNUT', name: 'Peanut the Squirrel', price: 1.15, marketCap: 1150000000, category: 'Meme' },
+  { symbol: 'ACT', name: 'Act I : The AI Prophecy', price: 0.42, marketCap: 400000000, category: 'AI' },
+  { symbol: 'IO', name: 'io.net', price: 2.45, marketCap: 310000000, category: 'AI' },
+  { symbol: 'ARKM', name: 'Arkham', price: 1.95, marketCap: 440000000, category: 'AI' },
+  { symbol: 'NMR', name: 'Numeraire', price: 18.2, marketCap: 130000000, category: 'AI' },
+  { symbol: 'RLC', name: 'iExec RLC', price: 2.15, marketCap: 160000000, category: 'AI' },
+  { symbol: 'PHB', name: 'Phoenix', price: 1.68, marketCap: 90000000, category: 'AI' },
+  { symbol: 'POLYX', name: 'Polymesh', price: 0.31, marketCap: 280000000, category: 'Gold & RWA' },
+  { symbol: 'OM', name: 'MANTRA', price: 3.65, marketCap: 3100000000, category: 'Gold & RWA' },
+  { symbol: 'TRU', name: 'TrueFi', price: 0.11, marketCap: 130000000, category: 'Gold & RWA' },
+  { symbol: 'RSR', name: 'Reserve Rights', price: 0.0094, marketCap: 500000000, category: 'Gold & RWA' },
+  { symbol: 'KAVA', name: 'Kava', price: 0.48, marketCap: 520000000, category: 'Layer 1' },
+  { symbol: 'MINA', name: 'Mina', price: 0.68, marketCap: 790000000, category: 'Layer 1' },
+  { symbol: 'ZIL', name: 'Zilliqa', price: 0.021, marketCap: 400000000, category: 'Layer 1' },
+  { symbol: 'IOTA', name: 'IOTA', price: 0.24, marketCap: 840000000, category: 'Layer 1' },
+  { symbol: 'KSM', name: 'Kusama', price: 28.5, marketCap: 440000000, category: 'Layer 1' },
+  { symbol: 'ASTR', name: 'Astar', price: 0.072, marketCap: 520000000, category: 'Layer 1' },
+  { symbol: 'CELO', name: 'Celo', price: 0.78, marketCap: 430000000, category: 'Layer 1' },
+  { symbol: 'ONE', name: 'Harmony', price: 0.022, marketCap: 310000000, category: 'Layer 1' },
+  { symbol: 'ROSE', name: 'Oasis', price: 0.092, marketCap: 650000000, category: 'Layer 1' },
+  { symbol: 'ENS', name: 'Ethereum Name Service', price: 28.4, marketCap: 940000000, category: 'Web3' },
+  { symbol: 'LPT', name: 'Livepeer', price: 13.8, marketCap: 490000000, category: 'AI' },
+  { symbol: 'ANKR', name: 'Ankr', price: 0.038, marketCap: 380000000, category: 'Web3' },
+  { symbol: 'BAT', name: 'Basic Attention Token', price: 0.24, marketCap: 360000000, category: 'Web3' },
+  { symbol: 'ENJ', name: 'Enjin Coin', price: 0.25, marketCap: 430000000, category: 'Web3' },
+  { symbol: 'GMT', name: 'STEPN', price: 0.19, marketCap: 510000000, category: 'Web3' },
+  { symbol: 'APE', name: 'ApeCoin', price: 1.25, marketCap: 900000000, category: 'Web3' },
+  { symbol: 'BLUR', name: 'Blur', price: 0.29, marketCap: 580000000, category: 'Web3' },
+];
+
+export const MASTER_CRYPTO_250: MarketTableRow[] = BINANCE_CRYPTO_SEEDS.map((c, idx) => ({
+  rank: idx + 1,
+  id: c.symbol.toLowerCase(),
+  name: c.name,
+  symbol: c.symbol,
+  price: c.price,
+  change1d: Number(((((idx * 17) % 19) - 8) * 0.65).toFixed(2)),
+  category: c.category,
+  exchange: 'BINANCE',
+  currency: 'USDT',
+  marketCap: c.marketCap,
+  volume24h: Math.floor(c.marketCap * 0.08),
+}));
+
+export async function fetchBinanceCryptoTableRows(): Promise<MarketTableRow[]> {
+  try {
+    const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) {
+        const seedBySymbol = new Map(BINANCE_CRYPTO_SEEDS.map((s) => [s.symbol.toUpperCase(), s]));
+        const excludedBases = new Set(['USDC', 'FDUSD', 'TUSD', 'USDP', 'DAI', 'BUSD', 'AEUR', 'EUR', 'GBP', 'TRY', 'BRL']);
+        const usdtTickers = data
+          .filter(
+            (t: any) =>
+              typeof t.symbol === 'string' &&
+              t.symbol.endsWith('USDT') &&
+              !t.symbol.endsWith('UPUSDT') &&
+              !t.symbol.endsWith('DOWNUSDT') &&
+              !t.symbol.endsWith('BULLUSDT') &&
+              !t.symbol.endsWith('BEARUSDT') &&
+              parseFloat(t.lastPrice) > 0 &&
+              parseFloat(t.quoteVolume) > 100000
+          )
+          .map((t: any) => {
+            const sym = t.symbol.slice(0, -4).toUpperCase();
+            return {
+              sym,
+              lastPrice: parseFloat(t.lastPrice),
+              changePct: parseFloat(t.priceChangePercent) || 0,
+              high24h: parseFloat(t.highPrice) || parseFloat(t.lastPrice),
+              low24h: parseFloat(t.lowPrice) || parseFloat(t.lastPrice),
+              quoteVolume: parseFloat(t.quoteVolume) || 0,
+            };
+          })
+          .filter((t) => !excludedBases.has(t.sym));
+
+        if (usdtTickers.length > 0) {
+          usdtTickers.sort((a, b) => {
+            const aSeedIdx = BINANCE_CRYPTO_SEEDS.findIndex((s) => s.symbol === a.sym);
+            const bSeedIdx = BINANCE_CRYPTO_SEEDS.findIndex((s) => s.symbol === b.sym);
+            if (aSeedIdx !== -1 && bSeedIdx !== -1) return aSeedIdx - bSeedIdx;
+            if (aSeedIdx !== -1) return -1;
+            if (bSeedIdx !== -1) return 1;
+            return b.quoteVolume - a.quoteVolume;
+          });
+
+          return usdtTickers.slice(0, 250).map((t, idx) => {
+            const seed = seedBySymbol.get(t.sym);
+            return {
+              rank: idx + 1,
+              id: t.sym.toLowerCase(),
+              name: seed?.name || `${t.sym} / USDT`,
+              symbol: t.sym,
+              price: t.lastPrice,
+              change1d: Number(t.changePct.toFixed(2)),
+              high24h: t.high24h,
+              low24h: t.low24h,
+              category: seed?.category || 'Layer 1',
+              exchange: 'BINANCE',
+              currency: 'USDT',
+              marketCap: seed?.marketCap || Math.round(t.quoteVolume * 14),
+              volume24h: Math.round(t.quoteVolume),
+            };
+          });
+        }
+      }
+    }
+  } catch {
+    // Fallback to MASTER_CRYPTO_250
+  }
+  return MASTER_CRYPTO_250;
+}
 
 export function subscribeMarketTable(
   _tableName: string,

@@ -825,33 +825,33 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
             <button
               type="button"
               onClick={() => setRollingWindow(500)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
+              className={`px-2 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
                 rollingWindow === 500
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
               }`}
               title="Use 500-Tick Rolling FIFO Window"
             >
-              500 Tick Rolling
+              500 Ticks
             </button>
             <button
               type="button"
               onClick={() => setRollingWindow(1000)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
+              className={`px-2 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
                 rollingWindow === 1000
                   ? 'bg-emerald-600 text-white shadow-xs'
                   : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
               }`}
               title="Use 1000-Tick Rolling FIFO Window"
             >
-              1000 Tick Rolling
+              1000 Ticks
             </button>
           </div>
 
           <button
             type="button"
             onClick={() => setFilterFlipsAndFlat((prev) => !prev)}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-all ${
+            className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-bold cursor-pointer transition-all ${
               filterFlipsAndFlat
                 ? 'bg-emerald-600 text-white border-emerald-600'
                 : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border)]'
@@ -859,17 +859,17 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
             title="Toggle filtering of u1d1 single-tick flipping noise and flat ticks in the run stream"
           >
             <Sliders className="w-3 h-3" />
-            <span>{filterFlipsAndFlat ? 'u1d1 Filtered: ON' : 'Show Raw u1d1'}</span>
+            <span>{filterFlipsAndFlat ? 'Filter: ON' : 'Filter: OFF'}</span>
           </button>
 
           <button
             type="button"
             onClick={handleRestartFromFirstTick}
-            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[11px] font-semibold text-[var(--theme-text-secondary)] cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[11px] font-semibold text-[var(--theme-text-secondary)] cursor-pointer"
             title="Clear buffer and restart building from the 1st tick (0)"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>Restart 1st Tick</span>
+            <span>Reset</span>
           </button>
         </div>
       </div>

@@ -15,7 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import { subscribeMarketTable, MASTER_CRYPTO_250 } from '../../services/marketDataTables';
+import { subscribeMarketTable, MASTER_CRYPTO_250, fetchBinanceCryptoTableRows } from '../../services/marketDataTables';
 
 export interface CryptoCoinItem {
   rank: number;
@@ -36,11 +36,13 @@ export interface CryptoCoinItem {
 interface CryptoMarketCapTableProps {
   selectedSymbol?: string;
   onSelectCoinToTrade?: (symbol: string, coin?: CryptoCoinItem) => void;
+  onCoinsLoaded?: (coins: CryptoCoinItem[]) => void;
 }
 
 export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   selectedSymbol = 'BTC',
   onSelectCoinToTrade,
+  onCoinsLoaded,
 }) => {
   const { isLight } = useTheme();
   const [coins, setCoins] = useState<CryptoCoinItem[]>(() =>
@@ -72,77 +74,60 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   useEffect(() => {
     const unsub = subscribeMarketTable('crypto_top250', (table: any) => {
       if (table && table.data && table.data.length > 0) {
-        setCoins(
-          table.data.map((m: any) => ({
-            rank: m.rank || 1,
-            id: m.id,
-            name: m.name,
-            symbol: m.symbol,
-            price: m.price,
-            change1h: 0.15,
-            change24h: m.change1d,
-            change7d: m.change1d * 2.2,
-            marketCap: Number(m.marketCap || 1000000000),
-            volume24h: Number(m.volume24h || 50000000),
-            circulatingSupply: 100000000,
-            category: (m.category as any) || 'Layer 1',
-            isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC'].includes(m.symbol),
-          }))
-        );
+        const mapped = table.data.map((m: any) => ({
+          rank: m.rank || 1,
+          id: m.id,
+          name: m.name,
+          symbol: m.symbol,
+          price: m.price,
+          change1h: 0.15,
+          change24h: m.change1d,
+          change7d: m.change1d * 2.2,
+          marketCap: Number(m.marketCap || 1000000000),
+          volume24h: Number(m.volume24h || 50000000),
+          circulatingSupply: 100000000,
+          category: (m.category as any) || 'Layer 1',
+          isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC'].includes(m.symbol),
+        }));
+        setCoins(mapped);
+        onCoinsLoaded?.(mapped);
       }
     });
 
     return () => unsub();
-  }, []);
+  }, [onCoinsLoaded]);
 
-  // Fetch or generate top 250 crypto coins
+  // Fetch live Binance USDT crypto table coins
   const fetchTopCoins = async () => {
     setIsLoading(true);
     try {
-      // CoinGecko API for top 250 coins
-      const res = await fetch(
-        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=250&page=1&sparkline=false&price_change_percentage=1h,24h,7d'
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const mapped: CryptoCoinItem[] = data.map((c: any, index: number) => {
-            const sym = c.symbol.toUpperCase();
-            let cat: CryptoCoinItem['category'] = 'Web3';
-            if (['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'ADA', 'AVAX', 'DOT', 'NEAR', 'SUI', 'APT'].includes(sym)) cat = 'Layer 1';
-            else if (['UNI', 'AAVE', 'LINK', 'MKR', 'SNX', 'CRV', 'LDO', 'PENDLE'].includes(sym)) cat = 'DeFi';
-            else if (['DOGE', 'SHIB', 'PEPE', 'WIF', 'BONK', 'FLOKI', 'TRUMP'].includes(sym)) cat = 'Meme';
-            else if (['PAXG', 'XAUT', 'RWA', 'ONDO', 'POLYX'].includes(sym)) cat = 'Gold & RWA';
-            else if (['FET', 'RNDR', 'TAO', 'AGIX', 'OCEAN', 'NEAR', 'AKT'].includes(sym)) cat = 'AI';
-            else if (['MATIC', 'POL', 'OP', 'ARB', 'BASE', 'MNT', 'STRK'].includes(sym)) cat = 'Layer 2';
-
-            return {
-              rank: index + 1,
-              id: c.id,
-              name: c.name,
-              symbol: sym,
-              price: c.current_price || 0,
-              change1h: c.price_change_percentage_1h_in_currency || (Math.random() - 0.48) * 1.2,
-              change24h: c.price_change_percentage_24h || 0,
-              change7d: c.price_change_percentage_7d_in_currency || (Math.random() - 0.45) * 8,
-              marketCap: c.market_cap || 0,
-              volume24h: c.total_volume || 0,
-              circulatingSupply: c.circulating_supply || 0,
-              category: cat,
-              isTradeableInSim: ['BTC', 'ETH', 'SOL', 'PAXG', 'BNB', 'XRP', 'DOGE'].includes(sym),
-            };
-          });
-
-          setCoins(mapped);
-          setIsLoading(false);
-          return;
-        }
+      const binanceRows = await fetchBinanceCryptoTableRows();
+      if (Array.isArray(binanceRows) && binanceRows.length > 0) {
+        const mapped: CryptoCoinItem[] = binanceRows.map((m, idx) => ({
+          rank: m.rank || idx + 1,
+          id: m.id,
+          name: m.name,
+          symbol: m.symbol,
+          price: m.price,
+          change1h: Number((m.change1d * 0.2).toFixed(2)),
+          change24h: m.change1d,
+          change7d: Number((m.change1d * 2.2).toFixed(2)),
+          marketCap: Number(m.marketCap || 1000000000),
+          volume24h: Number(m.volume24h || 50000000),
+          circulatingSupply: Math.max(1000, Math.round(Number(m.marketCap || 1000000000) / Math.max(m.price, 0.000001))),
+          category: (m.category as any) || 'Layer 1',
+          isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC', 'BNB'].includes(m.symbol),
+        }));
+        setCoins(mapped);
+        onCoinsLoaded?.(mapped);
+        setIsLoading(false);
+        return;
       }
-    } catch (e) {
-      // Fallback generator
+    } catch {
+      // Fallback below
     }
 
-    // Fallback generator for 250 crypto assets if CoinGecko rate-limits
+    // Fallback generator for 250 crypto assets
     generate250CoinsFallback();
   };
 

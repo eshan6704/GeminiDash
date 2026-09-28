@@ -23,6 +23,7 @@ export type MainMarketTab =
   | 'OPTIONS_HUB'
   | 'STOCK_CONSTITUENTS'
   | 'CRYPTO'
+  | 'COIN'
   | 'EQUITY_HUB';
 
 export type OptionsSubTab = 'INDEX' | 'STOCK' | 'BOTH';
@@ -57,13 +58,13 @@ const MASTER_PAGES: {
   {
     id: 'MARKET_OVERVIEW',
     num: '1',
-    shortLabel: 'Market Overview',
+    shortLabel: 'Markets',
     icon: <Globe className="w-3.5 h-3.5" />,
   },
   {
     id: 'OPTIONS_HUB',
     num: '2',
-    shortLabel: 'Option Chain',
+    shortLabel: 'Options',
     icon: <Waves className="w-3.5 h-3.5" />,
   },
   {
@@ -77,6 +78,12 @@ const MASTER_PAGES: {
     num: '4',
     shortLabel: 'Crypto',
     icon: <Coins className="w-3.5 h-3.5" />,
+  },
+  {
+    id: 'COIN',
+    num: '5',
+    shortLabel: 'Coin',
+    icon: <Activity className="w-3.5 h-3.5" />,
   },
 ];
 
@@ -96,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto px-3 sm:px-5 py-2.5 flex flex-wrap items-center justify-between gap-3">
         {/* Left: Main Market Tab Buttons + Active Desk Sub-Filters */}
         <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Primary Tab Bar: 1-Market Overview, 2-Option Chain, 3-Stocks, 4-Crypto */}
+          {/* Primary Tab Bar: 1-Markets, 2-Options, 3-Stocks, 4-Crypto, 5-Coin */}
           <div className="flex items-center gap-1 p-1 rounded-xl border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] flex-wrap">
             {MASTER_PAGES.map((page) => {
               const isSelected = mainMarketTab === page.id;
@@ -105,7 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={page.id}
                   type="button"
                   onClick={() => onSelectMarketTab(page.id)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
                     isSelected
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-elevated)] hover:text-[var(--theme-text-primary)]'
@@ -119,13 +126,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             })}
           </div>
 
-          {/* Inline Sub-Mode Switcher for Market Overview (All / Indian Indices / Global Indices & Futures / Forex / Commodities) */}
+          {/* Inline Sub-Mode Switcher for Market Overview (All / Indian / Global / Forex / Commodities) */}
           {mainMarketTab === 'MARKET_OVERVIEW' && onSelectMarketOverviewSubTab && (
             <div className="flex items-center gap-1 flex-wrap">
               {[
-                { id: 'ALL', label: 'All Macro', icon: <Activity className="w-3.5 h-3.5" /> },
-                { id: 'INDIAN_INDICES', label: 'Indian Indices', icon: <BarChart3 className="w-3.5 h-3.5" /> },
-                { id: 'GLOBAL_INDICES', label: 'Global Indices & Futures', icon: <Globe className="w-3.5 h-3.5" /> },
+                { id: 'ALL', label: 'All', icon: <Activity className="w-3.5 h-3.5" /> },
+                { id: 'INDIAN_INDICES', label: 'Indian', icon: <BarChart3 className="w-3.5 h-3.5" /> },
+                { id: 'GLOBAL_INDICES', label: 'Global', icon: <Globe className="w-3.5 h-3.5" /> },
                 { id: 'FOREX', label: 'Forex', icon: <DollarSign className="w-3.5 h-3.5" /> },
                 { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
               ].map((sub) => (
@@ -133,7 +140,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   key={sub.id}
                   type="button"
                   onClick={() => onSelectMarketOverviewSubTab(sub.id as MarketOverviewSubTab)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border whitespace-nowrap ${
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer border whitespace-nowrap ${
                     marketOverviewSubTab === sub.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
@@ -150,15 +157,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           {mainMarketTab === 'OPTIONS_HUB' && (
             <div className="flex items-center gap-1 flex-wrap">
               {[
-                { id: 'INDEX', label: 'Index Options', icon: <Waves className="w-3.5 h-3.5" /> },
-                { id: 'STOCK', label: 'Stock Options', icon: <Building2 className="w-3.5 h-3.5" /> },
+                { id: 'INDEX', label: 'Index', icon: <Waves className="w-3.5 h-3.5" /> },
+                { id: 'STOCK', label: 'Stock', icon: <Building2 className="w-3.5 h-3.5" /> },
                 { id: 'BOTH', label: 'Both', icon: <Activity className="w-3.5 h-3.5" /> },
               ].map((sub) => (
                 <button
                   key={sub.id}
                   type="button"
                   onClick={() => onSelectOptionsSubTab(sub.id as OptionsSubTab)}
-                  className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer border whitespace-nowrap ${
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer border whitespace-nowrap ${
                     optionsSubTab === sub.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'

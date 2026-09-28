@@ -250,15 +250,15 @@ export const NiftyStockAnalysisModal: React.FC<NiftyStockAnalysisModalProps> = (
           isLight ? 'bg-slate-100 border-slate-200' : 'bg-neutral-950 border-neutral-800'
         }`}>
           {[
-            { id: 'AI_SUMMARY', label: '⚡ AI Live Summary' },
-            { id: 'COMPANY', label: '🏢 Company Profile' },
-            { id: 'FUNDAMENTALS', label: '📊 Fundamentals & Results' },
-            { id: 'CORPORATE_ACTIONS', label: '🎁 Events & Corporate Timeline' },
-            { id: 'INTRADAY_HISTORICAL', label: '⏱️ Intraday & Historical' },
-            { id: 'TECHNICALS', label: '📈 Technicals & Pivots' },
-            { id: 'DERIVATIVES', label: '🎯 F&O Option Chain' },
-            { id: 'PEERS_OWNERSHIP', label: '⚔️ Peers & Shareholding' },
-            { id: 'ECOSYSTEM', label: '🌐 Direct HF API' },
+            { id: 'AI_SUMMARY', label: '⚡ Summary' },
+            { id: 'COMPANY', label: '🏢 Profile' },
+            { id: 'FUNDAMENTALS', label: '📊 Fundamentals' },
+            { id: 'CORPORATE_ACTIONS', label: '🎁 Events' },
+            { id: 'INTRADAY_HISTORICAL', label: '⏱️ Performance' },
+            { id: 'TECHNICALS', label: '📈 Technicals' },
+            { id: 'DERIVATIVES', label: '🎯 Option Chain' },
+            { id: 'PEERS_OWNERSHIP', label: '⚔️ Peers' },
+            { id: 'ECOSYSTEM', label: '🌐 API' },
           ].map((tab) => (
             <button
               key={tab.id}

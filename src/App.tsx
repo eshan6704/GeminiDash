@@ -47,6 +47,7 @@ import {
   PnlForecastingMatrixPanel,
 } from './components/CryptoSelectedCoinWorkspace';
 import { TrackedAsset } from './services/allTrackedAssets';
+import { MASTER_CRYPTO_250, fetchBinanceCryptoTableRows } from './services/marketDataTables';
 import { MarketAsset } from './types/trading';
 import {
   BarChart3,
@@ -61,6 +62,7 @@ import {
   Sliders,
   Briefcase,
   Info,
+  Search,
 } from 'lucide-react';
 
 type CryptoSectionATab =
@@ -81,25 +83,71 @@ type CryptoSectionBTab =
   | 'REMAINING_CRYPTO';
 
 export default function App() {
-  const [mainMarketTab, setMainMarketTab] = useState<MainMarketTab>('CRYPTO');
+  const [mainMarketTab, setMainMarketTab] = useState<MainMarketTab>('COIN');
   const [optionsSubTab, setOptionsSubTab] = useState<OptionsSubTab>('INDEX');
   const [equityHubSubTab, setEquityHubSubTab] = useState<EquityHubSubTab>('PORTFOLIO');
   const [marketOverviewSubTab, setMarketOverviewSubTab] = useState<MarketOverviewSubTab>('ALL');
 
-  // Section A & Section B single-selection dropdown states under Crypto Page
-  // Only ONE default is selected on each section:
-  // A- default is CRYPTO_TABLE (1- crypto table of 250 coin)
-  // B- default is COIN_INFO (1- selected coin all possible info, using BTC by default)
+  // Crypto (formerly Section A) & Coin (formerly Section B) single-selection dropdown states
+  // Implemented as main tabs so strictly ONE is active at a time
   const [sectionATab, setSectionATab] = useState<CryptoSectionATab>('CRYPTO_TABLE');
   const [sectionBTab, setSectionBTab] = useState<CryptoSectionBTab>('COIN_INFO');
   const [isDropdownAOpen, setIsDropdownAOpen] = useState<boolean>(false);
   const [isDropdownBOpen, setIsDropdownBOpen] = useState<boolean>(false);
+  const [isCoinPickerOpen, setIsCoinPickerOpen] = useState<boolean>(false);
   const dropdownARef = useRef<HTMLDivElement | null>(null);
   const dropdownBRef = useRef<HTMLDivElement | null>(null);
+  const coinPickerRef = useRef<HTMLDivElement | null>(null);
 
-  // Stores metadata when user selects any coin from the 250-coin table or search bar
+  // Available coins synced directly from the Binance Crypto Table
+  const [cryptoTableCoins, setCryptoTableCoins] = useState<CryptoCoinItem[]>(() =>
+    MASTER_CRYPTO_250.map((m, idx) => ({
+      rank: m.rank || idx + 1,
+      id: m.id,
+      name: m.name,
+      symbol: m.symbol,
+      price: m.price,
+      change1h: Number((m.change1d * 0.2).toFixed(2)),
+      change24h: m.change1d,
+      change7d: Number((m.change1d * 2.2).toFixed(2)),
+      marketCap: Number(m.marketCap || 1000000000),
+      volume24h: Number(m.volume24h || 50000000),
+      circulatingSupply: 100000000,
+      category: (m.category as any) || 'Layer 1',
+      isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC', 'BNB'].includes(m.symbol),
+    }))
+  );
+
+  // Stores metadata when user selects any coin from the 250-coin table or coin dropdown
   const [selectedCoinMeta, setSelectedCoinMeta] = useState<CryptoCoinItem | null>(null);
   const [searchedStockSymbol, setSearchedStockSymbol] = useState<string | null>(null);
+
+  // Load live Binance USDT crypto table coins on startup so the Coin tab dropdown has all available coins
+  useEffect(() => {
+    let mounted = true;
+    fetchBinanceCryptoTableRows().then((rows) => {
+      if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
+      const mapped: CryptoCoinItem[] = rows.map((m, idx) => ({
+        rank: m.rank || idx + 1,
+        id: m.id,
+        name: m.name,
+        symbol: m.symbol,
+        price: m.price,
+        change1h: Number((m.change1d * 0.2).toFixed(2)),
+        change24h: m.change1d,
+        change7d: Number((m.change1d * 2.2).toFixed(2)),
+        marketCap: Number(m.marketCap || 1000000000),
+        volume24h: Number(m.volume24h || 50000000),
+        circulatingSupply: 100000000,
+        category: (m.category as any) || 'Layer 1',
+        isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC', 'BNB'].includes(m.symbol),
+      }));
+      setCryptoTableCoins(mapped);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -108,6 +156,9 @@ export default function App() {
       }
       if (dropdownBRef.current && !dropdownBRef.current.contains(e.target as Node)) {
         setIsDropdownBOpen(false);
+      }
+      if (coinPickerRef.current && !coinPickerRef.current.contains(e.target as Node)) {
+        setIsCoinPickerOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -204,17 +255,18 @@ export default function App() {
   const currentSpotHolding = spotHoldings.find((h) => h && activeAsset && h.symbol === activeAsset.symbol);
   const currentSpotAmount = currentSpotHolding ? currentSpotHolding.amount : 0;
 
-  // Handler when a coin is selected from the 250-coin Market Table
+  // Handler when a coin is selected from the 250-coin Market Table in Crypto tab -> switches to Coin tab
   const handleSelectCoinFromTable = (symbol: string, coin?: CryptoCoinItem) => {
     const upper = symbol.toUpperCase();
     if (coin) {
       setSelectedCoinMeta(coin);
     }
     setSelectedSymbol(upper);
+    setMainMarketTab('COIN');
     addNotification(
       'info',
-      'Coin Selected in Section B',
-      `Loaded ${coin?.name || upper} (${upper}/USDT) into Section B workspace.`
+      'Coin Selected in Coin Tab',
+      `Loaded ${coin?.name || upper} (${upper}/USDT) into Coin workspace.`
     );
   };
 
@@ -248,11 +300,11 @@ export default function App() {
         isTradeableInSim: true,
       });
       setSelectedSymbol(asset.symbol.toUpperCase());
-      setMainMarketTab('CRYPTO');
+      setMainMarketTab('COIN');
       addNotification(
         'info',
         'Coin Selected via Search',
-        `Loaded ${asset.name} (${asset.symbol}) into Section B Coin Workspace.`
+        `Loaded ${asset.name} (${asset.symbol}) into Coin Workspace.`
       );
       return;
     }
@@ -294,7 +346,7 @@ export default function App() {
     }
   };
 
-  // Dropdown options for Section A (Crypto Common)
+  // Compact dropdown options for Crypto tab
   const sectionAOptions: {
     id: CryptoSectionATab;
     num: string;
@@ -305,41 +357,41 @@ export default function App() {
     {
       id: 'CRYPTO_TABLE',
       num: '1',
-      label: 'Crypto Table of 250 Coins',
-      subtitle: 'Default · Click any coin to load in Section B',
+      label: 'Top 250 Coins',
+      subtitle: 'Market Cap Table',
       icon: <Coins className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'ADVANCED_CRYPTO_SCREENER',
       num: '2',
-      label: 'Advanced Crypto Screener',
-      subtitle: 'Real-Time 250-Coin Filter by Market Cap, 24h Change & Volume',
+      label: 'Screener',
+      subtitle: '250-Coin Filter',
       icon: <Sliders className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'MICRO_VOLATILITY',
       num: '3',
-      label: 'Micro Volatility Matrix',
-      subtitle: 'ATR / IV Regimes, Cross-Asset Beta & Heatmaps',
+      label: 'Volatility',
+      subtitle: 'ATR & Regimes',
       icon: <Activity className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'WHALE_ORDERS',
       num: '4',
       label: 'Whale Orders',
-      subtitle: 'Institutional Block Executions (> $10k USDT)',
+      subtitle: 'Block Trades > $10k',
       icon: <Waves className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'CRYPTO_COMMON',
       num: '5',
-      label: 'Other Crypto Common (Ticker, 30D Backtest & Cloud Sync)',
-      subtitle: 'Multi-Asset Ribbon, 30D Equity Curve & B2 Sync',
+      label: 'Overview & Sync',
+      subtitle: 'Ticker, PnL & Cloud',
       icon: <BarChart3 className="w-4 h-4 text-emerald-600" />,
     },
   ];
 
-  // Dropdown options for Section B (Selected Coin Workspace)
+  // Compact dropdown options for Coin tab
   const sectionBOptions: {
     id: CryptoSectionBTab;
     num: string;
@@ -350,57 +402,57 @@ export default function App() {
     {
       id: 'COIN_INFO',
       num: '1',
-      label: `Selected Coin (${activeAsset.symbol}) — All Possible Info`,
-      subtitle: 'Default · Valuation, Supply, Derivatives & Pivot Levels',
+      label: 'Coin Info',
+      subtitle: 'Metrics & Pivots',
       icon: <Info className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'TICKS_AND_CHART',
       num: '2',
-      label: `(a) Tick Pattern u12_6.7, d15_5.6 (u1d1/Flat Filter) & (b) Current Chart (${activeAsset.symbol})`,
-      subtitle: 'Consecutive Tick Runs, 500-Tick Bullish/Bearish/Flat/Flip Score + Chart',
+      label: 'Ticks & Chart',
+      subtitle: 'Rolling Ticks + Chart',
       icon: <Activity className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'ORDERBOOK',
       num: '3',
-      label: `Orderbook (${activeAsset.symbol}/USDT)`,
-      subtitle: 'Live Grouped Market Depth, Spread & Bid/Ask Wall',
+      label: 'Orderbook',
+      subtitle: 'Market Depth',
       icon: <Layers className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'BINANCE_RECENT_TRADES',
       num: '4',
-      label: `Binance Real Recent Trades (${activeAsset.symbol}/USDT)`,
-      subtitle: 'Live WebSocket Trade Execution Stream & Quantities',
+      label: 'Recent Trades',
+      subtitle: 'Live Tape',
       icon: <Zap className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'OPTION_CHAIN',
       num: '5',
-      label: `Option Chain for Selected Symbol (${activeAsset.symbol})`,
-      subtitle: 'Deribit Real-Time Calls/Puts, Implied Volatility & Greeks',
+      label: 'Option Chain',
+      subtitle: 'Calls, Puts & IV',
       icon: <Waves className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'PAPER_PORTFOLIO_FORECAST',
       num: '6',
-      label: 'Paper Trading, Portfolio Simulator & PnL Forecasting (-20% to +2%)',
-      subtitle: 'Direct Order Execution, Equity Overview & Stress Matrix',
+      label: 'Paper Trade & PnL',
+      subtitle: 'Simulator & Forecast',
       icon: <Briefcase className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'AUTO_GRID_SIMULATION',
       num: '7',
-      label: 'Grid-Based Auto Simulation (Shark Terminal) & History',
-      subtitle: 'Automated Multi-Tier Grid Bot, Ladder & Execution Logs',
+      label: 'Auto Grid',
+      subtitle: 'Grid Bot & Logs',
       icon: <Sparkles className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'REMAINING_CRYPTO',
       num: '8',
-      label: 'Remaining Crypto Tools (Positions, Limit Orders, Spot & Alerts)',
-      subtitle: 'Active Margin Positions, Spot Wallet, Price Alerts & Settings',
+      label: 'Positions & Alerts',
+      subtitle: 'Orders, Spot & Alerts',
       icon: <Sliders className="w-4 h-4 text-emerald-600" />,
     },
   ];
@@ -491,274 +543,334 @@ export default function App() {
             Only ONE view is active in Section A (default: Crypto Table of 250 Coins)
             Only ONE view is active in Section B (default: Selected Coin All Info, BTC)
             ===================================================================== */}
+        {/* =====================================================================
+            MAIN TAB 4: CRYPTO (FORMERLY SECTION A — ONE ACTIVE AT A TIME)
+            ===================================================================== */}
         {mainMarketTab === 'CRYPTO' && (
-          <div className="space-y-6">
-            {/* -----------------------------------------------------------------
-                SECTION A: CRYPTO MARKET & COMMON INTELLIGENCE (DROPDOWN)
-                ----------------------------------------------------------------- */}
-            <section className="space-y-3">
-              <div className="px-3.5 py-2.5 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-mono font-bold">
-                    SECTION A
-                  </span>
-                  <span className="text-xs font-bold text-[var(--theme-text-secondary)]">
-                    Crypto Market View:
-                  </span>
+          <section className="space-y-3">
+            <div className="px-3.5 py-2 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-mono font-bold">
+                  CRYPTO
+                </span>
 
-                  {/* Dropdown A Trigger */}
-                  <div className="relative" ref={dropdownARef}>
-                    <button
-                      type="button"
-                      title={activeOptionA.subtitle}
-                      onClick={() => setIsDropdownAOpen((prev) => !prev)}
-                      className="inline-flex items-center justify-between gap-3 min-w-[260px] sm:min-w-[340px] px-3.5 py-2 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        {activeOptionA.icon}
-                        <span className="truncate">
-                          {activeOptionA.num}. {activeOptionA.label}
-                        </span>
-                      </span>
-                      <ChevronDown
-                        className={`w-4 h-4 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
-                          isDropdownAOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
-
-                    {isDropdownAOpen && (
-                      <div className="absolute left-0 mt-1.5 w-[320px] sm:w-[400px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1.5 divide-y divide-[var(--theme-border-subtle)]">
-                        {sectionAOptions.map((opt) => {
-                          const isSelected = sectionATab === opt.id;
-                          return (
-                            <button
-                              key={opt.id}
-                              type="button"
-                              onClick={() => {
-                                setSectionATab(opt.id);
-                                setIsDropdownAOpen(false);
-                              }}
-                              className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                                isSelected
-                                  ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
-                                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                {opt.icon}
-                                <div className="min-w-0">
-                                  <div className="text-xs font-semibold truncate">
-                                    {opt.num}. {opt.label}
-                                  </div>
-                                  <div className="text-[10px] font-mono text-[var(--theme-text-muted)] truncate">
-                                    {opt.subtitle}
-                                  </div>
-                                </div>
-                              </div>
-                              {isSelected && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Non-intrusive Hover Tooltip for Section A Selected View */}
-                  <div
-                    className="relative group inline-flex items-center"
+                {/* Dropdown A Trigger (Compact) */}
+                <div className="relative" ref={dropdownARef}>
+                  <button
+                    type="button"
                     title={activeOptionA.subtitle}
+                    onClick={() => setIsDropdownAOpen((prev) => !prev)}
+                    className="inline-flex items-center justify-between gap-2.5 min-w-[175px] px-3 py-1.5 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
                   >
-                    <span className="p-1.5 rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] hover:text-emerald-600 transition-colors cursor-help">
-                      <Info className="w-3.5 h-3.5" />
-                    </span>
-                    <div className="pointer-events-none absolute left-0 top-full mt-1.5 w-64 sm:w-72 p-2.5 rounded-lg border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
-                      <div className="text-[11px] font-bold text-[var(--theme-text-primary)]">
+                    <span className="flex items-center gap-1.5 truncate">
+                      {activeOptionA.icon}
+                      <span className="truncate">
                         {activeOptionA.num}. {activeOptionA.label}
-                      </div>
-                      <div className="text-[10px] font-mono text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
-                        {activeOptionA.subtitle}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="text-[11px] font-mono text-[var(--theme-text-muted)] hidden md:flex items-center gap-2">
-                  <span>{activeOptionA.subtitle}</span>
-                </div>
-              </div>
-
-              {/* Section A Content (Strictly ONE active view) */}
-              <div>
-                {sectionATab === 'CRYPTO_TABLE' && (
-                  <CryptoMarketCapTable
-                    selectedSymbol={activeAsset.symbol}
-                    onSelectCoinToTrade={handleSelectCoinFromTable}
-                  />
-                )}
-
-                {sectionATab === 'ADVANCED_CRYPTO_SCREENER' && (
-                  <AdvancedCryptoScreenerView
-                    selectedSymbol={activeAsset.symbol}
-                    liveAssets={assets}
-                    onSelectCoinToTrade={handleSelectCoinFromTable}
-                  />
-                )}
-
-                {sectionATab === 'MICRO_VOLATILITY' && (
-                  <MarketAnalyticsDashboard
-                    currentBtcPrice={assets.BTC?.price || 96500}
-                    currentPaxgPrice={assets.PAXG?.price || 2750}
-                  />
-                )}
-
-                {sectionATab === 'WHALE_ORDERS' && (
-                  <WhaleTradesFeed
-                    selectedSymbol={activeAsset.symbol}
-                    assets={assets}
-                    mode="WHALE_ONLY"
-                  />
-                )}
-
-                {sectionATab === 'CRYPTO_COMMON' && (
-                  <div className="space-y-4">
-                    <CryptoHeaderBar
-                      cashBalance={cashBalance}
-                      totalEquity={totalEquity}
-                      isLiveConnected={isLiveConnected}
-                      goldHedgeRatio={goldHedgeRatio}
-                      cloudSyncStatus={cloudSyncStatus}
-                      lastCloudSync={lastCloudSync}
-                      onManualCloudSync={() => {
-                        syncSimulatorToCloud(true);
-                        addNotification(
-                          'success',
-                          'B2 Cloud Sync',
-                          'Simulator state successfully synced to Backblaze B2 persistent store.'
-                        );
-                      }}
-                      onOpenFirestoreModal={() => setIsStorageOpen(true)}
-                      onOpenWhatIf={() => setIsWhatIfOpen(true)}
-                      onOpenAiReview={() => setIsAiReviewOpen(true)}
-                      onOpenSettings={() => setIsSettingsOpen(true)}
-                      onReset={() => resetSimulation()}
-                      onAddFunds={() => adjustCashBalance(5000)}
-                    />
-                    <TickerBar
-                      assets={assets}
-                      selectedSymbol={activeAsset.symbol}
-                      onSelectSymbol={setSelectedSymbol}
-                    />
-                    <DailyPnLChart tradeHistory={tradeHistory} brokerName="Shark Exchange" />
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* -----------------------------------------------------------------
-                SECTION B: SELECTED COIN WORKSPACE (DROPDOWN, DEFAULT COIN = BTC)
-                ----------------------------------------------------------------- */}
-            <section className="space-y-3">
-              <div className="px-3.5 py-2.5 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-mono font-bold">
-                    SECTION B
-                  </span>
-                  <span className="text-xs font-bold text-[var(--theme-text-secondary)]">
-                    Selected Coin ({activeAsset.symbol}/USDT):
-                  </span>
-
-                  {/* Dropdown B Trigger */}
-                  <div className="relative" ref={dropdownBRef}>
-                    <button
-                      type="button"
-                      title={activeOptionB.subtitle}
-                      onClick={() => setIsDropdownBOpen((prev) => !prev)}
-                      className="inline-flex items-center justify-between gap-3 min-w-[270px] sm:min-w-[390px] px-3.5 py-2 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        {activeOptionB.icon}
-                        <span className="truncate">
-                          {activeOptionB.num}. {activeOptionB.label}
-                        </span>
                       </span>
-                      <ChevronDown
-                        className={`w-4 h-4 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
-                          isDropdownBOpen ? 'rotate-180' : ''
-                        }`}
-                      />
-                    </button>
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
+                        isDropdownAOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
 
-                    {isDropdownBOpen && (
-                      <div className="absolute left-0 mt-1.5 w-[330px] sm:w-[440px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1.5 divide-y divide-[var(--theme-border-subtle)] max-h-[420px] overflow-y-auto">
-                        {sectionBOptions.map((opt) => {
-                          const isSelected = sectionBTab === opt.id;
+                  {isDropdownAOpen && (
+                    <div className="absolute left-0 mt-1.5 w-[220px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1 divide-y divide-[var(--theme-border-subtle)]">
+                      {sectionAOptions.map((opt) => {
+                        const isSelected = sectionATab === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setSectionATab(opt.id);
+                              setIsDropdownAOpen(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
+                                : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {opt.icon}
+                              <span className="text-xs font-semibold truncate">
+                                {opt.num}. {opt.label}
+                              </span>
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMainMarketTab('COIN')}
+                  className="px-2.5 py-1 rounded-lg border border-emerald-600/30 bg-emerald-600/10 hover:bg-emerald-600/20 text-[11px] font-bold text-emerald-700 cursor-pointer transition-colors"
+                >
+                  Coin ({activeAsset.symbol}) →
+                </button>
+              </div>
+            </div>
+
+            {/* Crypto Content (Strictly ONE active view) */}
+            <div>
+              {sectionATab === 'CRYPTO_TABLE' && (
+                <CryptoMarketCapTable
+                  selectedSymbol={activeAsset.symbol}
+                  onSelectCoinToTrade={handleSelectCoinFromTable}
+                  onCoinsLoaded={setCryptoTableCoins}
+                />
+              )}
+
+              {sectionATab === 'ADVANCED_CRYPTO_SCREENER' && (
+                <AdvancedCryptoScreenerView
+                  selectedSymbol={activeAsset.symbol}
+                  liveAssets={assets}
+                  onSelectCoinToTrade={handleSelectCoinFromTable}
+                />
+              )}
+
+              {sectionATab === 'MICRO_VOLATILITY' && (
+                <MarketAnalyticsDashboard
+                  currentBtcPrice={assets.BTC?.price || 96500}
+                  currentPaxgPrice={assets.PAXG?.price || 2750}
+                />
+              )}
+
+              {sectionATab === 'WHALE_ORDERS' && (
+                <WhaleTradesFeed
+                  selectedSymbol={activeAsset.symbol}
+                  assets={assets}
+                  mode="WHALE_ONLY"
+                />
+              )}
+
+              {sectionATab === 'CRYPTO_COMMON' && (
+                <div className="space-y-4">
+                  <CryptoHeaderBar
+                    cashBalance={cashBalance}
+                    totalEquity={totalEquity}
+                    isLiveConnected={isLiveConnected}
+                    goldHedgeRatio={goldHedgeRatio}
+                    cloudSyncStatus={cloudSyncStatus}
+                    lastCloudSync={lastCloudSync}
+                    onManualCloudSync={() => {
+                      syncSimulatorToCloud(true);
+                      addNotification(
+                        'success',
+                        'B2 Cloud Sync',
+                        'Simulator state successfully synced to Backblaze B2 persistent store.'
+                      );
+                    }}
+                    onOpenFirestoreModal={() => setIsStorageOpen(true)}
+                    onOpenWhatIf={() => setIsWhatIfOpen(true)}
+                    onOpenAiReview={() => setIsAiReviewOpen(true)}
+                    onOpenSettings={() => setIsSettingsOpen(true)}
+                    onReset={() => resetSimulation()}
+                    onAddFunds={() => adjustCashBalance(5000)}
+                  />
+                  <TickerBar
+                    assets={assets}
+                    selectedSymbol={activeAsset.symbol}
+                    onSelectSymbol={setSelectedSymbol}
+                  />
+                  <DailyPnLChart tradeHistory={tradeHistory} brokerName="Shark Exchange" />
+                </div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* =====================================================================
+            MAIN TAB 5: COIN (FORMERLY SECTION B — ONE ACTIVE AT A TIME)
+            ===================================================================== */}
+        {mainMarketTab === 'COIN' && (
+          <section className="space-y-3">
+            <div className="px-3.5 py-2 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-mono font-bold">
+                  COIN
+                </span>
+
+                {/* Dropdown List of Available Coins from Binance Crypto Table */}
+                <div className="relative" ref={coinPickerRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsCoinPickerOpen((prev) => !prev)}
+                    className="inline-flex items-center justify-between gap-2.5 min-w-[205px] px-3 py-1.5 rounded-lg text-xs font-mono font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
+                    title="Select available coin from Binance Crypto Table"
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      <Coins className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="text-emerald-600 font-extrabold">{activeAsset.symbol}</span>
+                      <span className="text-[var(--theme-text-secondary)] font-sans font-medium truncate max-w-[90px]">
+                        {activeAsset.name}
+                      </span>
+                      <span className="text-[11px] text-[var(--theme-text-primary)]">
+                        ${activeAsset.price < 1 ? activeAsset.price.toFixed(4) : activeAsset.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
+                        isCoinPickerOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {isCoinPickerOpen && (
+                    <div className="absolute left-0 mt-1.5 w-[295px] sm:w-[330px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1">
+                      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-[var(--theme-text-muted)] border-b border-[var(--theme-border-subtle)]">
+                        <span>BINANCE CRYPTO TABLE ({cryptoTableCoins.length} COINS)</span>
+                        <span>USDT SPOT</span>
+                      </div>
+
+                      <div className="max-h-[320px] overflow-y-auto divide-y divide-[var(--theme-border-subtle)]">
+                        {cryptoTableCoins.map((c) => {
+                          const isSelected = activeAsset.symbol === c.symbol.toUpperCase();
+                          const livePrice = assets[c.symbol.toUpperCase()]?.price || c.price;
+                          const changePct = assets[c.symbol.toUpperCase()]?.change24h ?? c.change24h;
                           return (
                             <button
-                              key={opt.id}
+                              key={c.id || c.symbol}
                               type="button"
                               onClick={() => {
-                                setSectionBTab(opt.id);
-                                setIsDropdownBOpen(false);
+                                handleSelectCoinFromTable(c.symbol, {
+                                  ...c,
+                                  price: livePrice,
+                                });
+                                setIsCoinPickerOpen(false);
                               }}
-                              className={`w-full px-3.5 py-2.5 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
                                 isSelected
-                                  ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
+                                  ? 'bg-emerald-600/15 text-[var(--theme-text-primary)] font-bold'
                                   : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
                               }`}
                             >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                {opt.icon}
-                                <div className="min-w-0">
-                                  <div className="text-xs font-semibold truncate">
-                                    {opt.num}. {opt.label}
-                                  </div>
-                                  <div className="text-[10px] font-mono text-[var(--theme-text-muted)] truncate">
-                                    {opt.subtitle}
-                                  </div>
-                                </div>
+                              <div className="flex items-center gap-2 min-w-0 font-mono">
+                                <span className="text-[10px] text-[var(--theme-text-muted)] w-6 shrink-0">
+                                  #{c.rank}
+                                </span>
+                                <span className="text-xs font-bold text-emerald-600 shrink-0">
+                                  {c.symbol}
+                                </span>
+                                <span className="text-[11px] text-[var(--theme-text-primary)] truncate font-sans">
+                                  {c.name}
+                                </span>
                               </div>
-                              {isSelected && <Check className="w-4 h-4 text-emerald-600 shrink-0" />}
+                              <div className="flex items-center gap-2 shrink-0 font-mono">
+                                <span className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                                  ${livePrice < 1 ? livePrice.toFixed(4) : livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                                </span>
+                                <span
+                                  className={`text-[10px] font-bold ${
+                                    changePct >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                                  }`}
+                                >
+                                  {changePct >= 0 ? '+' : ''}
+                                  {Number(changePct).toFixed(2)}%
+                                </span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                              </div>
                             </button>
                           );
                         })}
                       </div>
-                    )}
-                  </div>
-
-                  {/* Non-intrusive Hover Tooltip for Section B Selected View */}
-                  <div
-                    className="relative group inline-flex items-center"
-                    title={activeOptionB.subtitle}
-                  >
-                    <span className="p-1.5 rounded-lg border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-muted)] hover:text-emerald-600 transition-colors cursor-help">
-                      <Info className="w-3.5 h-3.5" />
-                    </span>
-                    <div className="pointer-events-none absolute left-0 top-full mt-1.5 w-64 sm:w-72 p-2.5 rounded-lg border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-150 z-50">
-                      <div className="text-[11px] font-bold text-[var(--theme-text-primary)]">
-                        {activeOptionB.num}. {activeOptionB.label}
-                      </div>
-                      <div className="text-[10px] font-mono text-[var(--theme-text-muted)] mt-0.5 leading-relaxed">
-                        {activeOptionB.subtitle}
-                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                {/* Active Coin Live Price Pill in Section B Header */}
-                <div className="flex items-center gap-3 font-mono text-xs">
-                  <span className="text-[var(--theme-text-muted)]">Active Coin:</span>
-                  <span className="font-extrabold text-[var(--theme-text-primary)]">
-                    {activeAsset.name} ({activeAsset.symbol})
-                  </span>
-                  <span className="font-bold text-emerald-600">
-                    ${activeAsset.price.toLocaleString('en-US', {
-                      minimumFractionDigits: activeAsset.price < 1 ? 4 : 2,
-                      maximumFractionDigits: activeAsset.price < 1 ? 4 : 2,
-                    })}
-                  </span>
+                {/* Dropdown B Trigger (Compact View Selector) */}
+                <div className="relative" ref={dropdownBRef}>
+                  <button
+                    type="button"
+                    title={activeOptionB.subtitle}
+                    onClick={() => setIsDropdownBOpen((prev) => !prev)}
+                    className="inline-flex items-center justify-between gap-2.5 min-w-[175px] px-3 py-1.5 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
+                  >
+                    <span className="flex items-center gap-1.5 truncate">
+                      {activeOptionB.icon}
+                      <span className="truncate">
+                        {activeOptionB.num}. {activeOptionB.label}
+                      </span>
+                    </span>
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
+                        isDropdownBOpen ? 'rotate-180' : ''
+                      }`}
+                    />
+                  </button>
+
+                  {isDropdownBOpen && (
+                    <div className="absolute left-0 mt-1.5 w-[225px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1 divide-y divide-[var(--theme-border-subtle)] max-h-[380px] overflow-y-auto">
+                      {sectionBOptions.map((opt) => {
+                        const isSelected = sectionBTab === opt.id;
+                        return (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => {
+                              setSectionBTab(opt.id);
+                              setIsDropdownBOpen(false);
+                            }}
+                            className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
+                                : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {opt.icon}
+                              <span className="text-xs font-semibold truncate">
+                                {opt.num}. {opt.label}
+                              </span>
+                            </div>
+                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {/* 1-Click Quick Coin Buttons in Coin Tab Header */}
+              <div className="flex items-center gap-1 flex-wrap font-mono">
+                {['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'PAXG', 'ZEC', 'BNB', 'SUI'].map((sym) => {
+                  const isCurrent = activeAsset.symbol === sym;
+                  return (
+                    <button
+                      key={sym}
+                      type="button"
+                      onClick={() => {
+                        const found = cryptoTableCoins.find((c) => c.symbol.toUpperCase() === sym);
+                        if (found) {
+                          handleSelectCoinFromTable(sym, {
+                            ...found,
+                            price: assets[sym]?.price || found.price,
+                          });
+                        } else {
+                          setSelectedSymbol(sym);
+                        }
+                      }}
+                      className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                          : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border)] hover:bg-[var(--theme-bg-elevated)]'
+                      }`}
+                    >
+                      {sym}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
               {/* Section B Content (Strictly ONE active view) */}
               <div>
@@ -952,7 +1064,6 @@ export default function App() {
                 )}
               </div>
             </section>
-          </div>
         )}
       </main>
 
