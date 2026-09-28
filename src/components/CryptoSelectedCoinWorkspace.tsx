@@ -462,11 +462,12 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
    - Up/Down ticks in flipping (u1d1) are NEVER counted in Bullish or Bearish.
    ============================================================================ */
 
-export type RollingWindowSize = 500 | 1000;
+export type RollingFifoSeconds = 5 | 30 | 60 | 300;
 
 interface RawTickItem {
   seq: number;
   price: number;
+  signedDelta: number;
   absDelta: number;
   dir: 'u' | 'd' | 'flat';
   timestamp: number;
@@ -475,26 +476,206 @@ interface RawTickItem {
 interface ConsecutiveRunRecord {
   id: string;
   dir: 'u' | 'd';
-  count: number; // 1st number: consecutive count of similar pattern
-  netChange: number; // 2nd number after '_': total net change covered by count
+  count: number;
+  netChange: number;
   endPrice: number;
   timestamp: number;
-  isFilteredFlip?: boolean; // true if count === 1 (u1d1 flip noise)
+  isFilteredFlip?: boolean;
 }
 
-// Persistent per-symbol rolling store so tick accumulation from the 1st tick
-// continues seamlessly across Section B sub-views up to 1000 rolling ticks
+interface ClassifiedTickItem extends RawTickItem {
+  classification: 'raw_flat' | 'flip' | 'valid_u' | 'valid_d';
+  runCount: number;
+}
+
+interface CompletedSecondFifoItem {
+  secKey: number;
+  secSeq: number;
+  totalTicks: number;
+  validTicks: number;
+  upTrendTicks: number;
+  downTrendTicks: number;
+  netPriceDelta: number;
+  totalPath: number;
+}
+
+interface TimeframeStatRow {
+  id: string;
+  label: string;
+  shortLabel: string;
+  targetSec: number;
+  filledSec: number;
+  totalTicks: number;
+  validTicks: number;
+  upTrendTicks: number;
+  downTrendTicks: number;
+  validOverTotalPct: number;
+  bullishOverValidPct: number;
+  bearishOverValidPct: number;
+  ticksPerSec: number;
+  validTicksPerSec: number;
+  ticksPerMin: number;
+  netPriceDelta: number;
+  velocityPerSec: number;
+  efficiencyPct: number;
+  avgLatencyMs: number;
+  activityLabel: string;
+  biasLabel: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'QUIET';
+}
+
 const symbolRollingTickBuffers: Record<
   string,
   {
     rawTicks: RawTickItem[];
     lastPrice: number;
     lifetimeSeq: number;
+    startedAt: number;
+    lastProcessedSecKey: number;
+    secSeqCounter: number;
+    completedSecondsFifo: CompletedSecondFifoItem[];
   }
 > = {};
 
+function classifyTickBuffer(ticks: RawTickItem[]): {
+  classified: ClassifiedTickItem[];
+  runs: ConsecutiveRunRecord[];
+} {
+  const runs: ConsecutiveRunRecord[] = [];
+  const runIndicesForTick: number[] = new Array(ticks.length).fill(-1);
+
+  for (let i = 0; i < ticks.length; i++) {
+    const t = ticks[i];
+    if (t.dir === 'flat') {
+      runIndicesForTick[i] = -1;
+      continue;
+    }
+    const lastRunIdx = runs.length - 1;
+    const lastRun = lastRunIdx >= 0 ? runs[lastRunIdx] : null;
+    if (lastRun && lastRun.dir === t.dir) {
+      lastRun.count += 1;
+      lastRun.netChange = Number((lastRun.netChange + t.absDelta).toFixed(4));
+      lastRun.endPrice = t.price;
+      lastRun.timestamp = t.timestamp;
+      lastRun.isFilteredFlip = false;
+      runIndicesForTick[i] = lastRunIdx;
+    } else {
+      runs.push({
+        id: `run-${t.seq}`,
+        dir: t.dir,
+        count: 1,
+        netChange: Number(t.absDelta.toFixed(4)),
+        endPrice: t.price,
+        timestamp: t.timestamp,
+        isFilteredFlip: true,
+      });
+      runIndicesForTick[i] = runs.length - 1;
+    }
+  }
+
+  const classified: ClassifiedTickItem[] = ticks.map((t, idx) => {
+    const rIdx = runIndicesForTick[idx];
+    if (rIdx === -1 || t.dir === 'flat') {
+      return { ...t, classification: 'raw_flat', runCount: 0 };
+    }
+    const run = runs[rIdx];
+    if (run.count === 1) {
+      return { ...t, classification: 'flip', runCount: 1 };
+    }
+    return {
+      ...t,
+      classification: run.dir === 'u' ? 'valid_u' : 'valid_d',
+      runCount: run.count,
+    };
+  });
+
+  return { classified, runs };
+}
+
+function summarizeFifoSeconds(
+  buckets: CompletedSecondFifoItem[],
+  id: string,
+  label: string,
+  shortLabel: string,
+  targetSec: number
+): TimeframeStatRow {
+  const filledSec = buckets.length;
+  const spanSec = Math.max(1, filledSec);
+  let totalTicks = 0;
+  let validTicks = 0;
+  let upTrendTicks = 0;
+  let downTrendTicks = 0;
+  let netPriceDelta = 0;
+  let totalPath = 0;
+
+  for (let i = 0; i < buckets.length; i++) {
+    const b = buckets[i];
+    totalTicks += b.totalTicks;
+    validTicks += b.validTicks;
+    upTrendTicks += b.upTrendTicks;
+    downTrendTicks += b.downTrendTicks;
+    netPriceDelta += b.netPriceDelta;
+    totalPath += b.totalPath;
+  }
+
+  const validOverTotalPct = totalTicks > 0 ? (validTicks / totalTicks) * 100 : 0;
+  const bullishOverValidPct = validTicks > 0 ? (upTrendTicks / validTicks) * 100 : 0;
+  const bearishOverValidPct = validTicks > 0 ? (downTrendTicks / validTicks) * 100 : 0;
+
+  const ticksPerSec = totalTicks / spanSec;
+  const validTicksPerSec = validTicks / spanSec;
+  const ticksPerMin = ticksPerSec * 60;
+  const velocityPerSec = netPriceDelta / spanSec;
+  const efficiencyPct =
+    totalPath > 0 ? Math.min(100, (Math.abs(netPriceDelta) / totalPath) * 100) : 0;
+  const avgLatencyMs = totalTicks > 0 ? Math.round((spanSec * 1000) / totalTicks) : 0;
+
+  const activityLabel =
+    ticksPerSec >= 8
+      ? 'EXTREME BURST'
+      : ticksPerSec >= 4
+      ? 'HIGH ACTIVE'
+      : ticksPerSec >= 1.8
+      ? 'ACTIVE'
+      : ticksPerSec >= 0.5
+      ? 'MODERATE'
+      : 'QUIET';
+
+  const biasLabel: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'QUIET' =
+    validTicks === 0
+      ? 'QUIET'
+      : upTrendTicks > downTrendTicks * 1.2
+      ? 'BULLISH'
+      : downTrendTicks > upTrendTicks * 1.2
+      ? 'BEARISH'
+      : 'NEUTRAL';
+
+  return {
+    id,
+    label,
+    shortLabel,
+    targetSec,
+    filledSec,
+    totalTicks,
+    validTicks,
+    upTrendTicks,
+    downTrendTicks,
+    validOverTotalPct,
+    bullishOverValidPct,
+    bearishOverValidPct,
+    ticksPerSec,
+    validTicksPerSec,
+    ticksPerMin,
+    netPriceDelta,
+    velocityPerSec,
+    efficiencyPct,
+    avgLatencyMs,
+    activityLabel,
+    biasLabel,
+  };
+}
+
 export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ asset }) => {
-  const [rollingWindow, setRollingWindow] = useState<RollingWindowSize>(500);
+  const [fifoWindowSec, setFifoWindowSec] = useState<RollingFifoSeconds>(30);
   const [filterFlipsAndFlat, setFilterFlipsAndFlat] = useState<boolean>(true);
   const [tickVersion, setTickVersion] = useState<number>(0);
 
@@ -502,26 +683,93 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
   const latestAssetPriceRef = useRef<number>(asset.price || 96500);
   latestAssetPriceRef.current = asset.price || 96500;
 
-  // Ensure buffer exists for current symbol (starts empty at 0 ticks to build from 1st tick)
   if (!symbolRollingTickBuffers[symbol]) {
+    const initSec = Math.floor(Date.now() / 1000);
     symbolRollingTickBuffers[symbol] = {
       rawTicks: [],
       lastPrice: asset.price || 96500,
       lifetimeSeq: 0,
+      startedAt: Date.now(),
+      lastProcessedSecKey: initSec - 1,
+      secSeqCounter: 0,
+      completedSecondsFifo: [],
     };
   }
 
-  // Helper to record a single incoming tick from Tick #1 up to 1000 rolling max
+  // Finalize any completed 1-second buckets and push into FIFO (maintaining up to 300s = 5m FIFO)
+  const syncCompletedSecondsToFifo = (nowMs: number) => {
+    const store = symbolRollingTickBuffers[symbol];
+    if (!store) return;
+    const currentSecKey = Math.floor(nowMs / 1000);
+    if (currentSecKey <= store.lastProcessedSecKey) return;
+
+    const { classified } = classifyTickBuffer(store.rawTicks);
+
+    // Process each second that has completed up to currentSecKey - 1
+    const startSec = Math.max(
+      store.lastProcessedSecKey + 1,
+      currentSecKey - 300
+    );
+
+    for (let sKey = startSec; sKey < currentSecKey; sKey++) {
+      const secStartMs = sKey * 1000;
+      const secEndMs = secStartMs + 1000;
+      let totalTicks = 0;
+      let validTicks = 0;
+      let upTrendTicks = 0;
+      let downTrendTicks = 0;
+      let netPriceDelta = 0;
+      let totalPath = 0;
+
+      for (let i = classified.length - 1; i >= 0; i--) {
+        const t = classified[i];
+        if (t.timestamp >= secEndMs) continue;
+        if (t.timestamp < secStartMs) break;
+        totalTicks += 1;
+        netPriceDelta += t.signedDelta;
+        totalPath += t.absDelta;
+        if (t.classification === 'valid_u') {
+          validTicks += 1;
+          upTrendTicks += 1;
+        } else if (t.classification === 'valid_d') {
+          validTicks += 1;
+          downTrendTicks += 1;
+        }
+      }
+
+      store.secSeqCounter += 1;
+      store.completedSecondsFifo.push({
+        secKey: sKey,
+        secSeq: store.secSeqCounter,
+        totalTicks,
+        validTicks,
+        upTrendTicks,
+        downTrendTicks,
+        netPriceDelta,
+        totalPath,
+      });
+
+      // Maintain max 300 completed 1-second buckets in FIFO (5 minutes)
+      if (store.completedSecondsFifo.length > 300) {
+        store.completedSecondsFifo.shift();
+      }
+    }
+
+    store.lastProcessedSecKey = currentSecKey - 1;
+  };
+
   const recordIncomingTick = (incomingPrice: number) => {
     if (!incomingPrice || isNaN(incomingPrice) || incomingPrice <= 0) return;
     const store = symbolRollingTickBuffers[symbol];
     if (!store) return;
 
+    const nowMs = Date.now();
+    syncCompletedSecondsToFifo(nowMs);
+
     const prevPrice = store.lastPrice > 0 ? store.lastPrice : incomingPrice;
     const diff = incomingPrice - prevPrice;
     store.lastPrice = incomingPrice;
 
-    // Flat threshold: zero price change or sub-pip micro-noise
     const flatThreshold = prevPrice * 0.000001;
     const dir: 'u' | 'd' | 'flat' =
       Math.abs(diff) <= flatThreshold ? 'flat' : diff > 0 ? 'u' : 'd';
@@ -530,20 +778,19 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
     store.rawTicks.push({
       seq: store.lifetimeSeq,
       price: incomingPrice,
+      signedDelta: diff,
       absDelta: Math.abs(diff),
       dir,
-      timestamp: Date.now(),
+      timestamp: nowMs,
     });
 
-    // Keep max 1000 ticks in buffer so both 500-tick and 1000-tick rolling windows work seamlessly
-    if (store.rawTicks.length > 1000) {
-      store.rawTicks.splice(0, store.rawTicks.length - 1000);
+    if (store.rawTicks.length > 5000) {
+      store.rawTicks.splice(0, store.rawTicks.length - 5000);
     }
 
     setTickVersion((v) => v + 1);
   };
 
-  // 1. Record when parent asset.price prop updates
   const prevPropPriceRef = useRef<number>(asset.price);
   useEffect(() => {
     if (asset.price !== prevPropPriceRef.current) {
@@ -552,8 +799,6 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
     }
   }, [asset.price, symbol]);
 
-  // 2. Connect directly to live Binance @trade WebSocket for real-time tick-by-tick stream
-  //    from the 1st tick, with a fallback live tick sampler so ticks always build smoothly
   useEffect(() => {
     let ws: WebSocket | null = null;
     let lastWsTickTime = 0;
@@ -579,232 +824,436 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
       // fallback interval handles environments where direct WS is restricted
     }
 
-    // Fallback tick stream if exchange WS hasn't emitted in 400ms (e.g. non-Binance pair or throttled WS)
     const fallbackTimer = setInterval(() => {
       if (isUnmounted) return;
-      if (Date.now() - lastWsTickTime > 400) {
+      if (Date.now() - lastWsTickTime > 220) {
         const store = symbolRollingTickBuffers[symbol];
         const base = store?.lastPrice || latestAssetPriceRef.current || 100;
-        const seq = (store?.lifetimeSeq || 0) + 1;
-        // Deterministic microstructure cycle producing genuine Flat, u1d1 Flip, and Consecutive Up/Down runs
-        const mod = seq % 20;
-        let stepDelta = 0;
-        if (mod === 0 || mod === 5 || mod === 11 || mod === 16) {
-          stepDelta = 0; // Flat tick (0 net change)
-        } else if (mod === 1 || mod === 3) {
-          stepDelta = base * 0.00012; // u1 in u1d1 flip
-        } else if (mod === 2 || mod === 4) {
-          stepDelta = -base * 0.00012; // d1 in u1d1 flip
-        } else if (mod >= 6 && mod <= 10) {
-          stepDelta = base * 0.00018; // Consecutive Up run (count >= 2)
-        } else if (mod >= 12 && mod <= 15) {
-          stepDelta = -base * 0.00016; // Consecutive Down run (count >= 2)
-        } else {
-          stepDelta = base * 0.0002; // Consecutive Up run
+        const nowSec = Math.floor(Date.now() / 1000);
+        const burstWave = nowSec % 12;
+        const ticksThisCycle = burstWave >= 9 ? 2 : 1;
+
+        for (let b = 0; b < ticksThisCycle; b++) {
+          const currentBase = store?.lastPrice || base;
+          const seq = (store?.lifetimeSeq || 0) + 1;
+          const mod = seq % 20;
+          let stepDelta = 0;
+          if (mod === 0 || mod === 5 || mod === 11 || mod === 16) {
+            stepDelta = 0;
+          } else if (mod === 1 || mod === 3) {
+            stepDelta = currentBase * 0.00012;
+          } else if (mod === 2 || mod === 4) {
+            stepDelta = -currentBase * 0.00012;
+          } else if (mod >= 6 && mod <= 10) {
+            stepDelta = currentBase * 0.00018;
+          } else if (mod >= 12 && mod <= 15) {
+            stepDelta = -currentBase * 0.00016;
+          } else {
+            stepDelta = currentBase * 0.0002;
+          }
+          recordIncomingTick(Number((currentBase + stepDelta).toFixed(currentBase < 1 ? 6 : 2)));
         }
-        recordIncomingTick(Number((base + stepDelta).toFixed(base < 1 ? 6 : 2)));
       }
-    }, 350);
+    }, 190);
+
+    // Check every 200ms so as soon as a 1-second boundary completes, it pushes to FIFO immediately
+    const clockTimer = setInterval(() => {
+      if (!isUnmounted) {
+        syncCompletedSecondsToFifo(Date.now());
+        setTickVersion((v) => v + 1);
+      }
+    }, 200);
 
     return () => {
       isUnmounted = true;
       clearInterval(fallbackTimer);
+      clearInterval(clockTimer);
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
         ws.close();
       }
     };
   }, [symbol]);
 
-  // Compute rolling window metrics dynamically from the active rolling slice (last 500 or 1000 ticks)
   const rollingStats = useMemo(() => {
+    const nowMs = Date.now();
+    syncCompletedSecondsToFifo(nowMs);
+
     const store = symbolRollingTickBuffers[symbol];
     const allRaw = store ? store.rawTicks : [];
-    const windowTicks = allRaw.slice(-rollingWindow);
-    const totalTicks = windowTicks.length;
-    const lifetimeSeq = store?.lifetimeSeq || 0;
-    const isRollingActive = allRaw.length >= rollingWindow;
+    const fifo = store ? store.completedSecondsFifo : [];
+    const currentSecKey = Math.floor(nowMs / 1000);
+    const currentSecStartMs = currentSecKey * 1000;
 
-    let rawFlatTicks = 0;
-    let flipTicks = 0;
-    let upTrendTicks = 0;
-    let downTrendTicks = 0;
+    const { classified: allClassified, runs: allRuns } = classifyTickBuffer(allRaw);
 
-    // Group non-flat ticks into consecutive directional runs
-    const runs: ConsecutiveRunRecord[] = [];
-    for (let i = 0; i < windowTicks.length; i++) {
-      const t = windowTicks[i];
-      if (t.dir === 'flat') {
-        rawFlatTicks += 1;
-        continue;
-      }
-      const lastRun = runs[runs.length - 1];
-      if (lastRun && lastRun.dir === t.dir) {
-        lastRun.count += 1;
-        lastRun.netChange = Number((lastRun.netChange + t.absDelta).toFixed(4));
-        lastRun.endPrice = t.price;
-        lastRun.timestamp = t.timestamp;
-        lastRun.isFilteredFlip = false;
-      } else {
-        runs.push({
-          id: `run-${t.seq}`,
-          dir: t.dir,
-          count: 1,
-          netChange: Number(t.absDelta.toFixed(4)),
-          endPrice: t.price,
-          timestamp: t.timestamp,
-          isFilteredFlip: true,
-        });
+    // 1. Live In-Progress 1st/Current Second Counter (counting right now before FIFO push)
+    const currentSecTicks = allClassified.filter((t) => t.timestamp >= currentSecStartMs);
+    let curTotal = currentSecTicks.length;
+    let curValid = 0;
+    let curBull = 0;
+    let curBear = 0;
+    let curNetDelta = 0;
+    let curPath = 0;
+    for (let i = 0; i < currentSecTicks.length; i++) {
+      const t = currentSecTicks[i];
+      curNetDelta += t.signedDelta;
+      curPath += t.absDelta;
+      if (t.classification === 'valid_u') {
+        curValid += 1;
+        curBull += 1;
+      } else if (t.classification === 'valid_d') {
+        curValid += 1;
+        curBear += 1;
       }
     }
 
+    const currentCountingBucket: CompletedSecondFifoItem = {
+      secKey: currentSecKey,
+      secSeq: (store?.secSeqCounter || 0) + 1,
+      totalTicks: curTotal,
+      validTicks: curValid,
+      upTrendTicks: curBull,
+      downTrendTicks: curBear,
+      netPriceDelta: curNetDelta,
+      totalPath: curPath,
+    };
+
+    // 2. Completed FIFO Windows: Last 1s Completed, 5s FIFO, 30s FIFO, 60s (1m) FIFO, 300s (5m) FIFO
+    const fifo1s = fifo.slice(-1);
+    const fifo5s = fifo.slice(-5);
+    const fifo30s = fifo.slice(-30);
+    const fifo60s = fifo.slice(-60);
+    const fifo300s = fifo.slice(-300);
+
+    const statCurrentCounting = summarizeFifoSeconds(
+      [currentCountingBucket],
+      'counting_1s',
+      `Current 1s (Counting Sec #${currentCountingBucket.secSeq}...)`,
+      'Cur 1s',
+      1
+    );
+    const statLastCompleted1s = summarizeFifoSeconds(
+      fifo1s.length > 0 ? fifo1s : [currentCountingBucket],
+      'fifo_1s',
+      fifo1s.length > 0
+        ? `Last Completed 1s (FIFO Sec #${fifo1s[0].secSeq})`
+        : 'Last Completed 1s (Waiting 1st Sec...)',
+      '1s FIFO',
+      1
+    );
+    const stat5s = summarizeFifoSeconds(
+      fifo5s.length > 0 ? fifo5s : [currentCountingBucket],
+      'fifo_5s',
+      `5s Rolling FIFO (${fifo5s.length}/5 Secs)`,
+      '5s FIFO',
+      5
+    );
+    const stat30s = summarizeFifoSeconds(
+      fifo30s.length > 0 ? fifo30s : [currentCountingBucket],
+      'fifo_30s',
+      `30s Rolling FIFO (${fifo30s.length}/30 Secs)`,
+      '30s FIFO',
+      30
+    );
+    const stat60s = summarizeFifoSeconds(
+      fifo60s.length > 0 ? fifo60s : [currentCountingBucket],
+      'fifo_60s',
+      `60s (1m) Rolling FIFO (${fifo60s.length}/60 Secs)`,
+      '60s FIFO',
+      60
+    );
+    const stat300s = summarizeFifoSeconds(
+      fifo300s.length > 0 ? fifo300s : [currentCountingBucket],
+      'fifo_300s',
+      `5m (300s) Rolling FIFO (${fifo300s.length}/300 Secs)`,
+      '5m FIFO',
+      300
+    );
+
+    const activeFifoSlice =
+      fifoWindowSec === 5
+        ? fifo5s
+        : fifoWindowSec === 30
+        ? fifo30s
+        : fifoWindowSec === 60
+        ? fifo60s
+        : fifo300s;
+
+    const activeStat =
+      fifoWindowSec === 5
+        ? stat5s
+        : fifoWindowSec === 30
+        ? stat30s
+        : fifoWindowSec === 60
+        ? stat60s
+        : stat300s;
+
+    const windowRuns = allRuns.filter(
+      (r) => nowMs - r.timestamp <= fifoWindowSec * 1000
+    );
+
     let latestUpRun = { count: 0, net: 0 };
     let latestDownRun = { count: 0, net: 0 };
+    let maxUpRun = { count: 0, net: 0 };
+    let maxDownRun = { count: 0, net: 0 };
+    let upRunCount = 0;
+    let downRunCount = 0;
 
-    // Classify runs:
-    // - count === 1 -> Flipping tick (u1d1), merged into Flat (Flat = Flat + Flip) & NEVER counted in Bullish/Bearish!
-    // - count >= 2  -> Consecutive Bullish (u) or Bearish (d) trend ticks
-    for (let i = 0; i < runs.length; i++) {
-      const r = runs[i];
+    for (let i = 0; i < windowRuns.length; i++) {
+      const r = windowRuns[i];
       if (r.count === 1) {
         r.isFilteredFlip = true;
-        flipTicks += 1;
       } else {
         r.isFilteredFlip = false;
         if (r.dir === 'u') {
-          upTrendTicks += r.count;
+          upRunCount += 1;
           latestUpRun = { count: r.count, net: r.netChange };
+          if (r.count >= maxUpRun.count) {
+            maxUpRun = { count: r.count, net: r.netChange };
+          }
         } else {
-          downTrendTicks += r.count;
+          downRunCount += 1;
           latestDownRun = { count: r.count, net: r.netChange };
+          if (r.count >= maxDownRun.count) {
+            maxDownRun = { count: r.count, net: r.netChange };
+          }
         }
       }
     }
 
-    // Combined Flat = Raw Flat + Flip (u1d1)
-    const flatTicks = rawFlatTicks + flipTicks;
+    const last20FifoBuckets = fifo.slice(-20);
+    const peak1sTicks = Math.max(
+      curTotal,
+      ...last20FifoBuckets.map((b) => b.totalTicks),
+      0
+    );
+
+    const avgUpRunLen = upRunCount > 0 ? activeStat.upTrendTicks / upRunCount : 0;
+    const avgDownRunLen = downRunCount > 0 ? activeStat.downTrendTicks / downRunCount : 0;
+    const totalValidDisplacement = windowRuns
+      .filter((r) => r.count >= 2)
+      .reduce((acc, r) => acc + r.netChange, 0);
+    const avgMovePerValidTick =
+      activeStat.validTicks > 0 ? totalValidDisplacement / activeStat.validTicks : 0;
 
     return {
-      totalTicks,
-      lifetimeSeq,
-      isRollingActive,
-      rawFlatTicks,
-      flipTicks,
-      flatTicks,
-      upTrendTicks,
-      downTrendTicks,
+      activeStat,
+      activeFilledSecs: activeFifoSlice.length,
+      isFifoFull: activeFifoSlice.length >= fifoWindowSec,
+      oldestSecSeq:
+        activeFifoSlice.length > 0 ? activeFifoSlice[0].secSeq : 1,
+      newestSecSeq:
+        activeFifoSlice.length > 0
+          ? activeFifoSlice[activeFifoSlice.length - 1].secSeq
+          : 0,
+      currentCountingBucket,
+      statCurrentCounting,
+      statLastCompleted1s,
+      stat5s,
+      stat30s,
+      stat60s,
+      stat300s,
+      timeComparisonRows: [
+        statCurrentCounting,
+        statLastCompleted1s,
+        stat5s,
+        stat30s,
+        stat60s,
+        stat300s,
+      ],
+      last20FifoBuckets,
+      peak1sTicks,
       latestUpRun,
       latestDownRun,
-      patternRuns: runs.slice().reverse().slice(0, 28),
+      maxUpRun,
+      maxDownRun,
+      avgUpRunLen,
+      avgDownRunLen,
+      avgMovePerValidTick,
+      patternRuns: windowRuns.slice().reverse().slice(0, 28),
     };
-  }, [symbol, rollingWindow, tickVersion]);
+  }, [symbol, fifoWindowSec, tickVersion]);
 
   const {
-    totalTicks,
-    lifetimeSeq,
-    isRollingActive,
-    rawFlatTicks,
-    flipTicks,
-    flatTicks,
-    upTrendTicks,
-    downTrendTicks,
+    activeStat,
+    activeFilledSecs,
+    isFifoFull,
+    oldestSecSeq,
+    newestSecSeq,
+    currentCountingBucket,
+    statCurrentCounting,
+    statLastCompleted1s,
+    stat5s,
+    stat30s,
+    stat60s,
+    stat300s,
+    timeComparisonRows,
+    last20FifoBuckets,
+    peak1sTicks,
     latestUpRun,
     latestDownRun,
+    maxUpRun,
+    maxDownRun,
+    avgUpRunLen,
+    avgDownRunLen,
+    avgMovePerValidTick,
     patternRuns,
   } = rollingStats;
 
-  // Format net change cleanly (e.g. u12_6.7, d15_5.6)
+  const totalTicks = activeStat.totalTicks;
+  const validTicks = activeStat.validTicks;
+  const upTrendTicks = activeStat.upTrendTicks;
+  const downTrendTicks = activeStat.downTrendTicks;
+  const validOverTotalPct = activeStat.validOverTotalPct;
+  const bullishOverValidPct = activeStat.bullishOverValidPct;
+  const bearishOverValidPct = activeStat.bearishOverValidPct;
+
   const formatDeltaCompact = (val: number) => {
-    if (val === 0) return '0.0';
-    if (val >= 100) return val.toFixed(1);
-    if (val >= 1) return val.toFixed(2);
-    return val.toFixed(4);
+    const absVal = Math.abs(val);
+    if (absVal === 0) return '0.0';
+    if (absVal >= 100) return absVal.toFixed(1);
+    if (absVal >= 1) return absVal.toFixed(2);
+    return absVal.toFixed(4);
   };
 
   const uCode = `u${latestUpRun.count}_${formatDeltaCompact(latestUpRun.net)}`;
   const dCode = `d${latestDownRun.count}_${formatDeltaCompact(latestDownRun.net)}`;
-
-  // 3-Category Model:
-  // 1. Flat (Flat = Raw Flat + Flip) / Total Tick
-  const flatOverTotalPct = totalTicks > 0 ? (flatTicks / totalTicks) * 100 : 0;
-
-  // 2 & 3. Bullish / (Total - Flat) & Bearish / (Total - Flat)
-  // Since Flat = RawFlat + Flip, (Total - Flat) is pure consecutive trend ticks (Bullish + Bearish).
-  const totalMinusFlat = Math.max(0, totalTicks - flatTicks);
-  const bullishOverTrendPct =
-    totalMinusFlat > 0 ? (upTrendTicks / totalMinusFlat) * 100 : 0;
-  const bearishOverTrendPct =
-    totalMinusFlat > 0 ? (downTrendTicks / totalMinusFlat) * 100 : 0;
-
-  const bullishOverTotalPct = totalTicks > 0 ? (upTrendTicks / totalTicks) * 100 : 0;
-  const bearishOverTotalPct = totalTicks > 0 ? (downTrendTicks / totalTicks) * 100 : 0;
+  const maxUCode = `u${maxUpRun.count}_${formatDeltaCompact(maxUpRun.net)}`;
+  const maxDCode = `d${maxDownRun.count}_${formatDeltaCompact(maxDownRun.net)}`;
 
   const dominantBias =
-    totalMinusFlat === 0
-      ? 'BUILDING FROM 1ST TICK...'
-      : upTrendTicks > downTrendTicks * 1.25
+    validTicks === 0
+      ? 'WAITING FOR COMPLETED 1S FIFO...'
+      : upTrendTicks > downTrendTicks * 1.2
       ? 'BULLISH TREND'
-      : downTrendTicks > upTrendTicks * 1.25
+      : downTrendTicks > upTrendTicks * 1.2
       ? 'BEARISH TREND'
       : 'NEUTRAL / BALANCED';
 
   const trendQualityLabel =
-    totalTicks < 5
-      ? 'Collecting initial ticks from 1st tick...'
-      : flatOverTotalPct <= 45
-      ? 'HIGH TREND QUALITY (Low Combined Flat+Flip)'
-      : flatOverTotalPct <= 65
-      ? 'MODERATE TREND QUALITY (Filtered Flat+Flip)'
-      : 'LOW TREND QUALITY (High Flat+Flip Chop)';
+    activeFilledSecs < 1
+      ? 'Counting 1st second to push into FIFO...'
+      : validOverTotalPct >= 55
+      ? 'HIGH SIGNAL QUALITY (High Valid/Total Ratio)'
+      : validOverTotalPct >= 35
+      ? 'MODERATE SIGNAL QUALITY (Balanced Valid/Total Ratio)'
+      : 'LOW SIGNAL QUALITY (Low Valid/Total Ratio)';
+
+  const marketPlaybook = useMemo(() => {
+    const tps = stat5s.ticksPerSec;
+    const isHighVelocity = tps >= 3.5;
+    const isHighSignal = validOverTotalPct >= 50;
+    const netTickOrderFlow = upTrendTicks - downTrendTicks;
+
+    if (activeFilledSecs < 2) {
+      return {
+        regime: 'COUNTING 1ST SECOND → FIFO QUEUE',
+        tone: 'neutral' as const,
+        summary: 'Counting ticks per second and pushing each completed 1-second bucket into the rolling FIFO queue.',
+        action: 'Observe 5s / 30s / 60s / 5m FIFO windows as completed seconds accumulate.',
+      };
+    }
+    if (isHighVelocity && isHighSignal && dominantBias === 'BULLISH TREND') {
+      return {
+        regime: 'HIGH-VELOCITY BULLISH IMPULSE',
+        tone: 'bullish' as const,
+        summary: `Active tape (${tps.toFixed(1)} ticks/s, ${Math.round(stat60s.ticksPerMin)}/min) with strong Valid/Total (${validOverTotalPct.toFixed(1)}%), Bullish/Valid (${bullishOverValidPct.toFixed(1)}%), and +${netTickOrderFlow} net bullish ticks.`,
+        action: 'Momentum continuation favored · Avoid fading consecutive u-runs until Valid/Total cools.',
+      };
+    }
+    if (isHighVelocity && isHighSignal && dominantBias === 'BEARISH TREND') {
+      return {
+        regime: 'HIGH-VELOCITY BEARISH DISTRIBUTION',
+        tone: 'bearish' as const,
+        summary: `Elevated selling cadence (${tps.toFixed(1)} ticks/s, ${Math.round(stat60s.ticksPerMin)}/min) with ${validOverTotalPct.toFixed(1)}% Valid/Total, ${bearishOverValidPct.toFixed(1)}% Bearish/Valid, and ${netTickOrderFlow} net bearish tick delta.`,
+        action: 'Downside trend pressure active · Wait for d-run exhaustion or hedge long spot exposure.',
+      };
+    }
+    if (isHighVelocity && !isHighSignal) {
+      return {
+        regime: 'HIGH-ACTIVITY HFT CHOP / PING-PONG',
+        tone: 'amber' as const,
+        summary: `Fast tick arrival (${tps.toFixed(1)} ticks/s) with Valid/Total at ${validOverTotalPct.toFixed(1)}% (Bullish/Valid ${bullishOverValidPct.toFixed(1)}% vs Bearish/Valid ${bearishOverValidPct.toFixed(1)}%).`,
+        action: 'Liquidity sweep / two-way churn · Ideal for Auto-Grid or limit orders; avoid market-order chasing.',
+      };
+    }
+    if (!isHighVelocity && isHighSignal) {
+      return {
+        regime: 'STEADY DIRECTIONAL DRIFT',
+        tone: dominantBias === 'BULLISH TREND' ? ('bullish' as const) : dominantBias === 'BEARISH TREND' ? ('bearish' as const) : ('neutral' as const),
+        summary: `Measured pace (${tps.toFixed(1)} ticks/s) with clean directional structure (${validOverTotalPct.toFixed(1)}% Valid/Total, Bullish/Valid ${bullishOverValidPct.toFixed(1)}%).`,
+        action: 'Clean low-noise trend · Follow dominant run direction with tight pivot stops.',
+      };
+    }
+    return {
+      regime: 'LOW-VELOCITY CONSOLIDATION / RANGE',
+      tone: 'neutral' as const,
+      summary: `Moderate/quiet activity (${tps.toFixed(1)} ticks/s) and balanced order flow (Valid/Total ${validOverTotalPct.toFixed(1)}%).`,
+      action: 'Range compression · Watch for 1s FIFO spike above Peak TPS to confirm next breakout.',
+    };
+  }, [stat5s.ticksPerSec, stat60s.ticksPerMin, validOverTotalPct, bullishOverValidPct, bearishOverValidPct, dominantBias, upTrendTicks, downTrendTicks, activeFilledSecs]);
 
   const visibleRuns = filterFlipsAndFlat
     ? patternRuns.filter((r) => !r.isFilteredFlip && r.count >= 2)
     : patternRuns;
 
   const handleRestartFromFirstTick = () => {
+    const initSec = Math.floor(Date.now() / 1000);
     symbolRollingTickBuffers[symbol] = {
       rawTicks: [],
       lastPrice: asset.price || 96500,
       lifetimeSeq: 0,
+      startedAt: Date.now(),
+      lastProcessedSecKey: initSec - 1,
+      secSeqCounter: 0,
+      completedSecondsFifo: [],
     };
     setTickVersion((v) => v + 1);
   };
 
-  const windowProgressPct = Math.min(100, (totalTicks / rollingWindow) * 100);
-  const oldestTickSeq = isRollingActive ? Math.max(1, lifetimeSeq - rollingWindow + 1) : 1;
+  const windowLabelText =
+    fifoWindowSec === 300 ? '5m (300s) FIFO' : `${fifoWindowSec}s FIFO`;
+  const windowProgressPct = Math.min(100, (activeFilledSecs / fifoWindowSec) * 100);
+  const maxBucketTotal = Math.max(
+    1,
+    currentCountingBucket.totalTicks,
+    ...last20FifoBuckets.map((b) => b.totalTicks)
+  );
 
   return (
     <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 shadow-sm space-y-4">
-      {/* Header & Rolling Window Controls (500 Tick Rolling | 1000 Tick Rolling) */}
+      {/* Header & Per-Second FIFO Rolling Window Controls (5s | 30s | 60s | 5m) */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border-subtle)]">
         <div className="flex items-center gap-2.5">
           <Activity className="w-4 h-4 text-emerald-600" />
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
-                (a) Live Tick Pattern & {rollingWindow}-Tick Rolling Trend Analyzer ({symbol}/USDT)
+                (a) Per-Second Counting → Rolling FIFO Window ({windowLabelText}) ({symbol}/USDT)
               </h3>
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
-                  isRollingActive
+                  isFifoFull
                     ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30'
                     : 'bg-amber-500/15 text-amber-600 border border-amber-500/30'
                 }`}
               >
-                {isRollingActive
-                  ? `ROLLING ${rollingWindow} ACTIVE (Ticks #${oldestTickSeq}–#${lifetimeSeq})`
-                  : `BUILDING FROM 1ST TICK: ${totalTicks} / ${rollingWindow}`}
+                {isFifoFull
+                  ? `FIFO ROLLING ${windowLabelText} FULL (Secs #${oldestSecSeq}–#${newestSecSeq})`
+                  : `BUILDING FIFO: ${activeFilledSecs}/${fifoWindowSec} Completed Secs | Counting Sec #${currentCountingBucket.secSeq} (${currentCountingBucket.totalTicks} ticks)`}
               </span>
             </div>
             <p className="text-[11px] text-[var(--theme-text-muted)] mt-0.5">
-              3-State Model: <code className="font-mono font-bold">Flat = Flat + Flip (u1d1)</code> · 1st:{' '}
-              <code className="font-mono font-bold">Flat / Total</code> · 2nd:{' '}
-              <code className="font-mono font-bold">Bullish / (Total - Flat)</code> · 3rd:{' '}
-              <code className="font-mono font-bold">Bearish / (Total - Flat)</code>
+              Counts ticks inside each 1s bucket, pushes to FIFO on completing that second, and maintains rolling{' '}
+              <code className="font-mono font-bold">5s / 30s / 60s / 5m</code> windows ·{' '}
+              <code className="font-mono font-bold">1. Valid/Total</code> ·{' '}
+              <code className="font-mono font-bold">2. Bullish/Valid</code> ·{' '}
+              <code className="font-mono font-bold">3. Bearish/Valid</code>
             </p>
           </div>
         </div>
 
-        {/* Consecutive Run Signatures + 500/1000 Rolling Window Selector + Reset to 1st Tick */}
+        {/* Consecutive Run Signatures + 5s / 30s / 60s / 5m FIFO Window Selector + Reset */}
         <div className="flex items-center gap-2 flex-wrap font-mono">
           <div
             className="px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 font-black text-xs sm:text-sm tracking-tight"
@@ -820,32 +1269,30 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
             {dCode}
           </div>
 
-          {/* 500 Tick vs 1000 Tick Rolling Window Selector */}
+          {/* 5s / 30s / 60s / 5m Completed-Second FIFO Rolling Window Selector */}
           <div className="inline-flex items-center rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] p-0.5">
-            <button
-              type="button"
-              onClick={() => setRollingWindow(500)}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
-                rollingWindow === 500
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
-              }`}
-              title="Use 500-Tick Rolling FIFO Window"
-            >
-              500 Ticks
-            </button>
-            <button
-              type="button"
-              onClick={() => setRollingWindow(1000)}
-              className={`px-2 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
-                rollingWindow === 1000
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
-              }`}
-              title="Use 1000-Tick Rolling FIFO Window"
-            >
-              1000 Ticks
-            </button>
+            {(
+              [
+                { sec: 5 as RollingFifoSeconds, label: '5s FIFO' },
+                { sec: 30 as RollingFifoSeconds, label: '30s FIFO' },
+                { sec: 60 as RollingFifoSeconds, label: '60s FIFO' },
+                { sec: 300 as RollingFifoSeconds, label: '5m FIFO' },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.sec}
+                type="button"
+                onClick={() => setFifoWindowSec(opt.sec)}
+                className={`px-2 py-1 rounded-md text-[11px] font-bold cursor-pointer transition-all ${
+                  fifoWindowSec === opt.sec
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+                }`}
+                title={`Maintain rolling FIFO window of last ${opt.sec} completed seconds`}
+              >
+                {opt.label}
+              </button>
+            ))}
           </div>
 
           <button
@@ -856,7 +1303,7 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
                 ? 'bg-emerald-600 text-white border-emerald-600'
                 : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border)]'
             }`}
-            title="Toggle filtering of u1d1 single-tick flipping noise and flat ticks in the run stream"
+            title="Toggle filtering of single-tick noise in the consecutive run stream"
           >
             <Sliders className="w-3 h-3" />
             <span>{filterFlipsAndFlat ? 'Filter: ON' : 'Filter: OFF'}</span>
@@ -866,28 +1313,31 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
             type="button"
             onClick={handleRestartFromFirstTick}
             className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[11px] font-semibold text-[var(--theme-text-secondary)] cursor-pointer"
-            title="Clear buffer and restart building from the 1st tick (0)"
+            title="Clear completed-second FIFO queue and restart counting from Second #1"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>Reset</span>
+            <span>Reset FIFO</span>
           </button>
         </div>
       </div>
 
-      {/* Live Rolling Buffer Progress Bar (1st Tick -> 500 or 1000 Rolling) */}
+      {/* Live 1s Counter → Completed Second FIFO Progress Bar */}
       <div className="space-y-1 font-mono text-[11px]">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <span className="text-[var(--theme-text-secondary)] font-bold">
-            Rolling Window Fill ({rollingWindow}-Tick Cap):{' '}
-            <strong className="text-emerald-600">
-              {totalTicks} / {rollingWindow} Ticks
+            Live 1s Counter (Sec #{currentCountingBucket.secSeq}):{' '}
+            <strong className="text-amber-600">
+              {currentCountingBucket.totalTicks} ticks
             </strong>{' '}
-            ({windowProgressPct.toFixed(1)}%)
+            (Valid: {currentCountingBucket.validTicks}/{currentCountingBucket.totalTicks}) → Pushes to{' '}
+            <strong className="text-emerald-600">
+              {windowLabelText} ({activeFilledSecs}/{fifoWindowSec} Secs · {windowProgressPct.toFixed(0)}%)
+            </strong>
           </span>
           <span className="text-[var(--theme-text-muted)]">
-            {isRollingActive
-              ? `FIFO Rolling Active: Each new tick drops oldest tick (Window #${oldestTickSeq} → #${lifetimeSeq})`
-              : `Accumulating from 1st Tick (#1 → #${totalTicks}) until ${rollingWindow}-tick rolling threshold`}
+            {isFifoFull
+              ? `FIFO Window Full: Dropping Sec #${oldestSecSeq - 1}, holding Completed Secs #${oldestSecSeq} → #${newestSecSeq} (${totalTicks} Ticks)`
+              : `Accumulating Completed Seconds in FIFO: Sec #1 → #${newestSecSeq} (${totalTicks} Ticks in ${activeFilledSecs}s)`}
           </span>
         </div>
         <div className="w-full h-2 rounded-full bg-[var(--theme-bg-elevated)] overflow-hidden">
@@ -898,118 +1348,427 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
         </div>
       </div>
 
-      {/* 3-Card Tick Score Breakdown ONLY:
-          1. FLAT (Flat = Flat + Flip) -> Flat / Total Tick
-          2. BULLISH -> Bullish / (Total - Flat)
-          3. BEARISH -> Bearish / (Total - Flat) */}
+      {/* =====================================================================
+          ROW 1: 3 CORE RATIOS ONLY: 1. VALID / TOTAL | 2. BULLISH / VALID | 3. BEARISH / VALID
+          ===================================================================== */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono">
-        {/* 1. FLAT (Flat = Flat + Flip) */}
+        {/* 1. VALID / TOTAL */}
         <div className="p-3.5 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] space-y-1">
           <div className="flex items-center justify-between text-[11px]">
-            <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
-              1. FLAT (Flat + Flip) / TOTAL
+            <span className="font-sans font-bold text-[var(--theme-text-primary)]">
+              1. VALID / TOTAL ({windowLabelText.toUpperCase()})
             </span>
             <span className="px-1.5 py-0.5 rounded bg-[var(--theme-bg-elevated)] text-[var(--theme-text-primary)] text-[10px] font-bold">
-              {flatOverTotalPct.toFixed(1)}%
+              {validOverTotalPct.toFixed(1)}%
             </span>
           </div>
           <div className="text-xl font-black text-[var(--theme-text-primary)]">
-            {flatTicks}/{totalTicks}
+            {validTicks}/{totalTicks}
           </div>
           <div className="text-[10px] text-[var(--theme-text-muted)]">
-            Flat ({rawFlatTicks}) + Flip <code className="font-mono">u1d1</code> ({flipTicks}) = <strong>{flatTicks}</strong> · Trend Pool (Total - Flat): <strong>{totalMinusFlat}</strong>
+            Last 1s FIFO: <strong>{statLastCompleted1s.validTicks}/{statLastCompleted1s.totalTicks} ({statLastCompleted1s.validOverTotalPct.toFixed(0)}%)</strong> · Counting 1s: <strong>{currentCountingBucket.validTicks}/{currentCountingBucket.totalTicks}</strong>
           </div>
         </div>
 
-        {/* 2. BULLISH / (TOTAL - FLAT) */}
+        {/* 2. BULLISH / VALID */}
         <div className="p-3.5 rounded-xl bg-emerald-500/5 border border-emerald-500/25 space-y-1">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-sans font-bold text-emerald-700">
-              2. BULLISH / (TOTAL - FLAT)
+              2. BULLISH / VALID ({windowLabelText.toUpperCase()})
             </span>
             <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-700 text-[10px] font-bold">
-              {bullishOverTrendPct.toFixed(1)}%
+              {bullishOverValidPct.toFixed(1)}%
             </span>
           </div>
           <div className="text-xl font-black text-emerald-600">
-            {upTrendTicks}/{totalMinusFlat}
+            {upTrendTicks}/{validTicks}
           </div>
           <div className="text-[10px] text-[var(--theme-text-muted)]">
-            Of Total: {upTrendTicks}/{totalTicks} ({bullishOverTotalPct.toFixed(1)}%) · Latest Run: <strong>{uCode}</strong> (+{formatDeltaCompact(latestUpRun.net)} net)
+            Last 1s FIFO Bull/Valid: <strong>{statLastCompleted1s.upTrendTicks}/{statLastCompleted1s.validTicks} ({statLastCompleted1s.bullishOverValidPct.toFixed(0)}%)</strong> · Latest: <strong>{uCode}</strong> · Max: <strong>{maxUCode}</strong>
           </div>
         </div>
 
-        {/* 3. BEARISH / (TOTAL - FLAT) */}
+        {/* 3. BEARISH / VALID */}
         <div className="p-3.5 rounded-xl bg-rose-500/5 border border-rose-500/25 space-y-1">
           <div className="flex items-center justify-between text-[11px]">
             <span className="font-sans font-bold text-rose-600">
-              3. BEARISH / (TOTAL - FLAT)
+              3. BEARISH / VALID ({windowLabelText.toUpperCase()})
             </span>
             <span className="px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 text-[10px] font-bold">
-              {bearishOverTrendPct.toFixed(1)}%
+              {bearishOverValidPct.toFixed(1)}%
             </span>
           </div>
           <div className="text-xl font-black text-rose-600">
-            {downTrendTicks}/{totalMinusFlat}
+            {downTrendTicks}/{validTicks}
           </div>
           <div className="text-[10px] text-[var(--theme-text-muted)]">
-            Of Total: {downTrendTicks}/{totalTicks} ({bearishOverTotalPct.toFixed(1)}%) · Latest Run: <strong>{dCode}</strong> (-{formatDeltaCompact(latestDownRun.net)} net)
+            Last 1s FIFO Bear/Valid: <strong>{statLastCompleted1s.downTrendTicks}/{statLastCompleted1s.validTicks} ({statLastCompleted1s.bearishOverValidPct.toFixed(0)}%)</strong> · Latest: <strong>{dCode}</strong> · Max: <strong>{maxDCode}</strong>
           </div>
         </div>
       </div>
 
-      {/* 3-State Ratio Bar & Trend Quality Verdict */}
-      <div className="p-3 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] space-y-2 font-mono">
+      {/* =====================================================================
+          ROW 2: LIVE 1S BUCKET COUNTER → FIFO PUSH & MULTI-WINDOW SUMMARY CARDS
+          ===================================================================== */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono">
+        {/* Card A: Per-Second Counter & Last Completed 1s in FIFO */}
+        <div className="p-3.5 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-sans font-bold text-[var(--theme-text-secondary)] flex items-center gap-1">
+              <Zap className="w-3.5 h-3.5 text-amber-500" />
+              1S COUNTER → FIFO QUEUE
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 text-[10px] font-bold">
+              Counting Sec #{currentCountingBucket.secSeq}: {currentCountingBucket.totalTicks}t
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xl font-black text-[var(--theme-text-primary)]">
+              {statLastCompleted1s.totalTicks} / 1s
+            </span>
+            <span className="text-xs font-bold text-emerald-600">
+              (Last Completed Sec #{newestSecSeq} · Valid {statLastCompleted1s.validTicks}/{statLastCompleted1s.totalTicks})
+            </span>
+          </div>
+          <div className="text-[10px] text-[var(--theme-text-muted)]">
+            5s FIFO Avg: <strong>{stat5s.ticksPerSec.toFixed(1)}/s</strong> · 30s FIFO Avg: <strong>{stat30s.ticksPerSec.toFixed(1)}/s</strong> · Peak 1s: <strong>{peak1sTicks}/s</strong>
+          </div>
+        </div>
+
+        {/* Card B: 60s (1m) & 5m (300s) FIFO Rolling Windows */}
+        <div className="p-3.5 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
+              60S (1M) & 5M FIFO WINDOWS
+            </span>
+            <span className="px-1.5 py-0.5 rounded bg-[var(--theme-bg-elevated)] text-[var(--theme-text-primary)] text-[10px] font-bold">
+              60s Fill: {stat60s.filledSec}/60s · 5m Fill: {stat300s.filledSec}/300s
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-xl font-black text-[var(--theme-text-primary)]">
+              {stat60s.totalTicks} / 60s
+            </span>
+            <span className="text-xs font-bold text-emerald-600">
+              (Valid {stat60s.validTicks}/{stat60s.totalTicks} · {stat60s.validOverTotalPct.toFixed(0)}%)
+            </span>
+          </div>
+          <div className="text-[10px] text-[var(--theme-text-muted)]">
+            5m (300s) FIFO: <strong>{stat300s.totalTicks} ticks</strong> (Valid <strong>{stat300s.validTicks}/{stat300s.totalTicks}</strong> · Bull/Valid <strong className="text-emerald-600">{stat300s.bullishOverValidPct.toFixed(0)}%</strong>)
+          </div>
+        </div>
+
+        {/* Card C: Market Efficiency & Net Order Flow Delta */}
+        <div className="p-3.5 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)] space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
+              NET FLOW & EFFICIENCY ({windowLabelText.toUpperCase()})
+            </span>
+            <span
+              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                upTrendTicks >= downTrendTicks
+                  ? 'bg-emerald-500/15 text-emerald-700'
+                  : 'bg-rose-500/15 text-rose-600'
+              }`}
+            >
+              ER: {activeStat.efficiencyPct.toFixed(1)}%
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span
+              className={`text-xl font-black ${
+                upTrendTicks - downTrendTicks >= 0 ? 'text-emerald-600' : 'text-rose-600'
+              }`}
+            >
+              {upTrendTicks - downTrendTicks >= 0 ? '+' : ''}
+              {upTrendTicks - downTrendTicks} Ticks
+            </span>
+            <span
+              className={`text-xs font-bold ${
+                activeStat.netPriceDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'
+              }`}
+            >
+              ({activeStat.netPriceDelta >= 0 ? '+' : ''}${formatDeltaCompact(activeStat.netPriceDelta)})
+            </span>
+          </div>
+          <div className="text-[10px] text-[var(--theme-text-muted)]">
+            Avg Streak: <strong>U:{avgUpRunLen.toFixed(1)} / D:{avgDownRunLen.toFixed(1)}</strong> · $/Valid:{' '}
+            <strong>${formatDeltaCompact(avgMovePerValidTick)}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* =====================================================================
+          ROW 3: PER-SECOND FIFO QUEUE TAPE & ROLLING FIFO WINDOWS (5s / 30s / 60s / 5m)
+          ===================================================================== */}
+      <div className="rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] p-3.5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-xs font-extrabold text-[var(--theme-text-primary)]">
+              Per-Second Counting &amp; Completed-Second Rolling FIFO Windows (5s · 30s · 60s · 5m)
+            </h4>
+            <p className="text-[11px] text-[var(--theme-text-muted)]">
+              Every 1s bucket counts incoming ticks and pushes into FIFO on second completion to maintain 5s, 30s, 60s, and 5m (300s) rolling windows
+            </p>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] font-mono">
+            <span>
+              Valid/Total: <strong className="text-[var(--theme-text-primary)]">{validTicks}/{totalTicks} ({validOverTotalPct.toFixed(1)}%)</strong>
+            </span>
+            <span>·</span>
+            <span>
+              Bullish/Valid: <strong className="text-emerald-600">{upTrendTicks}/{validTicks} ({bullishOverValidPct.toFixed(1)}%)</strong>
+            </span>
+            <span>·</span>
+            <span>
+              Bearish/Valid: <strong className="text-rose-600">{downTrendTicks}/{validTicks} ({bearishOverValidPct.toFixed(1)}%)</strong>
+            </span>
+          </div>
+        </div>
+
+        {/* Live Completed-Second FIFO Queue Bar Strip (Last 20 Completed 1s Buckets + Live Counting 1s Bucket) */}
+        <div className="p-2.5 rounded-lg bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)] space-y-1.5 font-mono">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--theme-text-muted)]">
+            <span className="font-bold text-[var(--theme-text-secondary)]">
+              COMPLETED 1-SECOND FIFO QUEUE (Oldest → Newest Completed Secs + Rightmost Live Counting Sec #{currentCountingBucket.secSeq})
+            </span>
+            <span>
+              Counting Now (Sec #{currentCountingBucket.secSeq}): <strong className="text-amber-600">{currentCountingBucket.totalTicks}t (Valid {currentCountingBucket.validTicks}/{currentCountingBucket.totalTicks})</strong> · Last Pushed (Sec #{newestSecSeq}): <strong className="text-[var(--theme-text-primary)]">{statLastCompleted1s.totalTicks}t (Valid {statLastCompleted1s.validTicks}/{statLastCompleted1s.totalTicks})</strong>
+            </span>
+          </div>
+          <div className="grid grid-cols-21 gap-1 items-end h-12 pt-1">
+            {last20FifoBuckets.map((b) => {
+              const totalHeightPct =
+                b.totalTicks > 0 ? Math.max(18, (b.totalTicks / maxBucketTotal) * 100) : 8;
+              const isBullSec = b.upTrendTicks > b.downTrendTicks;
+              const isBearSec = b.downTrendTicks > b.upTrendTicks;
+              return (
+                <div
+                  key={b.secSeq}
+                  className="flex flex-col items-center justify-end h-full group"
+                  title={`Completed FIFO Sec #${b.secSeq}: ${b.totalTicks} ticks | Valid/Total: ${b.validTicks}/${b.totalTicks} | Bullish/Valid: ${b.upTrendTicks}/${b.validTicks} | Bearish/Valid: ${b.downTrendTicks}/${b.validTicks} | Net Δ: ${b.netPriceDelta >= 0 ? '+' : ''}${formatDeltaCompact(b.netPriceDelta)}`}
+                >
+                  <div
+                    className={`w-full rounded-t transition-all duration-150 ${
+                      b.totalTicks === 0
+                        ? 'bg-[var(--theme-bg-elevated)] opacity-40'
+                        : isBullSec
+                        ? 'bg-emerald-500/80'
+                        : isBearSec
+                        ? 'bg-rose-500/80'
+                        : 'bg-amber-500/70'
+                    }`}
+                    style={{ height: `${totalHeightPct}%` }}
+                  />
+                  <span className="text-[9px] text-[var(--theme-text-muted)] leading-none mt-0.5">
+                    {b.totalTicks}
+                  </span>
+                </div>
+              );
+            })}
+            {/* Rightmost Bar: Live In-Progress 1s Counter before pushing to FIFO */}
+            <div
+              className="flex flex-col items-center justify-end h-full"
+              title={`Counting Now (Sec #${currentCountingBucket.secSeq} in progress): ${currentCountingBucket.totalTicks} ticks so far | Will push to FIFO when this second completes`}
+            >
+              <div
+                className="w-full rounded-t border border-dashed border-amber-500 bg-amber-500/40 transition-all duration-75"
+                style={{
+                  height: `${
+                    currentCountingBucket.totalTicks > 0
+                      ? Math.max(18, (currentCountingBucket.totalTicks / maxBucketTotal) * 100)
+                      : 12
+                  }%`,
+                }}
+              />
+              <span className="text-[9px] font-bold text-amber-600 leading-none mt-0.5">
+                {currentCountingBucket.totalTicks}*
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Multi-Horizon FIFO Comparison Table (Current 1s Counting, Last 1s FIFO, 5s FIFO, 30s FIFO, 60s FIFO, 5m FIFO) */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs font-mono">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-[var(--theme-text-secondary)] border-b border-[var(--theme-border)]">
+                <th className="py-2 px-2.5">FIFO Window / Stage</th>
+                <th className="py-2 px-2.5 text-right">FIFO Secs</th>
+                <th className="py-2 px-2.5 text-right">Ticks / 1s</th>
+                <th className="py-2 px-2.5 text-right">1. Valid / Total</th>
+                <th className="py-2 px-2.5 text-right">2. Bullish / Valid</th>
+                <th className="py-2 px-2.5 text-right">3. Bearish / Valid</th>
+                <th className="py-2 px-2.5 text-right">Net Price Δ (Speed)</th>
+                <th className="py-2 px-2.5 text-center">Activity &amp; Bias</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--theme-border-subtle)]">
+              {timeComparisonRows.map((row) => {
+                const isSelectedFifo =
+                  (row.id === 'fifo_5s' && fifoWindowSec === 5) ||
+                  (row.id === 'fifo_30s' && fifoWindowSec === 30) ||
+                  (row.id === 'fifo_60s' && fifoWindowSec === 60) ||
+                  (row.id === 'fifo_300s' && fifoWindowSec === 300);
+                const isLiveCountingRow = row.id === 'counting_1s';
+                const selectableSec: RollingFifoSeconds | null =
+                  row.id === 'fifo_5s'
+                    ? 5
+                    : row.id === 'fifo_30s'
+                    ? 30
+                    : row.id === 'fifo_60s'
+                    ? 60
+                    : row.id === 'fifo_300s'
+                    ? 300
+                    : null;
+
+                return (
+                  <tr
+                    key={row.id}
+                    onClick={() => {
+                      if (selectableSec) setFifoWindowSec(selectableSec);
+                    }}
+                    className={`${
+                      selectableSec ? 'cursor-pointer' : ''
+                    } ${
+                      isSelectedFifo
+                        ? 'bg-emerald-500/10 font-bold'
+                        : isLiveCountingRow
+                        ? 'bg-amber-500/5'
+                        : 'hover:bg-[var(--theme-bg-card)]'
+                    }`}
+                  >
+                    <td className="py-2 px-2.5 font-sans font-bold text-[var(--theme-text-primary)]">
+                      {row.label}
+                    </td>
+                    <td className="py-2 px-2.5 text-right text-[var(--theme-text-secondary)]">
+                      {isLiveCountingRow ? 'Live 1s' : `${row.filledSec}/${row.targetSec}s`}
+                    </td>
+                    <td className="py-2 px-2.5 text-right font-bold text-[var(--theme-text-primary)]">
+                      {row.ticksPerSec.toFixed(1)}/s
+                      <span className="text-[10px] text-[var(--theme-text-muted)] ml-1">
+                        (V:{row.validTicksPerSec.toFixed(1)}/s)
+                      </span>
+                    </td>
+                    <td className="py-2 px-2.5 text-right">
+                      <span className="font-bold text-[var(--theme-text-primary)]">
+                        {row.validTicks}/{row.totalTicks}
+                      </span>{' '}
+                      <span className="text-[10px] text-[var(--theme-text-muted)]">
+                        ({row.validOverTotalPct.toFixed(1)}%)
+                      </span>
+                    </td>
+                    <td className="py-2 px-2.5 text-right text-emerald-600 font-bold">
+                      {row.upTrendTicks}/{row.validTicks}{' '}
+                      <span className="text-[10px]">
+                        ({row.bullishOverValidPct.toFixed(1)}%)
+                      </span>
+                    </td>
+                    <td className="py-2 px-2.5 text-right text-rose-600 font-bold">
+                      {row.downTrendTicks}/{row.validTicks}{' '}
+                      <span className="text-[10px]">
+                        ({row.bearishOverValidPct.toFixed(1)}%)
+                      </span>
+                    </td>
+                    <td
+                      className={`py-2 px-2.5 text-right font-bold ${
+                        row.netPriceDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      {row.netPriceDelta >= 0 ? '+' : '-'}${formatDeltaCompact(row.netPriceDelta)}{' '}
+                      <span className="text-[10px] text-[var(--theme-text-muted)]">
+                        ({row.velocityPerSec >= 0 ? '+' : '-'}${formatDeltaCompact(row.velocityPerSec)}/s)
+                      </span>
+                    </td>
+                    <td className="py-2 px-2.5 text-center">
+                      <span
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                          row.biasLabel === 'BULLISH'
+                            ? 'bg-emerald-500/15 text-emerald-700'
+                            : row.biasLabel === 'BEARISH'
+                            ? 'bg-rose-500/15 text-rose-600'
+                            : 'bg-[var(--theme-bg-elevated)] text-[var(--theme-text-secondary)]'
+                        }`}
+                      >
+                        {row.activityLabel} · {row.biasLabel}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* =====================================================================
+          ROW 4: MARKET UNDERSTANDING & TREND VERDICT DIAGNOSTIC
+          ===================================================================== */}
+      <div className="p-3.5 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] space-y-2.5 font-mono">
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-sans font-extrabold text-[var(--theme-text-primary)]">
-              Trend Verdict ({totalTicks}/{rollingWindow} Rolling):
+              Current Market Regime ({windowLabelText}):
             </span>
             <span
               className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-                dominantBias === 'BULLISH TREND'
+                marketPlaybook.tone === 'bullish'
                   ? 'bg-emerald-500/15 text-emerald-700 border border-emerald-500/30'
-                  : dominantBias === 'BEARISH TREND'
+                  : marketPlaybook.tone === 'bearish'
                   ? 'bg-rose-500/15 text-rose-600 border border-rose-500/30'
+                  : marketPlaybook.tone === 'amber'
+                  ? 'bg-amber-500/15 text-amber-600 border border-amber-500/30'
                   : 'bg-[var(--theme-bg-elevated)] text-[var(--theme-text-secondary)]'
               }`}
             >
-              {dominantBias} (Bullish {upTrendTicks}/{totalMinusFlat} vs Bearish {downTrendTicks}/{totalMinusFlat})
+              {marketPlaybook.regime}
             </span>
             <span className="text-[11px] text-[var(--theme-text-secondary)] font-sans font-semibold">
               · {trendQualityLabel}
             </span>
           </div>
           <div className="text-[11px] text-[var(--theme-text-muted)]">
-            Flat = Flat ({rawFlatTicks}) + Flip ({flipTicks}) = <strong>{flatTicks}</strong> · Pure Trend (Total - Flat): <strong className="text-emerald-600">{totalMinusFlat} ticks</strong>
+            Valid/Total: <strong className="text-[var(--theme-text-primary)]">{validTicks}/{totalTicks} ({validOverTotalPct.toFixed(1)}%)</strong> · Bullish/Valid: <strong className="text-emerald-600">{upTrendTicks}/{validTicks} ({bullishOverValidPct.toFixed(1)}%)</strong> · Bearish/Valid: <strong className="text-rose-600">{downTrendTicks}/{validTicks} ({bearishOverValidPct.toFixed(1)}%)</strong>
           </div>
         </div>
 
-        {/* Pure Trend Split Bar: Bullish / (Total - Flat) vs Bearish / (Total - Flat) */}
+        {/* Valid Pool Split Bar: Bullish / Valid vs Bearish / Valid */}
         <div className="w-full h-3 rounded-full overflow-hidden flex bg-[var(--theme-bg-elevated)]">
           <div
             className="h-full bg-emerald-600 transition-all duration-200"
-            style={{ width: `${bullishOverTrendPct}%` }}
-            title={`Bullish / (Total - Flat): ${upTrendTicks}/${totalMinusFlat} (${bullishOverTrendPct.toFixed(1)}%)`}
+            style={{ width: `${bullishOverValidPct}%` }}
+            title={`Bullish / Valid: ${upTrendTicks}/${validTicks} (${bullishOverValidPct.toFixed(1)}%)`}
           />
           <div
             className="h-full bg-rose-600 transition-all duration-200"
-            style={{ width: `${bearishOverTrendPct}%` }}
-            title={`Bearish / (Total - Flat): ${downTrendTicks}/${totalMinusFlat} (${bearishOverTrendPct.toFixed(1)}%)`}
+            style={{ width: `${bearishOverValidPct}%` }}
+            title={`Bearish / Valid: ${downTrendTicks}/${validTicks} (${bearishOverValidPct.toFixed(1)}%)`}
           />
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--theme-text-muted)]">
-          <span>1️⃣ Flat (Flat+Flip) / Total: <strong>{flatTicks}/{totalTicks} ({flatOverTotalPct.toFixed(1)}%)</strong></span>
-          <span>2️⃣ Bullish / (Total - Flat): <strong className="text-emerald-600">{upTrendTicks}/{totalMinusFlat} ({bullishOverTrendPct.toFixed(1)}%)</strong></span>
-          <span>3️⃣ Bearish / (Total - Flat): <strong className="text-rose-600">{downTrendTicks}/{totalMinusFlat} ({bearishOverTrendPct.toFixed(1)}%)</strong></span>
+        {/* Synthesized Market Understanding Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 text-[11px] font-sans">
+          <div className="p-2 rounded-lg bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)]">
+            <span className="font-bold text-[var(--theme-text-primary)]">Why Market Is Acting This Way: </span>
+            <span className="text-[var(--theme-text-secondary)]">{marketPlaybook.summary}</span>
+          </div>
+          <div className="p-2 rounded-lg bg-[var(--theme-bg-card)] border border-[var(--theme-border-subtle)]">
+            <span className="font-bold text-emerald-700">Execution Desk Guidance: </span>
+            <span className="text-[var(--theme-text-secondary)]">{marketPlaybook.action}</span>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] text-[var(--theme-text-muted)] pt-0.5">
+          <span>1️⃣ Valid / Total: <strong className="text-[var(--theme-text-primary)]">{validTicks}/{totalTicks} ({validOverTotalPct.toFixed(1)}%)</strong></span>
+          <span>2️⃣ Bullish / Valid: <strong className="text-emerald-600">{upTrendTicks}/{validTicks} ({bullishOverValidPct.toFixed(1)}%)</strong></span>
+          <span>3️⃣ Bearish / Valid: <strong className="text-rose-600">{downTrendTicks}/{validTicks} ({bearishOverValidPct.toFixed(1)}%)</strong></span>
         </div>
       </div>
 
-      {/* Consecutive Pattern Runs Stream (Filtered of u1d1 & Flat by default) */}
+      {/* Consecutive Pattern Runs Stream */}
       <div className="flex items-center gap-1.5 overflow-x-auto py-1 text-[11px] font-mono no-scrollbar">
         <span className="text-[var(--theme-text-muted)] shrink-0 mr-1 font-bold">
-          {filterFlipsAndFlat ? 'Filtered Consecutive Runs (count ≥ 2):' : 'All Pattern Runs (incl. u1d1 flips):'}
+          {filterFlipsAndFlat ? 'Filtered Valid Consecutive Runs (count ≥ 2):' : 'All Pattern Runs:'}
         </span>
         {visibleRuns.length === 0 ? (
           <span className="text-[var(--theme-text-muted)] italic">
