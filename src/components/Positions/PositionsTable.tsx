@@ -19,6 +19,7 @@ import {
   Coins,
   Edit2,
   ExternalLink,
+  RotateCcw,
 } from 'lucide-react';
 import { useTheme } from '../../context/ThemeContext';
 
@@ -32,6 +33,7 @@ interface PositionsTableProps {
   onCancelLimitOrder: (orderId: string) => void;
   onUpdateSLTP: (positionId: string, stopLoss?: number, takeProfit?: number, trailingStopPercent?: number) => void;
   onSelectSymbol: (symbol: string) => void;
+  onResetTradeHistory?: () => void;
 }
 
 export const PositionsTable: React.FC<PositionsTableProps> = ({
@@ -44,6 +46,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
   onCancelLimitOrder,
   onUpdateSLTP,
   onSelectSymbol,
+  onResetTradeHistory,
 }) => {
   const { isLight } = useTheme();
   const [activeTab, setActiveTab] = useState<'positions' | 'orders' | 'spot' | 'history'>('positions');
@@ -125,7 +128,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
 
           <button
             onClick={() => setActiveTab('history')}
-            className={`flex items-center gap-2 px-3 py-1.5 rounded-sm text-[9px] uppercase tracking-widest font-bold transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-sm text-[9px] uppercase tracking-widest font-bold transition-all cursor-pointer ${
               activeTab === 'history'
                 ? 'bg-[var(--theme-border)] text-emerald-500 border border-[var(--theme-border-subtle)]'
                 : 'text-[var(--theme-text-muted)] hover:text-[var(--theme-text-secondary)]'
@@ -133,8 +136,23 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
           >
             <History className="w-3 h-3" />
             <span>Log</span>
+            <span className="px-1.5 py-0.2 rounded-sm font-mono text-[9px] bg-[var(--theme-bg-card)] text-[var(--theme-text-muted)]">
+              {tradeHistory.length}
+            </span>
           </button>
         </div>
+
+        {onResetTradeHistory && (
+          <button
+            type="button"
+            onClick={onResetTradeHistory}
+            title="Clear previous closed trade returns and log history while keeping active running positions"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>Reset Trade Returns &amp; Log ({tradeHistory.length})</span>
+          </button>
+        )}
       </div>
 
       {/* Tab 1: Open Leveraged Positions */}

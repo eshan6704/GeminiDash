@@ -4,6 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { execSync } from 'child_process';
 
 // Dummy Firebase Firestore functions for non-Firebase operation
 const getDocs = async (..._args: any[]) => ({ size: 0, forEach: () => {} } as any);
@@ -596,13 +597,10 @@ async function fetchYahooQuote(rawSymbol: string) {
       const cleanSym = yahooTargetSymbol.replace('.NS', '').replace('^', '');
       const hfUrls = [
         `https://eshan6704-marketapi2.hf.space/quote?symbol=${encodeURIComponent(cleanSym)}`,
-        `https://eshan6704-marketapi2.hf.space/api/quote?symbol=${encodeURIComponent(cleanSym)}`,
-        `https://eshan6704-marketapi2.hf.space/stock/${encodeURIComponent(cleanSym)}`,
-        `https://eshan6704-marketapi2.hf.space/stock?symbol=${encodeURIComponent(cleanSym)}`,
       ];
 
       for (const url of hfUrls) {
-        const hfRes = await fetch(url, { headers: { 'User-Agent': randomUA }, signal: AbortSignal.timeout(3000) });
+        const hfRes = await fetch(url, { headers: { 'User-Agent': randomUA }, signal: AbortSignal.timeout(1500) });
         if (hfRes.ok) {
           const json = await hfRes.json();
           const p = json?.lastPrice || json?.price || json?.last_price || json?.data?.lastPrice || json?.quote?.lastPrice;
@@ -1009,6 +1007,138 @@ app.delete('/api/storage/delete/:filename', async (req, res) => {
     return res.json({ success: true });
   } catch (error: any) {
     return res.json({ success: true });
+  }
+});
+
+// ==========================================
+// FULL APP BUILD COPY / SNAPSHOT ARCHIVE
+// ==========================================
+const BUILD_COPY_FILENAME = 'aurumx-app-build-copy.tar.gz';
+const BUILD_COPY_PUBLIC_PATH = path.resolve(__dirname, 'public', BUILD_COPY_FILENAME);
+
+function createAppBuildCopyArchive(): { buffer: Buffer; size: number; filename: string; createdAt: Date } {
+  const publicDir = path.resolve(__dirname, 'public');
+  if (!fs.existsSync(publicDir)) {
+    fs.mkdirSync(publicDir, { recursive: true });
+  }
+
+  // Include production dist (if present) plus full source and config files
+  const itemsToArchive = [
+    'src',
+    'server.ts',
+    'package.json',
+    'vite.config.ts',
+    'tsconfig.json',
+    'index.html',
+    'metadata.json',
+    '.env.example',
+  ];
+  if (fs.existsSync(path.resolve(__dirname, 'dist'))) {
+    itemsToArchive.unshift('dist');
+  }
+
+  const existingItems = itemsToArchive.filter((item) =>
+    fs.existsSync(path.resolve(__dirname, item))
+  );
+
+  execSync(
+    `tar -czf "${BUILD_COPY_PUBLIC_PATH}" ${existingItems.map((i) => `"${i}"`).join(' ')}`,
+    { cwd: __dirname }
+  );
+
+  const buffer = fs.readFileSync(BUILD_COPY_PUBLIC_PATH);
+  const now = new Date();
+
+  localB2FallbackStore.set(BUILD_COPY_FILENAME, {
+    buffer,
+    contentType: 'application/gzip',
+    size: buffer.length,
+    lastModified: now,
+  });
+
+  return {
+    buffer,
+    size: buffer.length,
+    filename: BUILD_COPY_FILENAME,
+    createdAt: now,
+  };
+}
+
+// Pre-register existing build copy if present on disk
+try {
+  if (fs.existsSync(BUILD_COPY_PUBLIC_PATH)) {
+    const buf = fs.readFileSync(BUILD_COPY_PUBLIC_PATH);
+    const stat = fs.statSync(BUILD_COPY_PUBLIC_PATH);
+    localB2FallbackStore.set(BUILD_COPY_FILENAME, {
+      buffer: buf,
+      contentType: 'application/gzip',
+      size: buf.length,
+      lastModified: stat.mtime,
+    });
+  }
+} catch {}
+
+app.post('/api/backup/create-build-copy', async (_req, res) => {
+  try {
+    const archive = createAppBuildCopyArchive();
+    const bucketName = process.env.B2_BUCKET_NAME;
+    let cloudStored = false;
+
+    if (bucketName && isB2Configured) {
+      try {
+        await b2Client.send(
+          new PutObjectCommand({
+            Bucket: bucketName,
+            Key: archive.filename,
+            Body: archive.buffer,
+            ContentType: 'application/gzip',
+          })
+        );
+        cloudStored = true;
+      } catch {
+        // Local mirror already populated
+      }
+    }
+
+    return res.json({
+      success: true,
+      filename: archive.filename,
+      size: archive.size,
+      createdAt: archive.createdAt.toISOString(),
+      cloudStored,
+      downloadUrl: `/api/backup/app-build-archive`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to create app build copy archive',
+    });
+  }
+});
+
+app.get('/api/backup/app-build-archive', (_req, res) => {
+  try {
+    let item = localB2FallbackStore.get(BUILD_COPY_FILENAME);
+    if (!item) {
+      const created = createAppBuildCopyArchive();
+      item = {
+        buffer: created.buffer,
+        contentType: 'application/gzip',
+        size: created.size,
+        lastModified: created.createdAt,
+      };
+    }
+    res.setHeader('Content-Type', 'application/gzip');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${BUILD_COPY_FILENAME}"`
+    );
+    return res.send(item.buffer);
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to download app build copy',
+    });
   }
 });
 
@@ -1596,25 +1726,31 @@ async function loadPersistentQuotesFromFirestore() {
   }
 }
 
+let isSyncingCoreSymbols = false;
+
 // Background Worker: Automatically refresh and persist core symbols to Firestore
 async function syncCoreSymbolsToFirestore() {
+  if (isSyncingCoreSymbols) return;
+  isSyncingCoreSymbols = true;
   lastPersistentSync = Date.now();
-  for (const item of CORE_PERSISTENT_SYMBOLS) {
-    try {
-      if (item.type === 'crypto' && item.binancePair) {
-        await fetchCryptoQuote(item.symbol, item.binancePair);
-      } else {
-        await fetchYahooQuote(item.symbol);
+  try {
+    for (const item of CORE_PERSISTENT_SYMBOLS) {
+      try {
+        if (item.type === 'crypto' && item.binancePair) {
+          await fetchCryptoQuote(item.symbol, item.binancePair);
+        }
+      } catch {
+        // Ignore individual sync failure
       }
-    } catch {
-      // Ignore individual sync failure
     }
-  }
-  if (firestoreDb) {
-    try {
-      const snap = await getDocs(collection(firestoreDb, 'symbol_prices'));
-      persistedSymbolsCount = snap.size;
-    } catch {}
+    if (firestoreDb) {
+      try {
+        const snap = await getDocs(collection(firestoreDb, 'symbol_prices'));
+        persistedSymbolsCount = snap.size;
+      } catch {}
+    }
+  } finally {
+    isSyncingCoreSymbols = false;
   }
 }
 
@@ -1630,11 +1766,6 @@ setTimeout(() => {
   // Fast symbol quote sync
   setInterval(() => {
     syncCoreSymbolsToFirestore();
-  }, 20000);
-
-  // Grouped table format batch sync to Firestore
-  setInterval(() => {
-    syncAllMarketTablesToFirestore();
   }, 45000);
 }, 2000);
 

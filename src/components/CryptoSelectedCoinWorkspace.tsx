@@ -3,6 +3,8 @@ import {
   MarketAsset,
   Position,
   SpotHolding,
+  TradeMode,
+  OrderSide,
   getBrokerMaxLeverage,
   SHARK_EXCHANGE,
 } from '../types/trading';
@@ -73,18 +75,22 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
         : sym === 'DOGE'
         ? 41200000000
         : sym === 'PAXG' || sym === 'XAUT'
-        ? 620000000
+        ? 1900000000
+        : sym === 'CL'
+        ? 145000000000
+        : sym === 'XAG'
+        ? 18200000000
         : volume24h * 14.5;
 
     const marketCap = extraCoinMeta?.marketCap || defaultCap;
     const fdv = marketCap * (sym === 'BTC' ? 1.05 : 1.18);
     const circulatingSupply = extraCoinMeta?.circulatingSupply || marketCap / Math.max(price, 0.0001);
-    const maxSupply = sym === 'BTC' ? 21000000 : sym === 'PAXG' ? circulatingSupply : circulatingSupply * 1.2;
+    const maxSupply = sym === 'BTC' ? 21000000 : sym === 'PAXG' || sym === 'XAUT' ? circulatingSupply : circulatingSupply * 1.2;
     const change1h = extraCoinMeta?.change1h ?? Number((change24h * 0.18).toFixed(2));
     const change7d = extraCoinMeta?.change7d ?? Number((change24h * 2.35).toFixed(2));
     const rank =
       extraCoinMeta?.rank ||
-      (sym === 'BTC' ? 1 : sym === 'ETH' ? 2 : sym === 'XRP' ? 4 : sym === 'SOL' ? 5 : sym === 'DOGE' ? 8 : sym === 'PAXG' ? 42 : 25);
+      (sym === 'BTC' ? 1 : sym === 'XAUT' ? 2 : sym === 'PAXG' ? 3 : sym === 'ZEC' ? 4 : sym === 'SOL' ? 5 : sym === 'CL' ? 6 : sym === 'XAG' ? 7 : 25);
 
     const rangeSpan = Math.max(high24h - low24h, price * 0.001);
     const rangePct = Math.min(100, Math.max(0, ((price - low24h) / rangeSpan) * 100));
@@ -179,30 +185,6 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
               Comprehensive real-time market profile, derivatives telemetry, and technical structure · Default BTC if unselected
             </p>
           </div>
-        </div>
-
-        {/* Quick Coin Selector Bar */}
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] font-semibold text-[var(--theme-text-muted)] mr-1">
-            Quick Switch:
-          </span>
-          {Object.keys(allAssets).map((sym) => {
-            const active = sym === asset.symbol;
-            return (
-              <button
-                key={sym}
-                type="button"
-                onClick={() => onSelectSymbol(sym)}
-                className={`px-2.5 py-1 rounded-md text-xs font-mono font-bold border transition-all cursor-pointer ${
-                  active
-                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                    : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border)] hover:bg-[var(--theme-bg-elevated)]'
-                }`}
-              >
-                {sym}
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -442,9 +424,6 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
           )}
         </div>
       </div>
-
-      {/* Embedded Live Rolling Tick Pattern Analyzer (Starts from 1st Tick, 500 / 1000 Tick Rolling) */}
-      <LiveRollingTickPatternCard asset={asset} />
     </div>
   );
 };
@@ -804,24 +783,27 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
     let lastWsTickTime = 0;
     let isUnmounted = false;
 
-    const pair = `${symbol.toLowerCase()}usdt`;
-    try {
-      ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair}@trade`);
-      ws.onmessage = (evt) => {
-        if (isUnmounted) return;
-        try {
-          const data = JSON.parse(evt.data);
-          const tradePrice = parseFloat(data.p);
-          if (!isNaN(tradePrice) && tradePrice > 0) {
-            lastWsTickTime = Date.now();
-            recordIncomingTick(tradePrice);
+    if (symbol !== 'CL' && symbol !== 'XAG') {
+      const wsSymbol = symbol === 'XAUT' ? 'paxg' : symbol.toLowerCase();
+      const pair = `${wsSymbol}usdt`;
+      try {
+        ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair}@trade`);
+        ws.onmessage = (evt) => {
+          if (isUnmounted) return;
+          try {
+            const data = JSON.parse(evt.data);
+            const tradePrice = parseFloat(data.p);
+            if (!isNaN(tradePrice) && tradePrice > 0) {
+              lastWsTickTime = Date.now();
+              recordIncomingTick(tradePrice);
+            }
+          } catch {
+            // ignore malformed packet
           }
-        } catch {
-          // ignore malformed packet
-        }
-      };
-    } catch {
-      // fallback interval handles environments where direct WS is restricted
+        };
+      } catch {
+        // fallback interval handles environments where direct WS is restricted
+      }
     }
 
     const fallbackTimer = setInterval(() => {
@@ -1229,7 +1211,7 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
-                (a) Per-Second Counting → Rolling FIFO Window ({windowLabelText}) ({symbol}/USDT)
+                Tick Analysis: Per-Second Counting → Rolling FIFO Window ({windowLabelText}) ({symbol}/USDT)
               </h3>
               <span
                 className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
@@ -1797,6 +1779,239 @@ export const LiveRollingTickPatternCard: React.FC<{ asset: MarketAsset }> = ({ a
   );
 };
 
+export const CoinTickBackgroundCollector: React.FC<{ asset: MarketAsset }> = ({ asset }) => {
+  const symbol = (asset.symbol || 'BTC').toUpperCase();
+  const latestAssetPriceRef = useRef<number>(asset.price || 96500);
+  latestAssetPriceRef.current = asset.price || 96500;
+
+  if (!symbolRollingTickBuffers[symbol]) {
+    const initSec = Math.floor(Date.now() / 1000);
+    symbolRollingTickBuffers[symbol] = {
+      rawTicks: [],
+      lastPrice: asset.price || 96500,
+      lifetimeSeq: 0,
+      startedAt: Date.now(),
+      lastProcessedSecKey: initSec - 1,
+      secSeqCounter: 0,
+      completedSecondsFifo: [],
+    };
+  }
+
+  const syncCompletedSecondsToFifo = (nowMs: number) => {
+    const store = symbolRollingTickBuffers[symbol];
+    if (!store) return;
+    const currentSecKey = Math.floor(nowMs / 1000);
+    if (currentSecKey <= store.lastProcessedSecKey) return;
+
+    const { classified } = classifyTickBuffer(store.rawTicks);
+    const startSec = Math.max(store.lastProcessedSecKey + 1, currentSecKey - 300);
+
+    for (let sKey = startSec; sKey < currentSecKey; sKey++) {
+      const secStartMs = sKey * 1000;
+      const secEndMs = secStartMs + 1000;
+      let totalTicks = 0;
+      let validTicks = 0;
+      let upTrendTicks = 0;
+      let downTrendTicks = 0;
+      let netPriceDelta = 0;
+      let totalPath = 0;
+
+      for (let i = classified.length - 1; i >= 0; i--) {
+        const t = classified[i];
+        if (t.timestamp >= secEndMs) continue;
+        if (t.timestamp < secStartMs) break;
+        totalTicks += 1;
+        netPriceDelta += t.signedDelta;
+        totalPath += t.absDelta;
+        if (t.classification === 'valid_u') {
+          validTicks += 1;
+          upTrendTicks += 1;
+        } else if (t.classification === 'valid_d') {
+          validTicks += 1;
+          downTrendTicks += 1;
+        }
+      }
+
+      store.secSeqCounter += 1;
+      store.completedSecondsFifo.push({
+        secKey: sKey,
+        secSeq: store.secSeqCounter,
+        totalTicks,
+        validTicks,
+        upTrendTicks,
+        downTrendTicks,
+        netPriceDelta,
+        totalPath,
+      });
+
+      if (store.completedSecondsFifo.length > 300) {
+        store.completedSecondsFifo.shift();
+      }
+    }
+
+    store.lastProcessedSecKey = currentSecKey - 1;
+  };
+
+  const recordIncomingTick = (incomingPrice: number) => {
+    if (!incomingPrice || isNaN(incomingPrice) || incomingPrice <= 0) return;
+    const store = symbolRollingTickBuffers[symbol];
+    if (!store) return;
+
+    const nowMs = Date.now();
+    syncCompletedSecondsToFifo(nowMs);
+
+    const prevPrice = store.lastPrice > 0 ? store.lastPrice : incomingPrice;
+    const diff = incomingPrice - prevPrice;
+    store.lastPrice = incomingPrice;
+
+    const flatThreshold = prevPrice * 0.000001;
+    const dir: 'u' | 'd' | 'flat' =
+      Math.abs(diff) <= flatThreshold ? 'flat' : diff > 0 ? 'u' : 'd';
+
+    store.lifetimeSeq += 1;
+    store.rawTicks.push({
+      seq: store.lifetimeSeq,
+      price: incomingPrice,
+      signedDelta: diff,
+      absDelta: Math.abs(diff),
+      dir,
+      timestamp: nowMs,
+    });
+
+    if (store.rawTicks.length > 5000) {
+      store.rawTicks.splice(0, store.rawTicks.length - 5000);
+    }
+  };
+
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let lastWsTickTime = 0;
+    let isUnmounted = false;
+
+    if (symbol !== 'CL' && symbol !== 'XAG') {
+      const wsSymbol = symbol === 'XAUT' ? 'paxg' : symbol.toLowerCase();
+      const pair = `${wsSymbol}usdt`;
+      try {
+        ws = new WebSocket(`wss://stream.binance.com:9443/ws/${pair}@trade`);
+        ws.onmessage = (evt) => {
+          if (isUnmounted) return;
+          try {
+            const data = JSON.parse(evt.data);
+            const tradePrice = parseFloat(data.p);
+            if (!isNaN(tradePrice) && tradePrice > 0) {
+              lastWsTickTime = Date.now();
+              recordIncomingTick(tradePrice);
+            }
+          } catch {
+            // ignore
+          }
+        };
+      } catch {
+        // fallback interval handles restricted environments
+      }
+    }
+
+    const fallbackTimer = setInterval(() => {
+      if (isUnmounted) return;
+      if (Date.now() - lastWsTickTime > 220) {
+        const store = symbolRollingTickBuffers[symbol];
+        const base = store?.lastPrice || latestAssetPriceRef.current || 100;
+        const nowSec = Math.floor(Date.now() / 1000);
+        const burstWave = nowSec % 12;
+        const ticksThisCycle = burstWave >= 9 ? 2 : 1;
+
+        for (let b = 0; b < ticksThisCycle; b++) {
+          const currentBase = store?.lastPrice || base;
+          const seq = (store?.lifetimeSeq || 0) + 1;
+          const mod = seq % 20;
+          let stepDelta = 0;
+          if (mod === 0 || mod === 5 || mod === 11 || mod === 16) {
+            stepDelta = 0;
+          } else if (mod === 1 || mod === 3) {
+            stepDelta = currentBase * 0.00012;
+          } else if (mod === 2 || mod === 4) {
+            stepDelta = -currentBase * 0.00012;
+          } else if (mod >= 6 && mod <= 10) {
+            stepDelta = currentBase * 0.00018;
+          } else if (mod >= 12 && mod <= 15) {
+            stepDelta = -currentBase * 0.00016;
+          } else {
+            stepDelta = currentBase * 0.0002;
+          }
+          recordIncomingTick(Number((currentBase + stepDelta).toFixed(currentBase < 1 ? 6 : 2)));
+        }
+      }
+    }, 190);
+
+    const clockTimer = setInterval(() => {
+      if (!isUnmounted) {
+        syncCompletedSecondsToFifo(Date.now());
+      }
+    }, 200);
+
+    return () => {
+      isUnmounted = true;
+      clearInterval(fallbackTimer);
+      clearInterval(clockTimer);
+      if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+        ws.close();
+      }
+    };
+  }, [symbol]);
+
+  return null;
+};
+
+interface CoinTickAnalysisProps {
+  asset: MarketAsset;
+}
+
+export const CoinTickAnalysisPanel: React.FC<CoinTickAnalysisProps> = ({ asset }) => {
+  return (
+    <div className="space-y-4">
+      <LiveRollingTickPatternCard asset={asset} />
+    </div>
+  );
+};
+
+interface CoinChartProps {
+  asset: MarketAsset;
+  positions: Position[];
+}
+
+export const CoinChartPanel: React.FC<CoinChartProps> = ({ asset, positions }) => {
+  const isUp = (asset.change24h || 0) >= 0;
+  return (
+    <div className="space-y-2">
+      <div className="px-3.5 py-2.5 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-emerald-600" />
+          <span className="font-extrabold text-[var(--theme-text-primary)]">
+            Live Candlestick &amp; Volume Chart ({asset.symbol}/USDT)
+          </span>
+        </div>
+        <div className="flex items-center gap-3 font-mono text-[11px]">
+          <span className="text-[var(--theme-text-muted)]">
+            Spot:{' '}
+            <strong className="text-[var(--theme-text-primary)]">
+              ${asset.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+            </strong>
+          </span>
+          <span className={isUp ? 'text-emerald-600 font-bold' : 'text-rose-600 font-bold'}>
+            {isUp ? '+' : ''}
+            {(asset.change24h || 0).toFixed(2)}%
+          </span>
+          <span className="text-[var(--theme-text-muted)] hidden sm:inline">
+            24h Range: ${asset.low24h.toLocaleString('en-US', { maximumFractionDigits: 2 })} – $
+            {asset.high24h.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+          </span>
+        </div>
+      </div>
+      <TradingChart asset={asset} activePositions={positions} />
+    </div>
+  );
+};
+
 interface CoinTickAndChartProps {
   asset: MarketAsset;
   positions: Position[];
@@ -1808,19 +2023,8 @@ export const CoinTickAndChartPanel: React.FC<CoinTickAndChartProps> = ({
 }) => {
   return (
     <div className="space-y-4">
-      {/* (a) LIVE CONSECUTIVE TICK PATTERN & 500 / 1000 ROLLING TREND QUALITY ANALYZER */}
       <LiveRollingTickPatternCard asset={asset} />
-
-      {/* (b) CURRENT CHART */}
-      <div className="space-y-1.5">
-        <div className="px-1 flex items-center justify-between text-xs font-bold text-[var(--theme-text-secondary)]">
-          <span>(b) Live Candlestick & Volume Chart ({asset.symbol}/USDT)</span>
-          <span className="font-mono text-[11px] text-[var(--theme-text-muted)]">
-            Spot: ${asset.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-          </span>
-        </div>
-        <TradingChart asset={asset} activePositions={positions} />
-      </div>
+      <CoinChartPanel asset={asset} positions={positions} />
     </div>
   );
 };
@@ -1835,16 +2039,41 @@ interface PnlForecastingMatrixProps {
   cashBalance: number;
   positions: Position[];
   spotHoldings: SpotHolding[];
+  totalTrades?: number;
+  realizedPnL?: number;
+  onResetTradeHistory?: () => void;
+  onResetSimulation?: () => void;
+  onPlaceLiveOrder?: (params: {
+    symbol: string;
+    mode: TradeMode;
+    side: OrderSide;
+    orderType: 'MARKET' | 'LIMIT';
+    margin: number;
+    leverage: number;
+  }) => boolean | void;
 }
+
+type ForecastSimMode = 'LIVE_RUNNING' | 'COMBINED' | 'HYPOTHETICAL';
 
 const SHOCK_STEPS = [-20, -15, -12, -10, -8, -5, -3, -2, -1, 0, 0.5, 1, 1.5, 2];
 
 export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
   asset,
   totalEquity,
+  cashBalance,
   positions,
   spotHoldings,
+  totalTrades = 0,
+  realizedPnL = 0,
+  onResetTradeHistory,
+  onResetSimulation,
+  onPlaceLiveOrder,
 }) => {
+  const coinPositions = positions.filter((p) => p.assetSymbol === asset.symbol);
+  const [forecastMode, setForecastMode] = useState<ForecastSimMode>(() =>
+    coinPositions.length > 0 || positions.length > 0 ? 'LIVE_RUNNING' : 'COMBINED'
+  );
+  const [selectedLivePosId, setSelectedLivePosId] = useState<string>('ALL_COIN');
   const [customShockPct, setCustomShockPct] = useState<number>(-5);
   const [simMargin, setSimMargin] = useState<number>(250);
   const [simLeverage, setSimLeverage] = useState<number>(
@@ -1852,61 +2081,141 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
   );
   const [simSide, setSimSide] = useState<'LONG' | 'SHORT'>('LONG');
 
+  // Auto-switch to LIVE_RUNNING when a new live trade is opened on this coin
+  const prevCoinPosCountRef = useRef<number>(coinPositions.length);
+  useEffect(() => {
+    if (coinPositions.length > prevCoinPosCountRef.current && coinPositions.length > 0) {
+      setForecastMode('LIVE_RUNNING');
+      setSelectedLivePosId('ALL_COIN');
+    }
+    prevCoinPosCountRef.current = coinPositions.length;
+  }, [coinPositions.length]);
+
   const curPrice = asset.price || 96500;
   const maxLev = getBrokerMaxLeverage(asset.symbol);
 
   const coinSpotHolding = spotHoldings.find((s) => s.symbol === asset.symbol);
   const spotQty = coinSpotHolding ? coinSpotHolding.amount : 0;
-  const coinPositions = positions.filter((p) => p.assetSymbol === asset.symbol);
+
+  // Target live running positions based on selector
+  const targetLivePositions = useMemo(() => {
+    if (selectedLivePosId === 'ALL_PORTFOLIO') return positions;
+    if (selectedLivePosId === 'ALL_COIN') return coinPositions;
+    const found = positions.find((p) => p.id === selectedLivePosId);
+    return found ? [found] : coinPositions;
+  }, [positions, coinPositions, selectedLivePosId]);
+
+  const activeLiveMargin = targetLivePositions.reduce((acc, p) => acc + p.margin, 0);
+  const activeLiveUnrealized = targetLivePositions.reduce((acc, p) => acc + p.unrealizedPnL, 0);
+
+  const handleSyncFromLiveTrade = () => {
+    const primary = targetLivePositions[0] || coinPositions[0] || positions[0];
+    if (!primary) return;
+    setSimSide(primary.side);
+    setSimMargin(Math.max(10, Math.round(primary.margin)));
+    setSimLeverage(Math.min(maxLev, primary.leverage));
+  };
 
   const computeRow = (pctChange: number) => {
     const projectedPrice = curPrice * (1 + pctChange / 100);
     const priceDiff = projectedPrice - curPrice;
 
     // 1. Spot PnL Delta for this coin
-    const spotPnLDelta = spotQty * priceDiff;
+    const spotPnLDelta =
+      forecastMode === 'HYPOTHETICAL' ? 0 : spotQty * priceDiff;
 
-    // 2. Active Open Leveraged Positions PnL & Liquidation check
+    // 2. Active Live Running Positions PnL (both total PnL from entry & delta from current mark)
     let openPosPnLDelta = 0;
+    let liveTotalPnLFromEntry = 0;
     let liquidatedCount = 0;
-    coinPositions.forEach((pos) => {
-      const isLong = pos.side === 'LONG';
-      const isLiq = isLong
-        ? projectedPrice <= pos.liquidationPrice
-        : projectedPrice >= pos.liquidationPrice;
-      if (isLiq) {
-        liquidatedCount += 1;
-        openPosPnLDelta -= pos.margin + pos.unrealizedPnL;
-      } else {
-        const delta = isLong
-          ? pos.amount * (projectedPrice - curPrice)
-          : pos.amount * (curPrice - projectedPrice);
-        openPosPnLDelta += delta;
-      }
-    });
+
+    if (forecastMode !== 'HYPOTHETICAL') {
+      targetLivePositions.forEach((pos) => {
+        const isLong = pos.side === 'LONG';
+        const posBasePrice = pos.assetSymbol === asset.symbol ? curPrice : pos.entryPrice;
+        const posProjectedPrice =
+          pos.assetSymbol === asset.symbol
+            ? projectedPrice
+            : posBasePrice * (1 + pctChange / 100);
+
+        const isLiq = isLong
+          ? posProjectedPrice <= pos.liquidationPrice
+          : posProjectedPrice >= pos.liquidationPrice;
+
+        if (isLiq) {
+          liquidatedCount += 1;
+          openPosPnLDelta -= pos.margin + pos.unrealizedPnL;
+          liveTotalPnLFromEntry -= pos.margin;
+        } else {
+          const deltaFromCurrent = isLong
+            ? pos.amount * (posProjectedPrice - posBasePrice)
+            : pos.amount * (posBasePrice - posProjectedPrice);
+          const totalFromEntry = isLong
+            ? pos.amount * (posProjectedPrice - pos.entryPrice)
+            : pos.amount * (pos.entryPrice - posProjectedPrice);
+
+          openPosPnLDelta += deltaFromCurrent;
+          liveTotalPnLFromEntry += totalFromEntry;
+        }
+      });
+    }
+
+    const liveRoePct =
+      activeLiveMargin > 0
+        ? (liveTotalPnLFromEntry / activeLiveMargin) * 100
+        : 0;
 
     // 3. Hypothetical Simulated Trade PnL (-20% to +2%)
+    const includeHypothetical =
+      forecastMode === 'HYPOTHETICAL' ||
+      forecastMode === 'COMBINED' ||
+      (forecastMode === 'LIVE_RUNNING' && targetLivePositions.length === 0 && spotQty === 0);
+
     const simNotional = simMargin * simLeverage;
     const rawSimRoePct =
       simSide === 'LONG' ? pctChange * simLeverage : -pctChange * simLeverage;
-    const isSimLiquidated = rawSimRoePct <= -99.2;
-    const simPnLUsd = isSimLiquidated
+    const isSimLiquidated = includeHypothetical && rawSimRoePct <= -99.2;
+    const simPnLUsd = !includeHypothetical
+      ? 0
+      : isSimLiquidated
       ? -simMargin
       : (simNotional * (simSide === 'LONG' ? pctChange : -pctChange)) / 100;
-    const simRoePct = isSimLiquidated ? -100 : rawSimRoePct;
+    const simRoePct = !includeHypothetical ? 0 : isSimLiquidated ? -100 : rawSimRoePct;
+
+    // Primary displayed trade PnL & ROE depending on mode
+    const primaryTradePnL =
+      forecastMode === 'LIVE_RUNNING' && (targetLivePositions.length > 0 || spotQty > 0)
+        ? liveTotalPnLFromEntry + spotPnLDelta
+        : forecastMode === 'COMBINED'
+        ? liveTotalPnLFromEntry + spotPnLDelta + simPnLUsd
+        : simPnLUsd;
+
+    const primaryRoePct =
+      forecastMode === 'LIVE_RUNNING' && activeLiveMargin > 0
+        ? liveRoePct
+        : forecastMode === 'COMBINED' && activeLiveMargin + simMargin > 0
+        ? ((liveTotalPnLFromEntry + simPnLUsd) / (activeLiveMargin + simMargin)) * 100
+        : simRoePct;
 
     // 4. Projected Total Portfolio Equity
-    const projectedEquity = Math.max(0, totalEquity + spotPnLDelta + openPosPnLDelta + simPnLUsd);
+    const projectedEquity = Math.max(
+      0,
+      totalEquity + spotPnLDelta + openPosPnLDelta + simPnLUsd
+    );
 
     return {
       pctChange,
       projectedPrice,
       spotPnLDelta,
       openPosPnLDelta,
+      liveTotalPnLFromEntry,
+      liveRoePct,
       liquidatedCount,
       simPnLUsd,
       simRoePct,
       isSimLiquidated,
+      primaryTradePnL,
+      primaryRoePct,
       projectedEquity,
     };
   };
@@ -1915,21 +2224,131 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
 
   return (
     <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 space-y-4 shadow-sm">
+      {/* Header with Live Running Trade Forecasting Switcher & Reset Returns/Log Button */}
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border-subtle)]">
         <div className="flex items-center gap-2.5">
           <BarChart3 className="w-4 h-4 text-emerald-600" />
           <div>
-            <h3 className="text-sm font-extrabold text-[var(--theme-text-primary)]">
-              PnL Forecasting & Stress Matrix (-20% to +2% Range · {asset.symbol}/USDT)
-            </h3>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-extrabold text-[var(--theme-text-primary)]">
+                PnL Forecasting &amp; Live Running Trade Stress Matrix (-20% to +2% · {asset.symbol}/USDT)
+              </h3>
+              <span className="px-2 py-0.5 rounded bg-emerald-600/10 text-emerald-600 border border-emerald-600/25 text-[10px] font-mono font-bold">
+                {coinPositions.length} LIVE {asset.symbol} TRADE{coinPositions.length === 1 ? '' : 'S'} RUNNING
+              </span>
+            </div>
             <p className="text-xs text-[var(--theme-text-muted)]">
-              Models downside drawdown shocks (-20% to 0%) and upside scalping targets (0% to +2%)
+              Simulate PnL forecasting directly on your live running trade(s) or model a hypothetical position across -20% to +2% shocks
             </p>
           </div>
         </div>
 
-        {/* Hypothetical Position Controls */}
+        {/* Reset Previous Trade Returns & Log Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          {onResetTradeHistory && (
+            <button
+              type="button"
+              onClick={onResetTradeHistory}
+              title="Reset previous closed trade returns (Realized PnL) and trade log history while keeping live running positions"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 text-xs font-mono font-bold transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>
+                Reset Previous Trade Returns &amp; Log ({totalTrades} Trades · {realizedPnL >= 0 ? '+' : ''}${realizedPnL.toFixed(2)})
+              </span>
+            </button>
+          )}
+          {onResetSimulation && (
+            <button
+              type="button"
+              onClick={onResetSimulation}
+              title="Reset entire simulator account including live positions and balance"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-rose-500/35 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 text-xs font-mono font-bold transition-all cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset All</span>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Mode Selector Bar: 1. Live Running Trade(s) | 2. Combined (Live + Sim) | 3. Hypothetical Sim Trade */}
+      <div className="p-3 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-bold text-[var(--theme-text-secondary)]">
+            Forecast Target:
+          </span>
+          <div className="inline-flex rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)] p-0.5 gap-0.5 font-mono text-xs">
+            <button
+              type="button"
+              onClick={() => setForecastMode('LIVE_RUNNING')}
+              className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                forecastMode === 'LIVE_RUNNING'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+              }`}
+            >
+              1. Live Running Trade ({coinPositions.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setForecastMode('COMBINED')}
+              className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                forecastMode === 'COMBINED'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+              }`}
+            >
+              2. Live + Hypothetical Sim
+            </button>
+            <button
+              type="button"
+              onClick={() => setForecastMode('HYPOTHETICAL')}
+              className={`px-2.5 py-1 rounded-md font-bold transition-all cursor-pointer ${
+                forecastMode === 'HYPOTHETICAL'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+              }`}
+            >
+              3. Hypothetical Sim Only
+            </button>
+          </div>
+
+          {/* Live Running Trade Picker when positions exist */}
+          {positions.length > 0 && forecastMode !== 'HYPOTHETICAL' && (
+            <select
+              value={selectedLivePosId}
+              onChange={(e) => setSelectedLivePosId(e.target.value)}
+              className="px-2.5 py-1 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)] text-xs font-mono font-bold text-[var(--theme-text-primary)]"
+            >
+              <option value="ALL_COIN">
+                All {asset.symbol} Running Trades ({coinPositions.length})
+              </option>
+              <option value="ALL_PORTFOLIO">
+                All Portfolio Running Trades ({positions.length})
+              </option>
+              {positions.map((p, idx) => (
+                <option key={p.id} value={p.id}>
+                  #{idx + 1} {p.assetSymbol} {p.side} {p.leverage}x · Margin ${p.margin.toFixed(0)} @ ${p.entryPrice.toFixed(2)}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Hypothetical Position Controls & Quick Live Launch */}
         <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+          {positions.length > 0 && (
+            <button
+              type="button"
+              onClick={handleSyncFromLiveTrade}
+              title="Copy Side, Margin, and Leverage from active running trade"
+              className="px-2.5 py-1 rounded-lg border border-emerald-600/30 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-600 font-bold cursor-pointer transition-colors"
+            >
+              Sync Params from Live Trade
+            </button>
+          )}
+
           <div className="inline-flex rounded-lg border border-[var(--theme-border)] overflow-hidden">
             <button
               type="button"
@@ -1937,7 +2356,7 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
               className={`px-2.5 py-1 font-bold cursor-pointer ${
                 simSide === 'LONG'
                   ? 'bg-emerald-600 text-white'
-                  : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)]'
+                  : 'bg-[var(--theme-bg-card)] text-[var(--theme-text-secondary)]'
               }`}
             >
               LONG
@@ -1948,7 +2367,7 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
               className={`px-2.5 py-1 font-bold cursor-pointer ${
                 simSide === 'SHORT'
                   ? 'bg-rose-600 text-white'
-                  : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)]'
+                  : 'bg-[var(--theme-bg-card)] text-[var(--theme-text-secondary)]'
               }`}
             >
               SHORT
@@ -1956,14 +2375,14 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
           </div>
 
           <label className="flex items-center gap-1">
-            <span className="text-[var(--theme-text-muted)]">Sim Margin ($):</span>
+            <span className="text-[var(--theme-text-muted)]">Margin ($):</span>
             <input
               type="number"
-              min={10}
-              step={50}
+              min={5}
+              step={10}
               value={simMargin}
-              onChange={(e) => setSimMargin(Math.max(10, Number(e.target.value) || 100))}
-              className="w-20 px-2 py-1 rounded font-mono text-xs"
+              onChange={(e) => setSimMargin(Math.max(5, Number(e.target.value) || 50))}
+              className="w-20 px-2 py-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-card)] font-mono text-xs"
             />
           </label>
 
@@ -1972,9 +2391,9 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
             <select
               value={simLeverage}
               onChange={(e) => setSimLeverage(Number(e.target.value))}
-              className="px-2 py-1 rounded font-mono text-xs"
+              className="px-2 py-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-card)] font-mono text-xs"
             >
-              {[1, 2, 5, 10, 20, 25, 50, 100]
+              {[1, 2, 5, 10, 20, 25, 50, 75, 100, 150]
                 .filter((l) => l <= maxLev)
                 .map((lev) => (
                   <option key={lev} value={lev}>
@@ -1983,8 +2402,111 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                 ))}
             </select>
           </label>
+
+          {onPlaceLiveOrder && (
+            <button
+              type="button"
+              onClick={() => {
+                const marginToUse = Math.min(simMargin, Math.max(5, cashBalance));
+                onPlaceLiveOrder({
+                  symbol: asset.symbol,
+                  mode: 'LEVERAGED' as TradeMode,
+                  side: simSide as OrderSide,
+                  orderType: 'MARKET',
+                  margin: marginToUse,
+                  leverage: simLeverage,
+                });
+                setForecastMode('LIVE_RUNNING');
+              }}
+              title="Open this simulated position as a live running trade to forecast live"
+              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer transition-colors shadow-xs"
+            >
+              + Open as Live Running Trade
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Live Running Trade Summary Strip */}
+      {targetLivePositions.length > 0 ? (
+        <div className="p-3 rounded-xl border border-emerald-600/30 bg-emerald-600/5 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+            <span className="font-sans font-bold text-emerald-700 flex items-center gap-1.5">
+              <Activity className="w-3.5 h-3.5 text-emerald-600" />
+              Active Live Running Trade(s) Being Forecasted ({targetLivePositions.length}):
+            </span>
+            <div className="flex items-center gap-4 flex-wrap">
+              <span>
+                Locked Margin:{' '}
+                <strong className="text-[var(--theme-text-primary)]">
+                  ${activeLiveMargin.toFixed(2)}
+                </strong>
+              </span>
+              <span>
+                Current Live Unrealized PnL:{' '}
+                <strong className={activeLiveUnrealized >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                  {activeLiveUnrealized >= 0 ? '+' : ''}${activeLiveUnrealized.toFixed(2)} (
+                  {activeLiveMargin > 0
+                    ? `${((activeLiveUnrealized / activeLiveMargin) * 100).toFixed(2)}%`
+                    : '0.00%'}
+                  )
+                </strong>
+              </span>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {targetLivePositions.map((pos, idx) => {
+              const isPosProfit = pos.unrealizedPnL >= 0;
+              return (
+                <div
+                  key={pos.id}
+                  onClick={() => {
+                    setForecastMode('LIVE_RUNNING');
+                    setSelectedLivePosId(pos.id);
+                  }}
+                  className={`p-2 rounded-lg border text-[11px] font-mono cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                    selectedLivePosId === pos.id
+                      ? 'border-emerald-600 bg-emerald-600/10'
+                      : 'border-[var(--theme-border)] bg-[var(--theme-bg-card)] hover:border-emerald-600/40'
+                  }`}
+                >
+                  <div>
+                    <span className="font-bold text-[var(--theme-text-primary)]">
+                      #{idx + 1} {pos.assetSymbol}{' '}
+                    </span>
+                    <span
+                      className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                        pos.side === 'LONG'
+                          ? 'bg-emerald-500/15 text-emerald-600'
+                          : 'bg-rose-500/15 text-rose-600'
+                      }`}
+                    >
+                      {pos.leverage}x {pos.side}
+                    </span>
+                    <div className="text-[10px] text-[var(--theme-text-muted)] mt-0.5">
+                      Entry ${pos.entryPrice.toFixed(2)} · Liq ${pos.liquidationPrice.toFixed(2)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className={`font-bold ${isPosProfit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {isPosProfit ? '+' : ''}${pos.unrealizedPnL.toFixed(2)}
+                    </div>
+                    <div className="text-[10px] text-[var(--theme-text-muted)]">
+                      Margin ${pos.margin.toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="px-3.5 py-2.5 rounded-xl border border-[var(--theme-border-subtle)] bg-[var(--theme-bg-card-subtle)] flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-[var(--theme-text-muted)]">
+          <span>
+            No open live running trade on {asset.symbol} yet — showing hypothetical {simSide} ({simLeverage}x · ${simMargin} margin) forecast, or click <strong>+ Open as Live Running Trade</strong> above to simulate a live running position.
+          </span>
+        </div>
+      )}
 
       {/* Interactive Slider (-20% to +2%) */}
       <div className="p-3.5 rounded-xl bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] space-y-2">
@@ -2000,6 +2522,21 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
             Projected {asset.symbol}:{' '}
             <strong className="text-[var(--theme-text-primary)]">
               ${customPreview.projectedPrice.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+            </strong>
+          </span>
+          <span>
+            Live Running Trade PnL:{' '}
+            <strong
+              className={
+                customPreview.liveTotalPnLFromEntry + customPreview.spotPnLDelta >= 0
+                  ? 'text-emerald-600'
+                  : 'text-rose-600'
+              }
+            >
+              {customPreview.liveTotalPnLFromEntry + customPreview.spotPnLDelta >= 0 ? '+' : ''}$
+              {(customPreview.liveTotalPnLFromEntry + customPreview.spotPnLDelta).toFixed(2)} (
+              {customPreview.liveRoePct >= 0 ? '+' : ''}
+              {customPreview.liveRoePct.toFixed(1)}%)
             </strong>
           </span>
           <span>
@@ -2021,14 +2558,14 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
           max={2}
           step={0.5}
           value={customShockPct}
-          onChange={(e) => setCustomShockPct( parseFloat(e.target.value) )}
+          onChange={(e) => setCustomShockPct(parseFloat(e.target.value))}
           className="w-full accent-emerald-600 cursor-pointer"
         />
         <div className="flex justify-between text-[10px] font-mono text-[var(--theme-text-muted)]">
           <span>-20.0% (Severe Crash)</span>
           <span>-10.0% (Correction)</span>
           <span>-5.0% (Pullback)</span>
-          <span>0.0% (Spot)</span>
+          <span>0.0% (Current Mark)</span>
           <span>+2.0% (Upside Target)</span>
         </div>
       </div>
@@ -2040,9 +2577,9 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
             <tr className="text-[10px] uppercase tracking-wider text-[var(--theme-text-secondary)] border-b border-[var(--theme-border)]">
               <th className="py-2 px-3">Move (%)</th>
               <th className="py-2 px-3 text-right">Projected {asset.symbol} Price</th>
+              <th className="py-2 px-3 text-right">Live Running Trade PnL (ROE %)</th>
               <th className="py-2 px-3 text-right">Sim {simSide} ({simLeverage}x) PnL</th>
               <th className="py-2 px-3 text-right">Sim ROE %</th>
-              <th className="py-2 px-3 text-right">Active Spot + Open Pos PnL</th>
               <th className="py-2 px-3 text-right">Projected Total Equity</th>
               <th className="py-2 px-3 text-center">Margin Status</th>
             </tr>
@@ -2051,6 +2588,7 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
             {SHOCK_STEPS.map((pct) => {
               const row = computeRow(pct);
               const isZero = pct === 0;
+              const liveCombined = row.liveTotalPnLFromEntry + row.spotPnLDelta;
               return (
                 <tr
                   key={pct}
@@ -2071,6 +2609,27 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                   </td>
                   <td
                     className={`py-2 px-3 text-right font-bold ${
+                      targetLivePositions.length === 0 && spotQty === 0
+                        ? 'text-[var(--theme-text-muted)]'
+                        : liveCombined >= 0
+                        ? 'text-emerald-600'
+                        : 'text-rose-600'
+                    }`}
+                  >
+                    {targetLivePositions.length === 0 && spotQty === 0 ? (
+                      'No Open Trade'
+                    ) : (
+                      <>
+                        {liveCombined >= 0 ? '+' : ''}${liveCombined.toFixed(2)}{' '}
+                        <span className="text-[10px] opacity-85">
+                          ({row.liveRoePct >= 0 ? '+' : ''}
+                          {row.liveRoePct.toFixed(1)}%)
+                        </span>
+                      </>
+                    )}
+                  </td>
+                  <td
+                    className={`py-2 px-3 text-right font-bold ${
                       row.simPnLUsd >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}
                   >
@@ -2082,14 +2641,6 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                     }`}
                   >
                     {row.simRoePct >= 0 ? '+' : ''}{row.simRoePct.toFixed(1)}%
-                  </td>
-                  <td
-                    className={`py-2 px-3 text-right ${
-                      row.spotPnLDelta + row.openPosPnLDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {row.spotPnLDelta + row.openPosPnLDelta >= 0 ? '+' : ''}$
-                    {(row.spotPnLDelta + row.openPosPnLDelta).toFixed(2)}
                   </td>
                   <td className="py-2 px-3 text-right font-bold text-[var(--theme-text-primary)]">
                     ${row.projectedEquity.toFixed(2)}

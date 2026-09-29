@@ -29,9 +29,39 @@ interface StorageManagerModalProps {
 export const StorageManagerModal: React.FC<StorageManagerModalProps> = ({ isOpen, onClose, simulatorData }) => {
   const [files, setFiles] = useState<B2Item[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isCreatingBuildCopy, setIsCreatingBuildCopy] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  const handleCreateAppBuildCopy = async (autoDownload = true) => {
+    setIsCreatingBuildCopy(true);
+    setError(null);
+    setSuccessMsg(null);
+    try {
+      const res = await fetch('/api/backup/create-build-copy', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Failed to create app build copy');
+      }
+      setSuccessMsg(
+        `App build copy "${data.filename}" (${(data.size / 1024).toFixed(1)} KB) created & saved to Storage!`
+      );
+      await fetchFiles();
+      if (autoDownload) {
+        const link = document.createElement('a');
+        link.href = data.downloadUrl || '/api/backup/app-build-archive';
+        link.download = data.filename || 'aurumx-app-build-copy.tar.gz';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to create build copy');
+    } finally {
+      setIsCreatingBuildCopy(false);
+    }
+  };
 
   const downloadSessionCsv = () => {
     if (!simulatorData) return;
@@ -175,6 +205,33 @@ export const StorageManagerModal: React.FC<StorageManagerModalProps> = ({ isOpen
 
         {/* Content */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
+          {/* App Build Copy Snapshot Card */}
+          <div className="p-4 rounded-sm border border-emerald-500/30 bg-emerald-500/5 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-tight text-emerald-600">
+                CURRENT APP BUILD COPY (DIST + FULL SOURCE ARCHIVE)
+              </p>
+              <p className="text-[10px] text-[var(--theme-text-muted)] mt-0.5">
+                Packages compiled production build (<code className="font-mono">dist/</code>) + full TypeScript source (<code className="font-mono">src/</code>, <code className="font-mono">server.ts</code>, configs) into <code className="font-mono">aurumx-app-build-copy.tar.gz</code>
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleCreateAppBuildCopy(true)}
+                disabled={isCreatingBuildCopy}
+                className="px-3.5 py-2 rounded-sm text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors flex items-center gap-1.5 cursor-pointer uppercase shadow-sm disabled:opacity-50"
+              >
+                {isCreatingBuildCopy ? (
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Download className="w-3.5 h-3.5" />
+                )}
+                <span>{isCreatingBuildCopy ? 'Packaging Build...' : 'Create & Download Build Copy'}</span>
+              </button>
+            </div>
+          </div>
+
           {/* Upload Section */}
           <div className="p-4 rounded-sm border border-dashed border-[var(--theme-border-subtle)] hover:border-[var(--theme-accent)] transition-colors group relative bg-[var(--theme-bg-card-subtle)]">
             <input 

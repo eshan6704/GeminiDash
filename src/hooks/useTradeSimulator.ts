@@ -1115,6 +1115,29 @@ export function useTradeSimulator() {
     [addNotification]
   );
 
+  // Reset previous closed trade returns & trade history log while preserving live running positions
+  const resetTradeHistory = useCallback(() => {
+    const lockedMargin = positionsRef.current.reduce((acc, p) => acc + p.margin, 0);
+    const lockedLimit = limitOrdersRef.current.reduce((acc, o) => acc + o.margin, 0);
+    const spotCost = spotHoldingsRef.current.reduce((acc, s) => acc + s.amount * s.avgCostPrice, 0);
+    const baseInitial = configRef.current.initialBalance || 100;
+    const restoredCash = Math.max(0, Number((baseInitial - lockedMargin - lockedLimit - spotCost).toFixed(2)));
+
+    setTradeHistory([]);
+    setCashBalance(restoredCash);
+    try {
+      localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.CASH, restoredCash.toString());
+    } catch {
+      // ignore storage errors
+    }
+    addNotification(
+      'info',
+      'Trade Returns & Log Reset',
+      `Cleared previous closed trade returns and trade log. Active running positions preserved.`
+    );
+  }, [addNotification]);
+
   // Reset entire simulation to initial funds
   const resetSimulation = useCallback(
     (newInitialBalance?: number) => {
@@ -1300,6 +1323,7 @@ export function useTradeSimulator() {
     closePosition,
     cancelLimitOrder,
     updatePositionSLTP,
+    resetTradeHistory,
     resetSimulation,
     adjustCashBalance,
     addNotification,

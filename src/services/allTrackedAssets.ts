@@ -15,10 +15,14 @@ export interface TrackedAsset {
 
 export const ALL_TRACKED_ASSETS: TrackedAsset[] = [
   // --- CRYPTO & GOLD TERMINAL ASSETS ---
-  { symbol: 'PAXG', name: 'PAX Gold (Gold Backed Token)', category: 'CRYPTO', price: 3042.80, change1d: 1.15, currency: 'USD', yahooSymbol: 'PAXG-USD', isTerminalAsset: true, sector: 'Precious Metals / Crypto' },
   { symbol: 'BTC', name: 'Bitcoin', category: 'CRYPTO', price: 91450.00, change1d: 2.34, currency: 'USD', yahooSymbol: 'BTC-USD', isTerminalAsset: true, sector: 'Layer 1 Crypto' },
-  { symbol: 'ETH', name: 'Ethereum', category: 'CRYPTO', price: 3340.50, change1d: 1.82, currency: 'USD', yahooSymbol: 'ETH-USD', isTerminalAsset: true, sector: 'Smart Contracts' },
+  { symbol: 'XAUT', name: 'Tether Gold', category: 'CRYPTO', price: 3045.50, change1d: 1.18, currency: 'USD', yahooSymbol: 'XAUT-USD', isTerminalAsset: true, sector: 'Precious Metals / Crypto' },
+  { symbol: 'PAXG', name: 'PAX Gold (Gold Backed Token)', category: 'CRYPTO', price: 3042.80, change1d: 1.15, currency: 'USD', yahooSymbol: 'PAXG-USD', isTerminalAsset: true, sector: 'Precious Metals / Crypto' },
+  { symbol: 'ZEC', name: 'Zcash', category: 'CRYPTO', price: 48.50, change1d: -0.50, currency: 'USD', yahooSymbol: 'ZEC-USD', isTerminalAsset: true, sector: 'Privacy L1 Crypto' },
   { symbol: 'SOL', name: 'Solana', category: 'CRYPTO', price: 198.70, change1d: 4.15, currency: 'USD', yahooSymbol: 'SOL-USD', isTerminalAsset: true, sector: 'High Speed L1' },
+  { symbol: 'CL', name: 'Crude Oil (WTI)', category: 'COMMODITY', price: 71.45, change1d: 0.85, currency: 'USD', yahooSymbol: 'CL=F', isTerminalAsset: true, sector: 'Energy / Commodity' },
+  { symbol: 'XAG', name: 'Silver (XAG/USD)', category: 'COMMODITY', price: 31.42, change1d: 1.15, currency: 'USD', yahooSymbol: 'SI=F', isTerminalAsset: true, sector: 'Precious Metals' },
+  { symbol: 'ETH', name: 'Ethereum', category: 'CRYPTO', price: 3340.50, change1d: 1.82, currency: 'USD', yahooSymbol: 'ETH-USD', isTerminalAsset: true, sector: 'Smart Contracts' },
   { symbol: 'BNB', name: 'BNB Chain', category: 'CRYPTO', price: 645.20, change1d: 0.95, currency: 'USD', yahooSymbol: 'BNB-USD', isTerminalAsset: true, sector: 'Exchange Token' },
   { symbol: 'XRP', name: 'Ripple XRP', category: 'CRYPTO', price: 2.38, change1d: 5.60, currency: 'USD', yahooSymbol: 'XRP-USD', isTerminalAsset: true, sector: 'Payments' },
   { symbol: 'DOGE', name: 'Dogecoin', category: 'CRYPTO', price: 0.285, change1d: 3.40, currency: 'USD', yahooSymbol: 'DOGE-USD', isTerminalAsset: true, sector: 'Memecoin' },

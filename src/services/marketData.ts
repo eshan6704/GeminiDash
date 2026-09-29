@@ -2,6 +2,37 @@ import { MarketAsset, Candle } from '../types/trading';
 import { getHydratedPrice, updateRememberedPrice } from './priceMemoryStore';
 
 export const INITIAL_ASSETS: Record<string, MarketAsset> = {
+  BTC: {
+    id: 'bitcoin',
+    symbol: 'BTC',
+    name: 'Bitcoin',
+    category: 'crypto',
+    price: 86520.00,
+    change24h: 1.15,
+    high24h: 87800.00,
+    low24h: 85200.00,
+    volume24h: 42000000000,
+    marketCap: 1730000000000,
+    lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
+    description: 'The pioneering decentralized digital cryptocurrency and store of value.',
+  },
+  XAUT: {
+    id: 'tether-gold',
+    symbol: 'XAUT',
+    name: 'Tether Gold',
+    category: 'gold',
+    price: 4335.50,
+    change24h: 0.31,
+    high24h: 4368.00,
+    low24h: 4298.00,
+    volume24h: 195000000,
+    marketCap: 1920000000,
+    lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
+    description: 'Tether Gold (XAUt) token backed 1:1 by one fine troy ounce of physical London Good Delivery gold.',
+    goldOunceFactor: 1,
+  },
   PAXG: {
     id: 'pax-gold',
     symbol: 'PAXG',
@@ -18,35 +49,20 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     description: 'Regulated digital gold token backed 1:1 by London Good Delivery gold bars held by Paxos Trust.',
     goldOunceFactor: 1,
   },
-  BTC: {
-    id: 'bitcoin',
-    symbol: 'BTC',
-    name: 'Bitcoin',
+  ZEC: {
+    id: 'zcash',
+    symbol: 'ZEC',
+    name: 'Zcash',
     category: 'crypto',
-    price: 86520.00,
-    change24h: 1.15,
-    high24h: 87800.00,
-    low24h: 85200.00,
-    volume24h: 42000000000,
-    marketCap: 1730000000000,
+    price: 45.50,
+    change24h: -0.5,
+    high24h: 47.0,
+    low24h: 44.0,
+    volume24h: 50000000,
+    marketCap: 700000000,
     lastUpdated: Date.now(),
     dataTimestamp: Date.now(),
-    description: 'The pioneering decentralized digital cryptocurrency and store of value.',
-  },
-  ETH: {
-    id: 'ethereum',
-    symbol: 'ETH',
-    name: 'Ethereum',
-    category: 'crypto',
-    price: 2758.50,
-    change24h: 0.85,
-    high24h: 2810.00,
-    low24h: 2715.00,
-    volume24h: 16100000000,
-    marketCap: 336000000000,
-    lastUpdated: Date.now(),
-    dataTimestamp: Date.now(),
-    description: 'Leading smart-contract platform for decentralized finance and web3 applications.',
+    description: 'Privacy-focused cryptocurrency based on zk-SNARKs technology.',
   },
   SOL: {
     id: 'solana',
@@ -63,20 +79,50 @@ export const INITIAL_ASSETS: Record<string, MarketAsset> = {
     dataTimestamp: Date.now(),
     description: 'High-throughput, ultra-low fee proof-of-stake layer 1 blockchain.',
   },
-  ZEC: {
-    id: 'zcash',
-    symbol: 'ZEC',
-    name: 'Zcash',
+  CL: {
+    id: 'crude-oil-wti',
+    symbol: 'CL',
+    name: 'Crude Oil (WTI)',
     category: 'crypto',
-    price: 45.50,
-    change24h: -0.5,
-    high24h: 47.0,
-    low24h: 44.0,
-    volume24h: 50000000,
-    marketCap: 700000000,
+    price: 71.45,
+    change24h: 0.85,
+    high24h: 72.30,
+    low24h: 70.60,
+    volume24h: 1850000000,
+    marketCap: 145000000000,
     lastUpdated: Date.now(),
     dataTimestamp: Date.now(),
-    description: 'Privacy-focused cryptocurrency based on zk-SNARKs technology.',
+    description: 'West Texas Intermediate (WTI) Crude Oil benchmark futures & spot market feed ($/bbl).',
+  },
+  XAG: {
+    id: 'silver-xag',
+    symbol: 'XAG',
+    name: 'Silver (XAG)',
+    category: 'gold',
+    price: 31.42,
+    change24h: 1.15,
+    high24h: 31.85,
+    low24h: 31.05,
+    volume24h: 920000000,
+    marketCap: 18200000000,
+    lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
+    description: 'Spot Silver (XAG/USD) precious metal benchmark per troy ounce.',
+  },
+  ETH: {
+    id: 'ethereum',
+    symbol: 'ETH',
+    name: 'Ethereum',
+    category: 'crypto',
+    price: 2758.50,
+    change24h: 0.85,
+    high24h: 2810.00,
+    low24h: 2715.00,
+    volume24h: 16100000000,
+    marketCap: 336000000000,
+    lastUpdated: Date.now(),
+    dataTimestamp: Date.now(),
+    description: 'Leading smart-contract platform for decentralized finance and web3 applications.',
   },
   XRP: {
     id: 'ripple',
@@ -164,6 +210,21 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
                   dataTimestamp: sourceTime,
                 };
                 updateRememberedPrice(sym, price, sourceTime, { change24h: change, high24h: high, low24h: low });
+
+                // Sync XAUT closely to PAXG live spot gold if Bitfinex hasn't updated XAUT more recently
+                if (sym === 'PAXG' && updatedAssets.XAUT) {
+                  const xautPrice = Number((price * 1.0005).toFixed(2));
+                  updatedAssets.XAUT = {
+                    ...updatedAssets.XAUT,
+                    price: xautPrice,
+                    change24h: isNaN(change) ? updatedAssets.XAUT.change24h : change,
+                    high24h: isNaN(high) ? updatedAssets.XAUT.high24h : Number((high * 1.0005).toFixed(2)),
+                    low24h: isNaN(low) ? updatedAssets.XAUT.low24h : Number((low * 1.0005).toFixed(2)),
+                    lastUpdated: sourceTime,
+                    dataTimestamp: sourceTime,
+                  };
+                  updateRememberedPrice('XAUT', xautPrice, sourceTime, { change24h: change, high24h: high, low24h: low });
+                }
               }
             }
           });
@@ -215,34 +276,40 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
 export type ChartInterval = '1s' | '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '2h' | '4h' | '1d';
 
 export async function fetchCandles(symbol: string, interval: ChartInterval): Promise<Candle[]> {
-  try {
-    const binanceSymbol = BINANCE_SYMBOL_MAP[symbol] || 'BTCUSDT';
-    const bRes = await fetch(
-      `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=100`
-    );
-    if (bRes.ok) {
-      const data = await bRes.json();
-      if (Array.isArray(data) && data.length > 0) {
-        return data.map((item: any[]) => ({
-          time: item[0],
-          open: parseFloat(item[1]),
-          high: parseFloat(item[2]),
-          low: parseFloat(item[3]),
-          close: parseFloat(item[4]),
-          volume: parseFloat(item[5]),
-        }));
+  const upper = (symbol || 'BTC').toUpperCase();
+  // Non-Binance spot commodities (CL Crude Oil, XAG Silver) use price-anchored candles
+  if (upper !== 'CL' && upper !== 'XAG') {
+    try {
+      const binanceSymbol =
+        BINANCE_SYMBOL_MAP[upper] ||
+        (upper === 'XAUT' ? 'PAXGUSDT' : `${upper}USDT`);
+      const bRes = await fetch(
+        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=100`
+      );
+      if (bRes.ok) {
+        const data = await bRes.json();
+        if (Array.isArray(data) && data.length > 0) {
+          return data.map((item: any[]) => ({
+            time: item[0],
+            open: parseFloat(item[1]),
+            high: parseFloat(item[2]),
+            low: parseFloat(item[3]),
+            close: parseFloat(item[4]),
+            volume: parseFloat(item[5]),
+          }));
+        }
       }
+    } catch (e) {
+      // Fallback candles generated gracefully
     }
-  } catch (e) {
-    // Fallback candles generated gracefully
   }
 
   // Graceful fallback: generate procedural continuous candles anchored to current price
-  return generateFallbackCandles(symbol, interval);
+  return generateFallbackCandles(upper, interval);
 }
 
 function generateFallbackCandles(symbol: string, interval: string): Candle[] {
-  const asset = INITIAL_ASSETS[symbol] || INITIAL_ASSETS.PAXG;
+  const asset = INITIAL_ASSETS[symbol] || INITIAL_ASSETS.BTC;
   const basePrice = asset.price;
   const count = 60;
   const candles: Candle[] = [];
@@ -255,7 +322,7 @@ function generateFallbackCandles(symbol: string, interval: string): Candle[] {
     const time = now - i * stepMs;
     const delta = (Math.random() - 0.49) * basePrice * volVolatility;
     const open = current;
-    const close = Math.max(1, open + delta);
+    const close = Math.max(0.0001, open + delta);
     const high = Math.max(open, close) + Math.random() * basePrice * volVolatility * 0.6;
     const low = Math.min(open, close) - Math.random() * basePrice * volVolatility * 0.6;
     const volume = Math.floor(Math.random() * 500 + 50);

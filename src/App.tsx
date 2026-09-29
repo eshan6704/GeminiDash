@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, Suspense, lazy } from 'react';
 import { useTradeSimulator } from './hooks/useTradeSimulator';
 import {
   Navbar,
@@ -18,36 +18,86 @@ import { OrderForm } from './components/OrderForm/OrderForm';
 import { MiniMarketDepth } from './components/OrderForm/MiniMarketDepth';
 import { PositionsTable } from './components/Positions/PositionsTable';
 import { PortfolioOverview } from './components/Portfolio/PortfolioOverview';
-import { WhatIfScenarioModal } from './components/Modals/WhatIfScenarioModal';
-import { AiRiskModal } from './components/Modals/AiRiskModal';
-import { SettingsModal } from './components/Modals/SettingsModal';
-import { BatchWriterModal } from './components/Modals/BatchWriterModal';
-import { StorageManagerModal } from './components/Modals/StorageManagerModal';
 import { NotificationToast } from './components/Notifications/NotificationToast';
-import { DailyPnLChart } from './components/Portfolio/DailyPnLChart';
-import { WhaleTradesFeed } from './components/Trades/WhaleTradesFeed';
-import { DeribitOptionsChain } from './components/DeribitOptions/DeribitOptionsChain';
-import { CryptoMarketCapTable, CryptoCoinItem } from './components/MarketCap/CryptoMarketCapTable';
-import { AdvancedCryptoScreenerView } from './components/MarketCap/AdvancedCryptoScreenerView';
-import { MarketAnalyticsDashboard } from './components/Analytics/MarketAnalyticsDashboard';
-import { GlobalIndicesView } from './components/Markets/GlobalIndicesView';
-import { ForexMarketView } from './components/Markets/ForexMarketView';
-import { CommoditiesMarketView } from './components/Markets/CommoditiesMarketView';
-import { NiftyIndicesView } from './components/Markets/NiftyIndicesView';
-import { StockConstituentsView } from './components/Markets/StockConstituentsView';
-import { IndianStockPortfolioView } from './components/Markets/IndianStockPortfolioView';
-import { IndianStockWatchlistView } from './components/Markets/IndianStockWatchlistView';
-import { OptionChainView } from './components/Markets/OptionChainView';
-import { StockOptionChainView } from './components/Markets/StockOptionChainView';
-import { AdvancedMarketScreenerView } from './components/Markets/AdvancedMarketScreenerView';
+import type { CryptoCoinItem } from './components/MarketCap/CryptoMarketCapTable';
 import { VolatilityAlertBanner } from './components/Notifications/VolatilityAlertBanner';
+
+const WhatIfScenarioModal = lazy(() =>
+  import('./components/Modals/WhatIfScenarioModal').then((m) => ({ default: m.WhatIfScenarioModal }))
+);
+const AiRiskModal = lazy(() =>
+  import('./components/Modals/AiRiskModal').then((m) => ({ default: m.AiRiskModal }))
+);
+const SettingsModal = lazy(() =>
+  import('./components/Modals/SettingsModal').then((m) => ({ default: m.SettingsModal }))
+);
+const BatchWriterModal = lazy(() =>
+  import('./components/Modals/BatchWriterModal').then((m) => ({ default: m.BatchWriterModal }))
+);
+const StorageManagerModal = lazy(() =>
+  import('./components/Modals/StorageManagerModal').then((m) => ({ default: m.StorageManagerModal }))
+);
+const DailyPnLChart = lazy(() =>
+  import('./components/Portfolio/DailyPnLChart').then((m) => ({ default: m.DailyPnLChart }))
+);
+const WhaleTradesFeed = lazy(() =>
+  import('./components/Trades/WhaleTradesFeed').then((m) => ({ default: m.WhaleTradesFeed }))
+);
+const DeribitOptionsChain = lazy(() =>
+  import('./components/DeribitOptions/DeribitOptionsChain').then((m) => ({ default: m.DeribitOptionsChain }))
+);
+const CryptoMarketCapTable = lazy(() =>
+  import('./components/MarketCap/CryptoMarketCapTable').then((m) => ({ default: m.CryptoMarketCapTable }))
+);
+const AdvancedCryptoScreenerView = lazy(() =>
+  import('./components/MarketCap/AdvancedCryptoScreenerView').then((m) => ({ default: m.AdvancedCryptoScreenerView }))
+);
+const MarketAnalyticsDashboard = lazy(() =>
+  import('./components/Analytics/MarketAnalyticsDashboard').then((m) => ({ default: m.MarketAnalyticsDashboard }))
+);
+const GlobalIndicesView = lazy(() =>
+  import('./components/Markets/GlobalIndicesView').then((m) => ({ default: m.GlobalIndicesView }))
+);
+const ForexMarketView = lazy(() =>
+  import('./components/Markets/ForexMarketView').then((m) => ({ default: m.ForexMarketView }))
+);
+const CommoditiesMarketView = lazy(() =>
+  import('./components/Markets/CommoditiesMarketView').then((m) => ({ default: m.CommoditiesMarketView }))
+);
+const NiftyIndicesView = lazy(() =>
+  import('./components/Markets/NiftyIndicesView').then((m) => ({ default: m.NiftyIndicesView }))
+);
+const StockConstituentsView = lazy(() =>
+  import('./components/Markets/StockConstituentsView').then((m) => ({ default: m.StockConstituentsView }))
+);
+const IndianStockPortfolioView = lazy(() =>
+  import('./components/Markets/IndianStockPortfolioView').then((m) => ({ default: m.IndianStockPortfolioView }))
+);
+const IndianStockWatchlistView = lazy(() =>
+  import('./components/Markets/IndianStockWatchlistView').then((m) => ({ default: m.IndianStockWatchlistView }))
+);
+const OptionChainView = lazy(() =>
+  import('./components/Markets/OptionChainView').then((m) => ({ default: m.OptionChainView }))
+);
+const StockOptionChainView = lazy(() =>
+  import('./components/Markets/StockOptionChainView').then((m) => ({ default: m.StockOptionChainView }))
+);
+const AdvancedMarketScreenerView = lazy(() =>
+  import('./components/Markets/AdvancedMarketScreenerView').then((m) => ({ default: m.AdvancedMarketScreenerView }))
+);
 import {
   SelectedCoinAllInfoPanel,
-  CoinTickAndChartPanel,
+  CoinTickAnalysisPanel,
+  CoinChartPanel,
+  CoinTickBackgroundCollector,
   PnlForecastingMatrixPanel,
 } from './components/CryptoSelectedCoinWorkspace';
 import { TrackedAsset } from './services/allTrackedAssets';
-import { MASTER_CRYPTO_250, fetchBinanceCryptoTableRows } from './services/marketDataTables';
+import {
+  MASTER_CRYPTO_250,
+  PREFERENCE_COIN_SYMBOLS,
+  fetchBinanceCryptoTableRows,
+} from './services/marketDataTables';
 import { MarketAsset } from './types/trading';
 import {
   BarChart3,
@@ -74,7 +124,8 @@ type CryptoSectionATab =
 
 type CryptoSectionBTab =
   | 'COIN_INFO'
-  | 'TICKS_AND_CHART'
+  | 'TICK_ANALYSIS'
+  | 'COIN_CHART'
   | 'ORDERBOOK'
   | 'BINANCE_RECENT_TRADES'
   | 'OPTION_CHAIN'
@@ -114,7 +165,7 @@ export default function App() {
       volume24h: Number(m.volume24h || 50000000),
       circulatingSupply: 100000000,
       category: (m.category as any) || 'Layer 1',
-      isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC', 'BNB'].includes(m.symbol),
+      isTradeableInSim: ['BTC', 'XAUT', 'PAXG', 'ZEC', 'SOL', 'CL', 'XAG', 'ETH', 'XRP', 'DOGE', 'BNB'].includes(m.symbol),
     }))
   );
 
@@ -122,30 +173,33 @@ export default function App() {
   const [selectedCoinMeta, setSelectedCoinMeta] = useState<CryptoCoinItem | null>(null);
   const [searchedStockSymbol, setSearchedStockSymbol] = useState<string | null>(null);
 
-  // Load live Binance USDT crypto table coins on startup so the Coin tab dropdown has all available coins
+  // Load live Binance USDT crypto table coins after initial render so startup stays lightweight
   useEffect(() => {
     let mounted = true;
-    fetchBinanceCryptoTableRows().then((rows) => {
-      if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
-      const mapped: CryptoCoinItem[] = rows.map((m, idx) => ({
-        rank: m.rank || idx + 1,
-        id: m.id,
-        name: m.name,
-        symbol: m.symbol,
-        price: m.price,
-        change1h: Number((m.change1d * 0.2).toFixed(2)),
-        change24h: m.change1d,
-        change7d: Number((m.change1d * 2.2).toFixed(2)),
-        marketCap: Number(m.marketCap || 1000000000),
-        volume24h: Number(m.volume24h || 50000000),
-        circulatingSupply: 100000000,
-        category: (m.category as any) || 'Layer 1',
-        isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC', 'BNB'].includes(m.symbol),
-      }));
-      setCryptoTableCoins(mapped);
-    });
+    const timer = setTimeout(() => {
+      fetchBinanceCryptoTableRows().then((rows) => {
+        if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
+        const mapped: CryptoCoinItem[] = rows.map((m, idx) => ({
+          rank: m.rank || idx + 1,
+          id: m.id,
+          name: m.name,
+          symbol: m.symbol,
+          price: m.price,
+          change1h: Number((m.change1d * 0.2).toFixed(2)),
+          change24h: m.change1d,
+          change7d: Number((m.change1d * 2.2).toFixed(2)),
+          marketCap: Number(m.marketCap || 1000000000),
+          volume24h: Number(m.volume24h || 50000000),
+          circulatingSupply: 100000000,
+          category: (m.category as any) || 'Layer 1',
+          isTradeableInSim: ['BTC', 'XAUT', 'PAXG', 'ZEC', 'SOL', 'CL', 'XAG', 'ETH', 'XRP', 'DOGE', 'BNB'].includes(m.symbol),
+        }));
+        setCryptoTableCoins(mapped);
+      });
+    }, 1500);
     return () => {
       mounted = false;
+      clearTimeout(timer);
     };
   }, []);
 
@@ -194,6 +248,7 @@ export default function App() {
     closePosition,
     cancelLimitOrder,
     updatePositionSLTP,
+    resetTradeHistory,
     resetSimulation,
     adjustCashBalance,
     addNotification,
@@ -407,50 +462,57 @@ export default function App() {
       icon: <Info className="w-4 h-4 text-emerald-600" />,
     },
     {
-      id: 'TICKS_AND_CHART',
+      id: 'TICK_ANALYSIS',
       num: '2',
-      label: 'Ticks & Chart',
-      subtitle: 'Rolling Ticks + Chart',
+      label: 'Tick Analysis',
+      subtitle: '1s FIFO & Tick Ratios',
       icon: <Activity className="w-4 h-4 text-emerald-600" />,
     },
     {
-      id: 'ORDERBOOK',
+      id: 'COIN_CHART',
       num: '3',
+      label: 'Chart',
+      subtitle: 'Candlestick & Volume',
+      icon: <BarChart3 className="w-4 h-4 text-emerald-600" />,
+    },
+    {
+      id: 'ORDERBOOK',
+      num: '4',
       label: 'Orderbook',
       subtitle: 'Market Depth',
       icon: <Layers className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'BINANCE_RECENT_TRADES',
-      num: '4',
+      num: '5',
       label: 'Recent Trades',
       subtitle: 'Live Tape',
       icon: <Zap className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'OPTION_CHAIN',
-      num: '5',
+      num: '6',
       label: 'Option Chain',
       subtitle: 'Calls, Puts & IV',
       icon: <Waves className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'PAPER_PORTFOLIO_FORECAST',
-      num: '6',
-      label: 'Paper Trade & PnL',
-      subtitle: 'Simulator & Forecast',
+      num: '7',
+      label: 'PnL & Trade Analyser',
+      subtitle: 'Trade, Log & PnL Forecast',
       icon: <Briefcase className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'AUTO_GRID_SIMULATION',
-      num: '7',
+      num: '8',
       label: 'Auto Grid',
       subtitle: 'Grid Bot & Logs',
       icon: <Sparkles className="w-4 h-4 text-emerald-600" />,
     },
     {
       id: 'REMAINING_CRYPTO',
-      num: '8',
+      num: '9',
       label: 'Positions & Alerts',
       subtitle: 'Orders, Spot & Alerts',
       icon: <Sliders className="w-4 h-4 text-emerald-600" />,
@@ -499,6 +561,13 @@ export default function App() {
 
       {/* Main Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-2.5 sm:p-4 lg:p-5 space-y-5">
+        <Suspense
+          fallback={
+            <div className="p-6 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)] text-xs font-mono text-[var(--theme-text-muted)]">
+              Loading market workspace...
+            </div>
+          }
+        >
         {/* NON-CRYPTO MARKET DESKS */}
         {mainMarketTab === 'MARKET_OVERVIEW' && (
           <div className="space-y-6">
@@ -725,60 +794,86 @@ export default function App() {
                   </button>
 
                   {isCoinPickerOpen && (
-                    <div className="absolute left-0 mt-1.5 w-[295px] sm:w-[330px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1">
-                      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-[var(--theme-text-muted)] border-b border-[var(--theme-border-subtle)]">
-                        <span>BINANCE CRYPTO TABLE ({cryptoTableCoins.length} COINS)</span>
-                        <span>USDT SPOT</span>
+                    <div className="absolute left-0 mt-1.5 w-[305px] sm:w-[340px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1">
+                      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-emerald-600 font-bold border-b border-[var(--theme-border-subtle)] bg-emerald-600/5">
+                        <span>★ PREFERENCE COINS (BTC · XAUT · PAXG · ZEC · SOL · CL · XAG)</span>
                       </div>
 
-                      <div className="max-h-[320px] overflow-y-auto divide-y divide-[var(--theme-border-subtle)]">
-                        {cryptoTableCoins.map((c) => {
-                          const isSelected = activeAsset.symbol === c.symbol.toUpperCase();
-                          const livePrice = assets[c.symbol.toUpperCase()]?.price || c.price;
-                          const changePct = assets[c.symbol.toUpperCase()]?.change24h ?? c.change24h;
+                      <div className="max-h-[360px] overflow-y-auto divide-y divide-[var(--theme-border-subtle)]">
+                        {cryptoTableCoins.map((c, idx) => {
+                          const symUpper = c.symbol.toUpperCase();
+                          const isPreferred = (PREFERENCE_COIN_SYMBOLS as readonly string[]).includes(symUpper);
+                          const prevCoin = idx > 0 ? cryptoTableCoins[idx - 1] : null;
+                          const prevWasPreferred =
+                            prevCoin &&
+                            (PREFERENCE_COIN_SYMBOLS as readonly string[]).includes(
+                              prevCoin.symbol.toUpperCase()
+                            );
+                          const showOtherHeader = !isPreferred && prevWasPreferred;
+
+                          const isSelected = activeAsset.symbol === symUpper;
+                          const livePrice = assets[symUpper]?.price || c.price;
+                          const changePct = assets[symUpper]?.change24h ?? c.change24h;
+                          const displayName =
+                            symUpper === 'CL' ? 'Crude Oil (WTI)' : symUpper === 'XAG' ? 'Silver (XAG)' : c.name;
+
                           return (
-                            <button
-                              key={c.id || c.symbol}
-                              type="button"
-                              onClick={() => {
-                                handleSelectCoinFromTable(c.symbol, {
-                                  ...c,
-                                  price: livePrice,
-                                });
-                                setIsCoinPickerOpen(false);
-                              }}
-                              className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                                isSelected
-                                  ? 'bg-emerald-600/15 text-[var(--theme-text-primary)] font-bold'
-                                  : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
-                              }`}
-                            >
-                              <div className="flex items-center gap-2 min-w-0 font-mono">
-                                <span className="text-[10px] text-[var(--theme-text-muted)] w-6 shrink-0">
-                                  #{c.rank}
-                                </span>
-                                <span className="text-xs font-bold text-emerald-600 shrink-0">
-                                  {c.symbol}
-                                </span>
-                                <span className="text-[11px] text-[var(--theme-text-primary)] truncate font-sans">
-                                  {c.name}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 shrink-0 font-mono">
-                                <span className="text-xs font-semibold text-[var(--theme-text-primary)]">
-                                  ${livePrice < 1 ? livePrice.toFixed(4) : livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                                </span>
-                                <span
-                                  className={`text-[10px] font-bold ${
-                                    changePct >= 0 ? 'text-emerald-600' : 'text-rose-500'
-                                  }`}
-                                >
-                                  {changePct >= 0 ? '+' : ''}
-                                  {Number(changePct).toFixed(2)}%
-                                </span>
-                                {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                              </div>
-                            </button>
+                            <React.Fragment key={c.id || c.symbol}>
+                              {showOtherHeader && (
+                                <div className="px-3 py-1 flex items-center justify-between text-[10px] font-mono text-[var(--theme-text-muted)] bg-[var(--theme-bg-card-subtle)]">
+                                  <span>OTHER MARKET COINS</span>
+                                  <span>USDT SPOT</span>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  handleSelectCoinFromTable(c.symbol, {
+                                    ...c,
+                                    name: displayName,
+                                    price: livePrice,
+                                  });
+                                  setIsCoinPickerOpen(false);
+                                }}
+                                className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
+                                  isSelected
+                                    ? 'bg-emerald-600/15 text-[var(--theme-text-primary)] font-bold'
+                                    : isPreferred
+                                    ? 'bg-emerald-600/[0.03] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-card-subtle)]'
+                                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 font-mono">
+                                  <span
+                                    className={`text-[10px] w-6 shrink-0 ${
+                                      isPreferred ? 'text-emerald-600 font-bold' : 'text-[var(--theme-text-muted)]'
+                                    }`}
+                                  >
+                                    {isPreferred ? `★${idx + 1}` : `#${c.rank}`}
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-600 shrink-0">
+                                    {symUpper === 'CL' ? 'CL (Crude)' : symUpper}
+                                  </span>
+                                  <span className="text-[11px] text-[var(--theme-text-primary)] truncate font-sans">
+                                    {displayName}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 font-mono">
+                                  <span className="text-xs font-semibold text-[var(--theme-text-primary)]">
+                                    ${livePrice < 1 ? livePrice.toFixed(4) : livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-bold ${
+                                      changePct >= 0 ? 'text-emerald-600' : 'text-rose-500'
+                                    }`}
+                                  >
+                                    {changePct >= 0 ? '+' : ''}
+                                    {Number(changePct).toFixed(2)}%
+                                  </span>
+                                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
+                                </div>
+                              </button>
+                            </React.Fragment>
                           );
                         })}
                       </div>
@@ -839,38 +934,12 @@ export default function App() {
                   )}
                 </div>
               </div>
-
-              {/* 1-Click Quick Coin Buttons in Coin Tab Header */}
-              <div className="flex items-center gap-1 flex-wrap font-mono">
-                {['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'PAXG', 'ZEC', 'BNB', 'SUI'].map((sym) => {
-                  const isCurrent = activeAsset.symbol === sym;
-                  return (
-                    <button
-                      key={sym}
-                      type="button"
-                      onClick={() => {
-                        const found = cryptoTableCoins.find((c) => c.symbol.toUpperCase() === sym);
-                        if (found) {
-                          handleSelectCoinFromTable(sym, {
-                            ...found,
-                            price: assets[sym]?.price || found.price,
-                          });
-                        } else {
-                          setSelectedSymbol(sym);
-                        }
-                      }}
-                      className={`px-2 py-1 rounded-md text-[11px] font-bold border transition-all cursor-pointer ${
-                        isCurrent
-                          ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                          : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border)] hover:bg-[var(--theme-bg-elevated)]'
-                      }`}
-                    >
-                      {sym}
-                    </button>
-                  );
-                })}
-              </div>
             </div>
+
+              {/* Background 1s FIFO Tick Collector when viewing other tabs so Tick Analysis stays warm */}
+              {sectionBTab !== 'TICK_ANALYSIS' && (
+                <CoinTickBackgroundCollector asset={activeAsset} />
+              )}
 
               {/* Section B Content (Strictly ONE active view) */}
               <div>
@@ -897,9 +966,14 @@ export default function App() {
                   />
                 )}
 
-                {/* B2: (a) Tick u12_5.7, d15_5.6 & (b) Current Chart */}
-                {sectionBTab === 'TICKS_AND_CHART' && (
-                  <CoinTickAndChartPanel asset={activeAsset} positions={positions} />
+                {/* B2: Dedicated Tick Analysis Tab (Per-Second Counting & Rolling FIFO Windows) */}
+                {sectionBTab === 'TICK_ANALYSIS' && (
+                  <CoinTickAnalysisPanel asset={activeAsset} />
+                )}
+
+                {/* B3: Separated Dedicated Chart Tab */}
+                {sectionBTab === 'COIN_CHART' && (
+                  <CoinChartPanel asset={activeAsset} positions={positions} />
                 )}
 
                 {/* B3: Orderbook as current */}
@@ -928,7 +1002,7 @@ export default function App() {
                   />
                 )}
 
-                {/* B6: Paper Trading, Portfolio Simulator & PnL Forecasting (-20% to +2%) */}
+                {/* B7: PnL & Trade Analyser (Portfolio, Order Execution, Live Positions/Log, and PnL Forecasting at the End) */}
                 {sectionBTab === 'PAPER_PORTFOLIO_FORECAST' && (
                   <div className="space-y-4">
                     <PortfolioOverview
@@ -946,14 +1020,8 @@ export default function App() {
                       assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
                       tradeHistory={tradeHistory}
                       brokerName="Shark Exchange"
-                    />
-
-                    <PnlForecastingMatrixPanel
-                      asset={activeAsset}
-                      totalEquity={totalEquity}
-                      cashBalance={cashBalance}
-                      positions={positions}
-                      spotHoldings={spotHoldings}
+                      onResetTradeHistory={resetTradeHistory}
+                      onResetSimulation={() => resetSimulation()}
                     />
 
                     <OrderForm
@@ -971,10 +1039,37 @@ export default function App() {
                       onNotify={addNotification}
                       onPlaceOrder={placeOrder}
                     />
+
+                    <PositionsTable
+                      positions={positions}
+                      limitOrders={limitOrders}
+                      tradeHistory={tradeHistory}
+                      spotHoldings={spotHoldings}
+                      assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                      onClosePosition={closePosition}
+                      onCancelLimitOrder={cancelLimitOrder}
+                      onUpdateSLTP={updatePositionSLTP}
+                      onSelectSymbol={setSelectedSymbol}
+                      onResetTradeHistory={resetTradeHistory}
+                    />
+
+                    {/* PnL Forecasting placed at the END to simulate PnL forecasting of live running trades */}
+                    <PnlForecastingMatrixPanel
+                      asset={activeAsset}
+                      totalEquity={totalEquity}
+                      cashBalance={cashBalance}
+                      positions={positions}
+                      spotHoldings={spotHoldings}
+                      totalTrades={totalTrades}
+                      realizedPnL={totalRealizedPnL}
+                      onResetTradeHistory={resetTradeHistory}
+                      onResetSimulation={() => resetSimulation()}
+                      onPlaceLiveOrder={placeOrder}
+                    />
                   </div>
                 )}
 
-                {/* B7: Grid-Based Auto Simulation (Shark Terminal) and its History */}
+                {/* B8: Grid-Based Auto Simulation (Shark Terminal) and its History */}
                 {sectionBTab === 'AUTO_GRID_SIMULATION' && (
                   <div className="space-y-4">
                     <OrderForm
@@ -1003,11 +1098,12 @@ export default function App() {
                       onCancelLimitOrder={cancelLimitOrder}
                       onUpdateSLTP={updatePositionSLTP}
                       onSelectSymbol={setSelectedSymbol}
+                      onResetTradeHistory={resetTradeHistory}
                     />
                   </div>
                 )}
 
-                {/* B8: Rest / Remaining under current Crypto Page */}
+                {/* B9: Rest / Remaining under current Crypto Page */}
                 {sectionBTab === 'REMAINING_CRYPTO' && (
                   <div className="space-y-4">
                     <CryptoHeaderBar
@@ -1043,6 +1139,7 @@ export default function App() {
                       onCancelLimitOrder={cancelLimitOrder}
                       onUpdateSLTP={updatePositionSLTP}
                       onSelectSymbol={setSelectedSymbol}
+                      onResetTradeHistory={resetTradeHistory}
                     />
 
                     <OrderForm
@@ -1065,6 +1162,7 @@ export default function App() {
               </div>
             </section>
         )}
+        </Suspense>
       </main>
 
       {/* Footer */}
@@ -1081,51 +1179,63 @@ export default function App() {
         </p>
       </footer>
 
-      {/* Modals */}
-      <WhatIfScenarioModal
-        isOpen={isWhatIfOpen}
-        assets={assets}
-        positions={positions}
-        selectedSymbol={activeAsset.symbol}
-        onClose={() => setIsWhatIfOpen(false)}
-      />
+      {/* Modals (Only mounted when opened) */}
+      <Suspense fallback={null}>
+        {isWhatIfOpen && (
+          <WhatIfScenarioModal
+            isOpen={isWhatIfOpen}
+            assets={assets}
+            positions={positions}
+            selectedSymbol={activeAsset.symbol}
+            onClose={() => setIsWhatIfOpen(false)}
+          />
+        )}
 
-      <AiRiskModal
-        isOpen={isAiReviewOpen}
-        equity={totalEquity}
-        cash={cashBalance}
-        unrealizedPnL={totalUnrealizedPnL}
-        positions={positions}
-        spotHoldings={spotHoldings}
-        assets={assets}
-        onClose={() => setIsAiReviewOpen(false)}
-      />
+        {isAiReviewOpen && (
+          <AiRiskModal
+            isOpen={isAiReviewOpen}
+            equity={totalEquity}
+            cash={cashBalance}
+            unrealizedPnL={totalUnrealizedPnL}
+            positions={positions}
+            spotHoldings={spotHoldings}
+            assets={assets}
+            onClose={() => setIsAiReviewOpen(false)}
+          />
+        )}
 
-      <SettingsModal
-        isOpen={isSettingsOpen}
-        config={config}
-        onSaveConfig={setConfig}
-        onReset={resetSimulation}
-        onAddFunds={(amount) => adjustCashBalance(amount)}
-        onClose={() => setIsSettingsOpen(false)}
-      />
+        {isSettingsOpen && (
+          <SettingsModal
+            isOpen={isSettingsOpen}
+            config={config}
+            onSaveConfig={setConfig}
+            onReset={resetSimulation}
+            onAddFunds={(amount) => adjustCashBalance(amount)}
+            onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
 
-      <BatchWriterModal
-        isOpen={isBatchModalOpen}
-        onClose={() => setIsBatchModalOpen(false)}
-      />
+        {isBatchModalOpen && (
+          <BatchWriterModal
+            isOpen={isBatchModalOpen}
+            onClose={() => setIsBatchModalOpen(false)}
+          />
+        )}
 
-      <StorageManagerModal
-        isOpen={isStorageOpen}
-        onClose={() => setIsStorageOpen(false)}
-        simulatorData={{
-          cashBalance,
-          totalEquity,
-          tradeHistory,
-          positions,
-          spotHoldings,
-        }}
-      />
+        {isStorageOpen && (
+          <StorageManagerModal
+            isOpen={isStorageOpen}
+            onClose={() => setIsStorageOpen(false)}
+            simulatorData={{
+              cashBalance,
+              totalEquity,
+              tradeHistory,
+              positions,
+              spotHoldings,
+            }}
+          />
+        )}
+      </Suspense>
 
       {/* Notifications Toast */}
       <NotificationToast

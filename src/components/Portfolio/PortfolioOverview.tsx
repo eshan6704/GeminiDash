@@ -16,6 +16,7 @@ import {
   BarChart3,
   ChevronDown,
   ChevronUp,
+  RotateCcw,
 } from 'lucide-react';
 import { MarketAsset, SpotHolding, Position, TradeRecord, SHARK_EXCHANGE } from '../../types/trading';
 import { exportTradeHistoryAndMetricsCSV } from '../../utils/csvExporter';
@@ -36,6 +37,8 @@ interface PortfolioOverviewProps {
   assets: Record<string, MarketAsset>;
   tradeHistory?: TradeRecord[];
   brokerName?: string;
+  onResetTradeHistory?: () => void;
+  onResetSimulation?: () => void;
 }
 
 export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
@@ -53,6 +56,8 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
   assets,
   tradeHistory = [],
   brokerName = SHARK_EXCHANGE.name,
+  onResetTradeHistory,
+  onResetSimulation,
 }) => {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const isUnrealizedProfit = unrealizedPnL >= 0;
@@ -147,11 +152,37 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
             )}
           </div>
 
+          {/* Reset Previous Trade Returns & Log Button */}
+          {onResetTradeHistory && (
+            <button
+              type="button"
+              onClick={onResetTradeHistory}
+              title="Reset realized trade returns, win rate, and closed trade log while keeping live running positions"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer active:scale-95"
+            >
+              <RotateCcw className="w-3 h-3 stroke-[2.5]" />
+              <span>Reset Returns &amp; Log ({totalTrades})</span>
+            </button>
+          )}
+
+          {/* Reset Full Simulator Button */}
+          {onResetSimulation && (
+            <button
+              type="button"
+              onClick={() => onResetSimulation()}
+              title="Reset entire simulator account including live positions, returns, and balance"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm border border-rose-500/35 bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer active:scale-95"
+            >
+              <RotateCcw className="w-3 h-3 stroke-[2.5]" />
+              <span>Reset All</span>
+            </button>
+          )}
+
           {/* Export CSV Button */}
           <button
             type="button"
             onClick={handleExportCSV}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold uppercase tracking-widest transition-all active:scale-95"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-bold uppercase tracking-widest transition-all cursor-pointer active:scale-95"
           >
             {isExporting ? (
               <>

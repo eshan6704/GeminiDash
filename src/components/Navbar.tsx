@@ -14,6 +14,7 @@ import {
   Box,
   Star,
   SlidersHorizontal,
+  Download,
 } from 'lucide-react';
 import { TrackedAsset } from '../services/allTrackedAssets';
 
@@ -207,11 +208,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right: Quick Launch & Gateways */}
         <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href="/api/backup/app-build-archive"
+            download="aurumx-app-build-copy.tar.gz"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border cursor-pointer bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-600 border-emerald-600/30"
+            title="Download a complete copy of the current app build (dist + full source)"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Copy Build</span>
+          </a>
+
           {onOpenStorage && (
             <button
               onClick={onOpenStorage}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all border cursor-pointer bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[var(--theme-text-secondary)] border-[var(--theme-border)]"
-              title="Open Backblaze B2 Cloud Storage Explorer"
+              title="Open Backblaze B2 Cloud Storage Explorer & Build Snapshots"
             >
               <HardDrive className="w-3.5 h-3.5 text-emerald-600" />
               <span>Storage</span>

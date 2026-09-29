@@ -169,6 +169,8 @@ export const MASTER_NIFTY_500: MarketTableRow[] = COMPLETE_NSE_FNO_STOCKS.map((s
   peRatio: Number((20 + Math.random() * 15).toFixed(2)),
 }));
 
+export const PREFERENCE_COIN_SYMBOLS = ['BTC', 'XAUT', 'PAXG', 'ZEC', 'SOL', 'CL', 'XAG'] as const;
+
 const BINANCE_CRYPTO_SEEDS: {
   symbol: string;
   name: string;
@@ -177,9 +179,14 @@ const BINANCE_CRYPTO_SEEDS: {
   category: string;
 }[] = [
   { symbol: 'BTC', name: 'Bitcoin', price: 96500, marketCap: 1910000000000, category: 'Layer 1' },
+  { symbol: 'XAUT', name: 'Tether Gold', price: 4335.5, marketCap: 1920000000, category: 'Gold & RWA' },
+  { symbol: 'PAXG', name: 'PAX Gold', price: 4332.2, marketCap: 1880000000, category: 'Gold & RWA' },
+  { symbol: 'ZEC', name: 'Zcash', price: 48.5, marketCap: 790000000, category: 'Layer 1' },
+  { symbol: 'SOL', name: 'Solana', price: 210, marketCap: 98500000000, category: 'Layer 1' },
+  { symbol: 'CL', name: 'Crude Oil (WTI)', price: 71.45, marketCap: 145000000000, category: 'Gold & RWA' },
+  { symbol: 'XAG', name: 'Silver (XAG)', price: 31.42, marketCap: 18200000000, category: 'Gold & RWA' },
   { symbol: 'ETH', name: 'Ethereum', price: 3450, marketCap: 415000000000, category: 'Layer 1' },
   { symbol: 'XRP', name: 'Ripple', price: 1.85, marketCap: 106000000000, category: 'Layer 1' },
-  { symbol: 'SOL', name: 'Solana', price: 210, marketCap: 98500000000, category: 'Layer 1' },
   { symbol: 'BNB', name: 'Binance Coin', price: 620, marketCap: 91000000000, category: 'Layer 1' },
   { symbol: 'DOGE', name: 'Dogecoin', price: 0.28, marketCap: 41200000000, category: 'Meme' },
   { symbol: 'ADA', name: 'Cardano', price: 0.85, marketCap: 30200000000, category: 'Layer 1' },
@@ -236,9 +243,6 @@ const BINANCE_CRYPTO_SEEDS: {
   { symbol: 'WLD', name: 'Worldcoin', price: 2.35, marketCap: 1650000000, category: 'AI' },
   { symbol: 'AKT', name: 'Akash Network', price: 3.65, marketCap: 910000000, category: 'AI' },
   { symbol: 'PENDLE', name: 'Pendle', price: 5.12, marketCap: 840000000, category: 'DeFi' },
-  { symbol: 'ZEC', name: 'Zcash', price: 48.5, marketCap: 790000000, category: 'Layer 1' },
-  { symbol: 'XAUT', name: 'Tether Gold', price: 2755, marketCap: 680000000, category: 'Gold & RWA' },
-  { symbol: 'PAXG', name: 'PAX Gold', price: 2750, marketCap: 520000000, category: 'Gold & RWA' },
   { symbol: 'QNT', name: 'Quant', price: 98.0, marketCap: 1180000000, category: 'Layer 1' },
   { symbol: 'EOS', name: 'EOS', price: 0.88, marketCap: 1340000000, category: 'Layer 1' },
   { symbol: 'XTZ', name: 'Tezos', price: 1.28, marketCap: 1290000000, category: 'Layer 1' },
@@ -313,9 +317,23 @@ export const MASTER_CRYPTO_250: MarketTableRow[] = BINANCE_CRYPTO_SEEDS.map((c, 
   volume24h: Math.floor(c.marketCap * 0.08),
 }));
 
+let cachedBinanceTableRows: MarketTableRow[] | null = null;
+let cachedBinanceTableTimestamp = 0;
+
 export async function fetchBinanceCryptoTableRows(): Promise<MarketTableRow[]> {
+  if (cachedBinanceTableRows && Date.now() - cachedBinanceTableTimestamp < 30000) {
+    return cachedBinanceTableRows;
+  }
   try {
-    const res = await fetch('https://api.binance.com/api/v3/ticker/24hr');
+    // Request only top seeded USDT pairs (~12KB payload instead of 2.5MB full exchange dump)
+    const nonBinanceDirect = new Set(['XAUT', 'CL', 'XAG']);
+    const querySymbols = BINANCE_CRYPTO_SEEDS
+      .map((s) => s.symbol.toUpperCase())
+      .filter((sym) => !nonBinanceDirect.has(sym))
+      .slice(0, 45)
+      .map((sym) => `"${sym}USDT"`);
+    const url = `https://api.binance.com/api/v3/ticker/24hr?symbols=[${querySymbols.join(',')}]`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
@@ -326,12 +344,7 @@ export async function fetchBinanceCryptoTableRows(): Promise<MarketTableRow[]> {
             (t: any) =>
               typeof t.symbol === 'string' &&
               t.symbol.endsWith('USDT') &&
-              !t.symbol.endsWith('UPUSDT') &&
-              !t.symbol.endsWith('DOWNUSDT') &&
-              !t.symbol.endsWith('BULLUSDT') &&
-              !t.symbol.endsWith('BEARUSDT') &&
-              parseFloat(t.lastPrice) > 0 &&
-              parseFloat(t.quoteVolume) > 100000
+              parseFloat(t.lastPrice) > 0
           )
           .map((t: any) => {
             const sym = t.symbol.slice(0, -4).toUpperCase();
@@ -347,33 +360,89 @@ export async function fetchBinanceCryptoTableRows(): Promise<MarketTableRow[]> {
           .filter((t) => !excludedBases.has(t.sym));
 
         if (usdtTickers.length > 0) {
-          usdtTickers.sort((a, b) => {
-            const aSeedIdx = BINANCE_CRYPTO_SEEDS.findIndex((s) => s.symbol === a.sym);
-            const bSeedIdx = BINANCE_CRYPTO_SEEDS.findIndex((s) => s.symbol === b.sym);
-            if (aSeedIdx !== -1 && bSeedIdx !== -1) return aSeedIdx - bSeedIdx;
-            if (aSeedIdx !== -1) return -1;
-            if (bSeedIdx !== -1) return 1;
-            return b.quoteVolume - a.quoteVolume;
-          });
+          const tickerBySym = new Map(usdtTickers.map((t) => [t.sym, t]));
+          const paxgLive = tickerBySym.get('PAXG');
 
-          return usdtTickers.slice(0, 250).map((t, idx) => {
-            const seed = seedBySymbol.get(t.sym);
+          // Ensure all 7 preference coins (BTC, XAUT, PAXG, ZEC, SOL, CL, XAG) are always pinned at the top in exact preference order
+          const preferredSet = new Set<string>(PREFERENCE_COIN_SYMBOLS);
+          const preferredRows: MarketTableRow[] = PREFERENCE_COIN_SYMBOLS.map((sym, idx) => {
+            const seed = seedBySymbol.get(sym);
+            const live = tickerBySym.get(sym);
+            if (live) {
+              return {
+                rank: idx + 1,
+                id: sym.toLowerCase(),
+                name: seed?.name || `${sym} / USDT`,
+                symbol: sym,
+                price: live.lastPrice,
+                change1d: Number(live.changePct.toFixed(2)),
+                high24h: live.high24h,
+                low24h: live.low24h,
+                category: seed?.category || 'Layer 1',
+                exchange: 'BINANCE',
+                currency: 'USDT',
+                marketCap: seed?.marketCap || Math.round(live.quoteVolume * 14),
+                volume24h: Math.round(live.quoteVolume),
+              };
+            }
+            if (sym === 'XAUT' && paxgLive) {
+              const xautPrice = Number((paxgLive.lastPrice * 1.0005).toFixed(2));
+              return {
+                rank: idx + 1,
+                id: 'xaut',
+                name: seed?.name || 'Tether Gold',
+                symbol: 'XAUT',
+                price: xautPrice,
+                change1d: Number(paxgLive.changePct.toFixed(2)),
+                high24h: Number((paxgLive.high24h * 1.0005).toFixed(2)),
+                low24h: Number((paxgLive.low24h * 1.0005).toFixed(2)),
+                category: 'Gold & RWA',
+                exchange: 'BITFINEX',
+                currency: 'USDT',
+                marketCap: seed?.marketCap || 1920000000,
+                volume24h: Math.round(paxgLive.quoteVolume * 1.05),
+              };
+            }
             return {
               rank: idx + 1,
-              id: t.sym.toLowerCase(),
-              name: seed?.name || `${t.sym} / USDT`,
-              symbol: t.sym,
-              price: t.lastPrice,
-              change1d: Number(t.changePct.toFixed(2)),
-              high24h: t.high24h,
-              low24h: t.low24h,
-              category: seed?.category || 'Layer 1',
-              exchange: 'BINANCE',
+              id: sym.toLowerCase(),
+              name: seed?.name || sym,
+              symbol: sym,
+              price: seed?.price || 100,
+              change1d: sym === 'CL' ? 0.85 : sym === 'XAG' ? 1.15 : 0.45,
+              category: seed?.category || 'Gold & RWA',
+              exchange: sym === 'CL' ? 'NYMEX' : sym === 'XAG' ? 'COMEX' : 'BINANCE',
               currency: 'USDT',
-              marketCap: seed?.marketCap || Math.round(t.quoteVolume * 14),
-              volume24h: Math.round(t.quoteVolume),
+              marketCap: seed?.marketCap || 1000000000,
+              volume24h: Math.floor((seed?.marketCap || 1000000000) * 0.08),
             };
           });
+
+          const remainingSeeds = BINANCE_CRYPTO_SEEDS.filter((s) => !preferredSet.has(s.symbol.toUpperCase()));
+          const remainingRows: MarketTableRow[] = remainingSeeds.map((seed, idx) => {
+            const sym = seed.symbol.toUpperCase();
+            const live = tickerBySym.get(sym);
+            return {
+              rank: preferredRows.length + idx + 1,
+              id: sym.toLowerCase(),
+              name: seed.name,
+              symbol: sym,
+              price: live ? live.lastPrice : seed.price,
+              change1d: live ? Number(live.changePct.toFixed(2)) : Number(((((idx * 17) % 19) - 8) * 0.65).toFixed(2)),
+              high24h: live ? live.high24h : Number((seed.price * 1.03).toFixed(4)),
+              low24h: live ? live.low24h : Number((seed.price * 0.97).toFixed(4)),
+              category: seed.category || 'Layer 1',
+              exchange: 'BINANCE',
+              currency: 'USDT',
+              marketCap: seed.marketCap || (live ? Math.round(live.quoteVolume * 14) : 1000000000),
+              volume24h: live ? Math.round(live.quoteVolume) : Math.floor(seed.marketCap * 0.08),
+            };
+          });
+
+          const combined = [...preferredRows, ...remainingRows];
+          cachedBinanceTableRows = combined;
+          cachedBinanceTableTimestamp = Date.now();
+          return combined;
         }
       }
     }
