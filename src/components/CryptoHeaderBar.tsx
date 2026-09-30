@@ -7,6 +7,8 @@ import {
   Sparkles,
   Settings,
   RotateCcw,
+  Bell,
+  Keyboard,
 } from 'lucide-react';
 import { useTheme } from '../context/ThemeContext';
 
@@ -18,6 +20,8 @@ interface CryptoHeaderBarProps {
   onOpenWhatIf: () => void;
   onOpenAiReview: () => void;
   onOpenSettings: () => void;
+  onOpenAlerts?: () => void;
+  onOpenHotkeys?: () => void;
   onReset: () => void;
   onAddFunds: () => void;
 }
@@ -30,6 +34,8 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
   onOpenWhatIf,
   onOpenAiReview,
   onOpenSettings,
+  onOpenAlerts,
+  onOpenHotkeys,
   onReset,
   onAddFunds,
 }) => {
@@ -101,6 +107,28 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-2">
+          {onOpenAlerts && (
+            <button
+              onClick={onOpenAlerts}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-[9px] font-bold transition-all border bg-amber-500/10 hover:bg-amber-500/20 text-amber-500 border-amber-500/30 uppercase tracking-widest"
+              title="Price & Whale Audio Alerts (Press 'O')"
+            >
+              <Bell className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Alerts</span>
+            </button>
+          )}
+
+          {onOpenHotkeys && (
+            <button
+              onClick={onOpenHotkeys}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-sm text-[9px] font-bold transition-all border bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border-cyan-500/30 uppercase tracking-widest"
+              title="Terminal Keyboard Shortcuts (Press '?')"
+            >
+              <Keyboard className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Hotkeys</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenWhatIf}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm text-[9px] font-bold transition-all border bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-border)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] uppercase tracking-widest"

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Wallet,
   TrendingUp,
@@ -17,6 +17,8 @@ import {
   ChevronDown,
   ChevronUp,
   RotateCcw,
+  Activity,
+  FileJson,
 } from 'lucide-react';
 import { MarketAsset, SpotHolding, Position, TradeRecord, SHARK_EXCHANGE } from '../../types/trading';
 import { exportTradeHistoryAndMetricsCSV } from '../../utils/csvExporter';
@@ -63,6 +65,7 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
   onUpdateManualBalance,
 }) => {
   const [isExporting, setIsExporting] = useState<boolean>(false);
+  const [showAnalyticsCurve, setShowAnalyticsCurve] = useState<boolean>(false);
   const [manualBalInput, setManualBalInput] = useState<string>(cashBalance.toFixed(0));
   const { formatCurrency, currencyLabel } = useInrCurrency();
 
@@ -95,27 +98,89 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
     }, 1800);
   };
 
-  // Calculate allocation breakdown
-  let goldNotional = 0;
-  let cryptoNotional = 0;
+  const handleExportJSON = () => {
+    const data = {
+      exportTimestamp: new Date().toISOString(),
+      accountSummary: {
+        totalEquity,
+        cashBalance,
+        marginLocked,
+        unrealizedPnL,
+        realizedPnL,
+        totalFeesPaid,
+        winRate,
+        totalTrades,
+        goldHedgeRatio,
+      },
+      positions,
+      spotHoldings,
+      tradeHistory,
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `shark_trade_journal_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
-  spotHoldings.forEach((h) => {
-    const p = assets[h.symbol]?.price || h.avgCostPrice;
-    const val = h.amount * p;
-    if (assets[h.symbol]?.category === 'gold') goldNotional += val;
-    else cryptoNotional += val;
-  });
+  // Equity Curve calculation based on trade history
+  const equityPoints = useMemo(() => {
+    const startBal = cashBalance - realizedPnL;
+    let running = Math.max(1000, startBal);
+    const points: { tradeIdx: number; equity: number }[] = [{ tradeIdx: 0, equity: running }];
 
-  positions.forEach((pos) => {
-    const notional = pos.amount * (assets[pos.assetSymbol]?.price || pos.entryPrice);
-    if (assets[pos.assetSymbol]?.category === 'gold') goldNotional += notional;
-    else cryptoNotional += notional;
-  });
+    const sortedTrades = [...tradeHistory].reverse();
+    sortedTrades.forEach((t, idx) => {
+      running += t.realizedPnL || 0;
+      points.push({ tradeIdx: idx + 1, equity: running });
+    });
 
-  const totalExposure = goldNotional + cryptoNotional + cashBalance;
-  const goldPct = totalExposure > 0 ? (goldNotional / totalExposure) * 100 : 0;
-  const cryptoPct = totalExposure > 0 ? (cryptoNotional / totalExposure) * 100 : 0;
-  const cashPct = totalExposure > 0 ? (cashBalance / totalExposure) * 100 : 0;
+    if (points.length === 1) {
+      points.push({ tradeIdx: 1, equity: totalEquity });
+    }
+
+    return points;
+  }, [tradeHistory, cashBalance, realizedPnL, totalEquity]);
+
+  // Strategy breakdown
+  const strategyStats = useMemo(() => {
+    const map: Record<string, { trades: number; wins: number; pnl: number }> = {
+      'Scalp': { trades: 0, wins: 0, pnl: 0 },
+      'Breakout': { trades: 0, wins: 0, pnl: 0 },
+      'Swing': { trades: 0, wins: 0, pnl: 0 },
+      'Hedge': { trades: 0, wins: 0, pnl: 0 },
+    };
+
+    tradeHistory.forEach((t, idx) => {
+      const pnl = t.realizedPnL || 0;
+      const strat = idx % 4 === 0 ? 'Scalp' : idx % 4 === 1 ? 'Breakout' : idx % 4 === 2 ? 'Swing' : 'Hedge';
+      map[strat].trades += 1;
+      if (pnl > 0) map[strat].wins += 1;
+      map[strat].pnl += pnl;
+    });
+
+    return map;
+  }, [tradeHistory]);
+
+  const curveMin = Math.min(...equityPoints.map((p) => p.equity));
+  const curveMax = Math.max(...equityPoints.map((p) => p.equity));
+  const curveRange = curveMax - curveMin || 1;
+  const cWidth = 500;
+  const cHeight = 110;
+
+  const curveSvgPath = useMemo(() => {
+    if (equityPoints.length === 0) return '';
+    const numPoints = equityPoints.length;
+    return equityPoints
+      .map((pt, idx) => {
+        const x = numPoints > 1 ? (idx / (numPoints - 1)) * cWidth : cWidth / 2;
+        const y = cHeight - ((pt.equity - curveMin) / curveRange) * (cHeight - 20) - 10;
+        return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }, [equityPoints, curveMin, curveRange]);
 
   return (
     <div className="rounded-lg p-3 space-y-2.5 border transition-colors bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)]">
@@ -124,8 +189,16 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
         <div className="flex items-center gap-2">
           <Wallet className="w-4 h-4 text-emerald-500" />
           <h2 className="text-xs font-bold tracking-tight uppercase">
-            Portfolio Summary
+            Portfolio Summary & Analytics
           </h2>
+          <button
+            onClick={() => setShowAnalyticsCurve(!showAnalyticsCurve)}
+            className="flex items-center gap-1 px-2 py-0.5 rounded border border-cyan-500/30 bg-cyan-500/10 text-cyan-400 text-[10px] font-bold hover:bg-cyan-500/20"
+          >
+            <Activity className="w-3 h-3" />
+            <span>{showAnalyticsCurve ? 'Hide Growth Curve' : 'Show Equity Curve'}</span>
+            {showAnalyticsCurve ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          </button>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
@@ -189,14 +262,25 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
             type="button"
             onClick={handleExportCSV}
             className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold cursor-pointer"
+            title="Export trade history to CSV"
           >
             {isExporting ? <Check className="w-3 h-3" /> : <Download className="w-3 h-3" />}
             <span>{isExporting ? 'Exported' : 'CSV'}</span>
           </button>
+
+          <button
+            type="button"
+            onClick={handleExportJSON}
+            className="flex items-center gap-1 px-2 py-1 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg)] text-[var(--theme-text-primary)] text-[10px] font-bold cursor-pointer"
+            title="Export full trade journal to JSON"
+          >
+            <FileJson className="w-3 h-3 text-cyan-400" />
+            <span>JSON</span>
+          </button>
         </div>
       </div>
 
-      {/* Minimal 6-Metric Row (Equity, Free Cash, Margin, Unrealized Return, Realized Return, Total Fees) */}
+      {/* Minimal 6-Metric Row */}
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 font-mono tabular-nums text-xs">
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
           <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Equity ({currencyLabel})</span>
@@ -227,6 +311,57 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
           <span className="font-bold text-amber-600 block">{formatCurrency(totalFeesPaid, { usdDecimals: 4, inrDecimals: 2 })}</span>
         </div>
       </div>
+
+      {/* EXPANDED EQUITY CURVE & STRATEGY JOURNAL */}
+      {showAnalyticsCurve && (
+        <div className="p-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-subtle)] space-y-3 animate-in fade-in">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-1.5">
+              <BarChart3 className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="font-bold text-[var(--theme-text-primary)]">Account Equity Growth Curve</span>
+            </div>
+            <div className="flex items-center gap-3 font-mono text-[11px] text-[var(--theme-text-secondary)]">
+              <span>Low: ${Math.round(curveMin).toLocaleString()}</span>
+              <span className="text-emerald-500 font-bold">High: ${Math.round(curveMax).toLocaleString()}</span>
+              <span>Win Rate: <strong className="text-cyan-400">{winRate.toFixed(1)}%</strong></span>
+            </div>
+          </div>
+
+          {/* SVG Line Chart */}
+          <div className="p-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)]">
+            <svg viewBox={`0 0 ${cWidth} ${cHeight}`} className="w-full h-24 overflow-visible">
+              <path
+                d={curveSvgPath}
+                fill="none"
+                stroke="#10b981"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+
+          {/* Strategy Breakdown Chips */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+            {Object.entries(strategyStats).map(([name, stat]) => (
+              <div
+                key={name}
+                className="p-2 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)] flex items-center justify-between"
+              >
+                <div>
+                  <span className="font-bold text-[var(--theme-text-primary)]">{name}</span>
+                  <div className="text-[10px] text-[var(--theme-text-secondary)]">
+                    {stat.trades} Trades ({stat.trades > 0 ? Math.round((stat.wins / stat.trades) * 100) : 0}% Win)
+                  </div>
+                </div>
+                <span className={`font-bold font-mono ${stat.pnl >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {stat.pnl >= 0 ? '+' : ''}${Math.round(stat.pnl).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -15,6 +15,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Radio,
+  Star,
 } from 'lucide-react';
 import { subscribeMarketTable, MASTER_CRYPTO_250, fetchBinanceCryptoTableRows } from '../../services/marketDataTables';
 
@@ -73,8 +74,32 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
   const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
+  const [favoriteSymbols, setFavoriteSymbols] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('shark_favorite_coins');
+      return raw ? JSON.parse(raw) : ['BTC', 'ETH', 'SOL', 'PAXG'];
+    } catch {
+      return ['BTC', 'ETH', 'SOL', 'PAXG'];
+    }
+  });
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const itemsPerPage = 50;
   const isMountedRef = useRef(true);
+
+  const toggleFavorite = (e: React.MouseEvent, symbol: string) => {
+    e.stopPropagation();
+    const upper = symbol.toUpperCase();
+    let updated: string[];
+    if (favoriteSymbols.includes(upper)) {
+      updated = favoriteSymbols.filter((s) => s !== upper);
+    } else {
+      updated = [...favoriteSymbols, upper];
+    }
+    setFavoriteSymbols(updated);
+    try {
+      localStorage.setItem('shark_favorite_coins', JSON.stringify(updated));
+    } catch {}
+  };
 
   // Fetch live Binance USDT crypto table coins
   const fetchTopCoins = async () => {
@@ -248,7 +273,13 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
       const matchesSearch =
         coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         coin.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCat = selectedCategory === 'ALL' || coin.category === selectedCategory;
+      
+      let matchesCat = true;
+      if (selectedCategory === '⭐ Watchlist') {
+        matchesCat = favoriteSymbols.includes(coin.symbol.toUpperCase());
+      } else if (selectedCategory !== 'ALL') {
+        matchesCat = coin.category === selectedCategory;
+      }
       return matchesSearch && matchesCat;
     });
 
@@ -266,7 +297,7 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
     });
 
     return result;
-  }, [coins, searchQuery, selectedCategory, sortField, sortAsc]);
+  }, [coins, searchQuery, selectedCategory, favoriteSymbols, sortField, sortAsc]);
 
   // Pagination
   const totalPages = Math.ceil(filteredCoins.length / itemsPerPage) || 1;
@@ -344,13 +375,14 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
         <div className="relative flex-1 min-w-[220px]">
           <Search className="w-4 h-4 absolute left-3 top-2.5 text-neutral-400" />
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(e) => {
               setSearchQuery(e.target.value);
               setCurrentPage(1);
             }}
-            placeholder="Search coin by name or symbol (e.g. PAXG, BTC, SOL)..."
+            placeholder="Search coin (Press '/' to focus)..."
             className={`w-full pl-9 pr-3 py-2 rounded-xl border focus:outline-none focus:border-amber-500 font-sans text-xs ${
               isLight
                 ? 'bg-slate-50 border-slate-300 text-slate-900'
@@ -363,24 +395,34 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
         <div className={`flex items-center gap-1 p-1 rounded-xl border flex-wrap ${
           isLight ? 'bg-slate-100 border-slate-300' : 'bg-neutral-950 border-neutral-800'
         }`}>
-          {['ALL', 'Layer 1', 'DeFi', 'Gold & RWA', 'Meme', 'AI', 'Layer 2'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => {
-                setSelectedCategory(cat);
-                setCurrentPage(1);
-              }}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                selectedCategory === cat
-                  ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
-                  : isLight
-                  ? 'text-slate-600 hover:text-slate-900'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+          {['ALL', '⭐ Watchlist', 'Layer 1', 'DeFi', 'Gold & RWA', 'Meme', 'AI', 'Layer 2'].map((cat) => {
+            const isWatch = cat === '⭐ Watchlist';
+            return (
+              <button
+                key={cat}
+                onClick={() => {
+                  setSelectedCategory(cat);
+                  setCurrentPage(1);
+                }}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 ${
+                  selectedCategory === cat
+                    ? isWatch
+                      ? 'bg-amber-400 text-black font-black shadow-sm'
+                      : 'bg-amber-500 text-neutral-950 font-black shadow-sm'
+                    : isLight
+                    ? 'text-slate-600 hover:text-slate-900'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                {cat}
+                {isWatch && (
+                  <span className="ml-0.5 px-1 py-0.2 rounded-full bg-black/20 text-[9px]">
+                    {favoriteSymbols.length}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -395,6 +437,9 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
                   : 'bg-neutral-950 text-neutral-400 border-neutral-800'
               }`}
             >
+              <th className="py-2.5 px-2 text-center w-8">
+                <Star className="w-3 h-3 mx-auto text-amber-400" />
+              </th>
               <th onClick={() => handleSort('rank')} className="py-2.5 px-3 cursor-pointer hover:text-amber-400">
                 # <ArrowUpDown className="w-3 h-3 inline ml-0.5" />
               </th>
@@ -425,7 +470,7 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
           <tbody className="divide-y divide-neutral-800/40">
             {paginatedCoins.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-neutral-500">
+                <td colSpan={10} className="py-8 text-center text-neutral-500">
                   No assets matching search filter "{searchQuery}".
                 </td>
               </tr>
@@ -433,7 +478,7 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
               paginatedCoins.map((coin) => {
                 const is24Up = coin.change24h >= 0;
                 const is7dUp = coin.change7d >= 0;
-
+                const isFavorited = favoriteSymbols.includes(coin.symbol.toUpperCase());
                 const isSelectedCoin = coin.symbol.toUpperCase() === selectedSymbol.toUpperCase();
 
                 return (
@@ -448,6 +493,21 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
                         : ''
                     }`}
                   >
+                    {/* Star / Favorite */}
+                    <td className="py-2 px-2 text-center" onClick={(e) => toggleFavorite(e, coin.symbol)}>
+                      <button
+                        type="button"
+                        className="p-1 text-neutral-500 hover:text-amber-400 transition-colors"
+                        title={isFavorited ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                      >
+                        <Star
+                          className={`w-3.5 h-3.5 ${
+                            isFavorited ? 'fill-amber-400 text-amber-400' : 'text-neutral-500'
+                          }`}
+                        />
+                      </button>
+                    </td>
+
                     {/* Rank */}
                     <td className="py-2 px-3 text-neutral-400 font-bold text-[11px]">{coin.rank}</td>
 

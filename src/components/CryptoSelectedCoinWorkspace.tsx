@@ -11,6 +11,7 @@ import {
 } from '../types/trading';
 import { TradingChart } from './Chart/TradingChart';
 import { useInrCurrency, InrCurrencyToggle } from '../utils/inrCurrency';
+import { CoinNewsPanel } from './News/CoinNewsPanel';
 import {
   TrendingUp,
   TrendingDown,
@@ -1364,6 +1365,15 @@ export const SelectedCoinAllInfoPanel: React.FC<SelectedCoinAllInfoProps> = ({
           </div>
         )}
       </div>
+
+      {/* 08. REAL-TIME GROUNDED NEWS & MARKET CATALYSTS (GOOGLE SEARCH GROUNDING) */}
+      <CoinNewsPanel
+        symbol={asset.symbol}
+        name={asset.name}
+        category={asset.category}
+        currentPrice={price}
+        change24h={change24h}
+      />
     </div>
   );
 };

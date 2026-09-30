@@ -6,6 +6,7 @@ import {
   Activity,
   Waves,
 } from 'lucide-react';
+import { alertAudioEngine } from '../../services/alertSoundService';
 
 interface TradeItem {
   id: string;
@@ -209,6 +210,13 @@ export const WhaleTradesFeed: React.FC<WhaleTradesFeedProps> = ({
 
               if (isWhaleTrade) {
                 setWhaleTrades((prev) => [newTrade, ...prev.slice(0, 49)]);
+                if (totalUsd >= 100000) {
+                  alertAudioEngine.playMegaWhaleSonar();
+                } else if (isSell) {
+                  alertAudioEngine.playBearishChime();
+                } else {
+                  alertAudioEngine.playBullishChime();
+                }
               }
             }
           } catch {

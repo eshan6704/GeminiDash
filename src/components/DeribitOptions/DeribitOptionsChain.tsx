@@ -9,6 +9,11 @@ import {
   Trash2,
   ArrowUpRight,
   ArrowDownRight,
+  TrendingUp,
+  TrendingDown,
+  Activity,
+  BarChart2,
+  Info,
 } from 'lucide-react';
 import { useInrCurrency, InrCurrencyToggle } from '../../utils/inrCurrency';
 
@@ -952,6 +957,247 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* OPTIONS STRATEGY PAYOFF & PNL VISUALIZER */}
+      <OptionsPayoffVisualizer
+        currency={currency}
+        spotPrice={activeSpotPrice}
+        optionPositions={optionPositions}
+      />
+    </div>
+  );
+};
+
+interface PayoffVisualizerProps {
+  currency: string;
+  spotPrice: number;
+  optionPositions: OptionPositionItem[];
+}
+
+type StrategyPreset = 'CUSTOM' | 'BULL_CALL_SPREAD' | 'BEAR_PUT_SPREAD' | 'STRADDLE' | 'STRANGLE' | 'COVERED_CALL';
+
+export const OptionsPayoffVisualizer: React.FC<PayoffVisualizerProps> = ({
+  currency,
+  spotPrice,
+  optionPositions,
+}) => {
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyPreset>('BULL_CALL_SPREAD');
+  const [hoveredPrice, setHoveredPrice] = useState<number | null>(null);
+
+  // Derive strikes based on spot price
+  const atmStrike = Math.round(spotPrice);
+  const step = spotPrice > 1000 ? Math.round(spotPrice * 0.05 / 500) * 500 || 500 : Number((spotPrice * 0.05).toFixed(2));
+  const lowerStrike = atmStrike - step;
+  const higherStrike = atmStrike + step;
+
+  // Calculate payoff curves
+  const pricePoints = useMemo(() => {
+    const points: { price: number; pnl: number }[] = [];
+    const minP = Math.max(1, spotPrice * 0.7);
+    const maxP = spotPrice * 1.3;
+    const numSteps = 40;
+    const stepSize = (maxP - minP) / numSteps;
+
+    // Synthetic legs based on selected strategy
+    const legs: { type: 'call' | 'put' | 'spot'; strike: number; side: 'LONG' | 'SHORT'; premium: number }[] = [];
+
+    if (selectedStrategy === 'BULL_CALL_SPREAD') {
+      legs.push({ type: 'call', strike: lowerStrike, side: 'LONG', premium: spotPrice * 0.04 });
+      legs.push({ type: 'call', strike: higherStrike, side: 'SHORT', premium: spotPrice * 0.018 });
+    } else if (selectedStrategy === 'BEAR_PUT_SPREAD') {
+      legs.push({ type: 'put', strike: higherStrike, side: 'LONG', premium: spotPrice * 0.04 });
+      legs.push({ type: 'put', strike: lowerStrike, side: 'SHORT', premium: spotPrice * 0.018 });
+    } else if (selectedStrategy === 'STRADDLE') {
+      legs.push({ type: 'call', strike: atmStrike, side: 'LONG', premium: spotPrice * 0.035 });
+      legs.push({ type: 'put', strike: atmStrike, side: 'LONG', premium: spotPrice * 0.035 });
+    } else if (selectedStrategy === 'STRANGLE') {
+      legs.push({ type: 'call', strike: higherStrike, side: 'LONG', premium: spotPrice * 0.02 });
+      legs.push({ type: 'put', strike: lowerStrike, side: 'LONG', premium: spotPrice * 0.02 });
+    } else if (selectedStrategy === 'COVERED_CALL') {
+      legs.push({ type: 'spot', strike: spotPrice, side: 'LONG', premium: 0 });
+      legs.push({ type: 'call', strike: higherStrike, side: 'SHORT', premium: spotPrice * 0.025 });
+    } else if (selectedStrategy === 'CUSTOM' && optionPositions.length > 0) {
+      optionPositions.forEach((pos) => {
+        legs.push({
+          type: pos.type,
+          strike: pos.strike,
+          side: pos.side,
+          premium: pos.entryMarkUsd,
+        });
+      });
+    } else {
+      // Default to long call
+      legs.push({ type: 'call', strike: atmStrike, side: 'LONG', premium: spotPrice * 0.03 });
+    }
+
+    for (let i = 0; i <= numSteps; i++) {
+      const p = minP + i * stepSize;
+      let totalPnl = 0;
+
+      for (const leg of legs) {
+        let legPayoff = 0;
+        if (leg.type === 'call') {
+          const intrinsic = Math.max(0, p - leg.strike);
+          legPayoff = leg.side === 'LONG' ? intrinsic - leg.premium : leg.premium - intrinsic;
+        } else if (leg.type === 'put') {
+          const intrinsic = Math.max(0, leg.strike - p);
+          legPayoff = leg.side === 'LONG' ? intrinsic - leg.premium : leg.premium - intrinsic;
+        } else if (leg.type === 'spot') {
+          legPayoff = p - leg.strike;
+        }
+        totalPnl += legPayoff;
+      }
+
+      points.push({ price: p, pnl: totalPnl });
+    }
+
+    return points;
+  }, [selectedStrategy, spotPrice, atmStrike, lowerStrike, higherStrike, optionPositions]);
+
+  // Derive metrics
+  const maxProfit = Math.max(...pricePoints.map((pt) => pt.pnl));
+  const maxLoss = Math.min(...pricePoints.map((pt) => pt.pnl));
+  const currentPnlAtSpot = pricePoints.find((pt) => Math.abs(pt.price - spotPrice) < spotPrice * 0.02)?.pnl || 0;
+
+  // Chart coordinate mapping
+  const chartWidth = 500;
+  const chartHeight = 160;
+  const minPnl = Math.min(...pricePoints.map((p) => p.pnl));
+  const maxPnl = Math.max(...pricePoints.map((p) => p.pnl));
+  const pnlRange = maxPnl - minPnl || 1;
+  const minPrice = pricePoints[0]?.price || spotPrice * 0.7;
+  const maxPrice = pricePoints[pricePoints.length - 1]?.price || spotPrice * 1.3;
+  const priceRange = maxPrice - minPrice || 1;
+
+  const zeroY = chartHeight - ((0 - minPnl) / pnlRange) * chartHeight;
+
+  const svgPath = useMemo(() => {
+    if (pricePoints.length === 0) return '';
+    return pricePoints
+      .map((pt, idx) => {
+        const x = ((pt.price - minPrice) / priceRange) * chartWidth;
+        const y = chartHeight - ((pt.pnl - minPnl) / pnlRange) * chartHeight;
+        return `${idx === 0 ? 'M' : 'L'} ${x.toFixed(1)},${y.toFixed(1)}`;
+      })
+      .join(' ');
+  }, [pricePoints, minPrice, maxPrice, priceRange, minPnl, maxPnl, pnlRange]);
+
+  return (
+    <div className="mt-4 p-4 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-subtle)] space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
+            <Activity className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-[var(--theme-text-primary)]">
+              Options Payoff & Expiry PnL Simulator ({currency})
+            </h4>
+            <p className="text-[11px] text-[var(--theme-text-secondary)]">
+              Visual risk/reward curve, break-evens, and strategy profiles
+            </p>
+          </div>
+        </div>
+
+        {/* Strategy Presets */}
+        <div className="flex items-center gap-1 p-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card)] flex-wrap text-[10px]">
+          {[
+            { id: 'BULL_CALL_SPREAD', label: 'Bull Call Spread' },
+            { id: 'BEAR_PUT_SPREAD', label: 'Bear Put Spread' },
+            { id: 'STRADDLE', label: 'Long Straddle' },
+            { id: 'STRANGLE', label: 'Long Strangle' },
+            { id: 'COVERED_CALL', label: 'Covered Call' },
+          ].map((strat) => (
+            <button
+              key={strat.id}
+              onClick={() => setSelectedStrategy(strat.id as StrategyPreset)}
+              className={`px-2 py-1 rounded-md font-bold transition-all ${
+                selectedStrategy === strat.id
+                  ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+              }`}
+            >
+              {strat.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Metrics Banner */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+        <div className="p-2.5 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)]">
+          <div className="text-[10px] text-[var(--theme-text-secondary)] font-medium">Underlying Spot</div>
+          <div className="text-sm font-black font-mono text-[var(--theme-text-primary)]">${spotPrice.toLocaleString()}</div>
+        </div>
+        <div className="p-2.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5">
+          <div className="text-[10px] text-emerald-600 font-medium">Max Potential Profit</div>
+          <div className="text-sm font-black font-mono text-emerald-500">
+            {maxProfit > 100000 ? 'Unlimited' : `+$${Math.round(maxProfit).toLocaleString()}`}
+          </div>
+        </div>
+        <div className="p-2.5 rounded-xl border border-rose-500/20 bg-rose-500/5">
+          <div className="text-[10px] text-rose-600 font-medium">Max Defined Loss</div>
+          <div className="text-sm font-black font-mono text-rose-500">
+            -${Math.abs(Math.round(maxLoss)).toLocaleString()}
+          </div>
+        </div>
+        <div className="p-2.5 rounded-xl border border-indigo-500/20 bg-indigo-500/5">
+          <div className="text-[10px] text-indigo-500 font-medium">PnL At Current Spot</div>
+          <div className={`text-sm font-black font-mono ${currentPnlAtSpot >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {currentPnlAtSpot >= 0 ? '+' : ''}${Math.round(currentPnlAtSpot).toLocaleString()}
+          </div>
+        </div>
+      </div>
+
+      {/* SVG Payoff Curve Diagram */}
+      <div className="relative p-3 rounded-xl border border-[var(--theme-border)] bg-[var(--theme-bg-card)]">
+        <div className="flex items-center justify-between text-[10px] text-[var(--theme-text-secondary)] mb-1 font-mono">
+          <span>Expiry Range: ${Math.round(minPrice).toLocaleString()}</span>
+          <span className="font-bold text-amber-500">Spot: ${spotPrice.toLocaleString()}</span>
+          <span>${Math.round(maxPrice).toLocaleString()}</span>
+        </div>
+
+        <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-36 overflow-visible">
+          {/* Zero baseline */}
+          <line
+            x1="0"
+            y1={zeroY}
+            x2={chartWidth}
+            y2={zeroY}
+            stroke="currentColor"
+            className="text-[var(--theme-border)]"
+            strokeDasharray="4 4"
+            strokeWidth="1.5"
+          />
+
+          {/* Current Spot Vertical Line */}
+          <line
+            x1={((spotPrice - minPrice) / priceRange) * chartWidth}
+            y1="0"
+            x2={((spotPrice - minPrice) / priceRange) * chartWidth}
+            y2={chartHeight}
+            stroke="#f59e0b"
+            strokeWidth="1.5"
+            strokeDasharray="2 2"
+          />
+
+          {/* Payoff Curve Line */}
+          <path
+            d={svgPath}
+            fill="none"
+            stroke="#6366f1"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+
+        <div className="flex items-center justify-between mt-2 text-[10px] text-[var(--theme-text-secondary)] font-mono">
+          <span className="text-rose-500 font-bold">◄ Downside Expiry Loss</span>
+          <span className="text-indigo-400 font-semibold">Interactive Risk Profile Graph</span>
+          <span className="text-emerald-500 font-bold">Upside Expiry Profit ►</span>
+        </div>
       </div>
     </div>
   );

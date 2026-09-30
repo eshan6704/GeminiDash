@@ -32,6 +32,12 @@ const AiRiskModal = lazy(() =>
 const SettingsModal = lazy(() =>
   import('./components/Modals/SettingsModal').then((m) => ({ default: m.SettingsModal }))
 );
+const AlertManagerModal = lazy(() =>
+  import('./components/Alerts/AlertManagerModal').then((m) => ({ default: m.AlertManagerModal }))
+);
+const HotkeyHelperModal = lazy(() =>
+  import('./components/Hotkeys/HotkeyHelperModal').then((m) => ({ default: m.HotkeyHelperModal }))
+);
 const DailyPnLChart = lazy(() =>
   import('./components/Portfolio/DailyPnLChart').then((m) => ({ default: m.DailyPnLChart }))
 );
@@ -87,6 +93,11 @@ import {
   fetchBinanceCryptoTableRows,
 } from './services/marketDataTables';
 import { MarketAsset } from './types/trading';
+import {
+  alertAudioEngine,
+  loadStoredAlerts,
+  saveStoredAlerts,
+} from './services/alertSoundService';
 import {
   BarChart3,
   Zap,
@@ -216,6 +227,83 @@ export default function App() {
   const [isWhatIfOpen, setIsWhatIfOpen] = useState<boolean>(false);
   const [isAiReviewOpen, setIsAiReviewOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isAlertsOpen, setIsAlertsOpen] = useState<boolean>(false);
+  const [isHotkeysOpen, setIsHotkeysOpen] = useState<boolean>(false);
+
+  // Check stored price alerts on price updates
+  const triggeredAlertIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!assets) return;
+    const stored = loadStoredAlerts();
+    if (stored.length === 0) return;
+
+    let hasUpdate = false;
+    const updated = stored.map((alert) => {
+      if (alert.triggered || triggeredAlertIdsRef.current.has(alert.id)) return alert;
+      const asset = assets[alert.symbol.toUpperCase()];
+      if (!asset || !asset.price) return alert;
+
+      const hit =
+        (alert.condition === 'ABOVE' && asset.price >= alert.targetPrice) ||
+        (alert.condition === 'BELOW' && asset.price <= alert.targetPrice);
+
+      if (hit) {
+        triggeredAlertIdsRef.current.add(alert.id);
+        hasUpdate = true;
+        if (alert.condition === 'ABOVE') {
+          alertAudioEngine.playBullishChime();
+        } else {
+          alertAudioEngine.playBearishChime();
+        }
+        addNotification(
+          'success',
+          `🔔 Price Alert Triggered: ${alert.symbol}`,
+          `Price reached $${asset.price.toLocaleString()} (${alert.condition === 'ABOVE' ? '≥' : '≤'} $${alert.targetPrice.toLocaleString()})${alert.notes ? ` — ${alert.notes}` : ''}`
+        );
+        return { ...alert, triggered: true };
+      }
+      return alert;
+    });
+
+    if (hasUpdate) {
+      saveStoredAlerts(updated);
+    }
+  }, [assets, addNotification]);
+
+  // Global Pro Trader Hotkeys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't intercept when user is typing in an input / textarea / select
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+        if (e.key === 'Escape') {
+          (e.target as HTMLElement).blur();
+        }
+        return;
+      }
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setIsHotkeysOpen((prev) => !prev);
+      } else if (e.key === 'o' || e.key === 'O') {
+        e.preventDefault();
+        setIsAlertsOpen((prev) => !prev);
+      } else if (e.key === 'Escape') {
+        setIsAlertsOpen(false);
+        setIsHotkeysOpen(false);
+        setIsWhatIfOpen(false);
+        setIsAiReviewOpen(false);
+        setIsSettingsOpen(false);
+      } else if (e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        setMainMarketTab('CRYPTO');
+        setSectionATab('CRYPTO_TABLE');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Resolve active selected coin (defaults to BTC if no coin is selected)
   const activeAsset: MarketAsset = useMemo(() => {
@@ -462,6 +550,8 @@ export default function App() {
                     onOpenWhatIf={() => setIsWhatIfOpen(true)}
                     onOpenAiReview={() => setIsAiReviewOpen(true)}
                     onOpenSettings={() => setIsSettingsOpen(true)}
+                    onOpenAlerts={() => setIsAlertsOpen(true)}
+                    onOpenHotkeys={() => setIsHotkeysOpen(true)}
                     onReset={() => resetSimulation()}
                     onAddFunds={() => adjustCashBalance(5000)}
                   />
@@ -692,6 +782,22 @@ export default function App() {
             onReset={resetSimulation}
             onAddFunds={(amount) => adjustCashBalance(amount)}
             onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
+
+        {isAlertsOpen && (
+          <AlertManagerModal
+            isOpen={isAlertsOpen}
+            activeSymbol={activeAsset.symbol}
+            activePrice={activeAsset.price}
+            onClose={() => setIsAlertsOpen(false)}
+          />
+        )}
+
+        {isHotkeysOpen && (
+          <HotkeyHelperModal
+            isOpen={isHotkeysOpen}
+            onClose={() => setIsHotkeysOpen(false)}
           />
         )}
       </Suspense>
