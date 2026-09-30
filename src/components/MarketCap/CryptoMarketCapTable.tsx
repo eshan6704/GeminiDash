@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useTheme } from '../../context/ThemeContext';
 import {
   Coins,
@@ -14,6 +14,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Radio,
 } from 'lucide-react';
 import { subscribeMarketTable, MASTER_CRYPTO_250, fetchBinanceCryptoTableRows } from '../../services/marketDataTables';
 
@@ -35,12 +36,14 @@ export interface CryptoCoinItem {
 
 interface CryptoMarketCapTableProps {
   selectedSymbol?: string;
+  liveAssets?: Record<string, any>;
   onSelectCoinToTrade?: (symbol: string, coin?: CryptoCoinItem) => void;
   onCoinsLoaded?: (coins: CryptoCoinItem[]) => void;
 }
 
 export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   selectedSymbol = 'BTC',
+  liveAssets,
   onSelectCoinToTrade,
   onCoinsLoaded,
 }) => {
@@ -68,41 +71,17 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
   const [sortAsc, setSortAsc] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [isWsConnected, setIsWsConnected] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number>(Date.now());
   const itemsPerPage = 50;
-
-  // Real-time Firestore subscription to grouped Top 250 table
-  useEffect(() => {
-    const unsub = subscribeMarketTable('crypto_top250', (table: any) => {
-      if (table && table.data && table.data.length > 0) {
-        const mapped = table.data.map((m: any) => ({
-          rank: m.rank || 1,
-          id: m.id,
-          name: m.name,
-          symbol: m.symbol,
-          price: m.price,
-          change1h: 0.15,
-          change24h: m.change1d,
-          change7d: m.change1d * 2.2,
-          marketCap: Number(m.marketCap || 1000000000),
-          volume24h: Number(m.volume24h || 50000000),
-          circulatingSupply: 100000000,
-          category: (m.category as any) || 'Layer 1',
-          isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC'].includes(m.symbol),
-        }));
-        setCoins(mapped);
-        onCoinsLoaded?.(mapped);
-      }
-    });
-
-    return () => unsub();
-  }, [onCoinsLoaded]);
+  const isMountedRef = useRef(true);
 
   // Fetch live Binance USDT crypto table coins
   const fetchTopCoins = async () => {
     setIsLoading(true);
     try {
       const binanceRows = await fetchBinanceCryptoTableRows();
-      if (Array.isArray(binanceRows) && binanceRows.length > 0) {
+      if (Array.isArray(binanceRows) && binanceRows.length > 0 && isMountedRef.current) {
         const mapped: CryptoCoinItem[] = binanceRows.map((m, idx) => ({
           rank: m.rank || idx + 1,
           id: m.id,
@@ -119,94 +98,149 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
           isTradeableInSim: ['PAXG', 'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ZEC', 'BNB'].includes(m.symbol),
         }));
         setCoins(mapped);
+        setLastSyncTime(Date.now());
         onCoinsLoaded?.(mapped);
         setIsLoading(false);
         return;
       }
     } catch {
-      // Fallback below
+      // Fallback
     }
-
-    // Fallback generator for 250 crypto assets
-    generate250CoinsFallback();
+    if (isMountedRef.current) {
+      setIsLoading(false);
+    }
   };
 
-  const generate250CoinsFallback = () => {
-    const categories: CryptoCoinItem['category'][] = ['Layer 1', 'DeFi', 'Meme', 'Gold & RWA', 'AI', 'Layer 2', 'Web3'];
-    const topPresets = [
-      { name: 'Bitcoin', symbol: 'BTC', price: 96500, cap: 1900000000000, cat: 'Layer 1' },
-      { name: 'Ethereum', symbol: 'ETH', price: 3450, cap: 415000000000, cat: 'Layer 1' },
-      { name: 'Tether Gold', symbol: 'XAUT', price: 2755, cap: 620000000, cat: 'Gold & RWA' },
-      { name: 'PAX Gold', symbol: 'PAXG', price: 2750, cap: 480000000, cat: 'Gold & RWA' },
-      { name: 'Solana', symbol: 'SOL', price: 210, cap: 98000000000, cat: 'Layer 1' },
-      { name: 'Binance Coin', symbol: 'BNB', price: 620, cap: 91000000000, cat: 'Layer 1' },
-      { name: 'Ripple', symbol: 'XRP', price: 1.85, cap: 105000000000, cat: 'Layer 1' },
-      { name: 'Dogecoin', symbol: 'DOGE', price: 0.28, cap: 41000000000, cat: 'Meme' },
-      { name: 'Cardano', symbol: 'ADA', price: 0.85, cap: 30000000000, cat: 'Layer 1' },
-      { name: 'Avalanche', symbol: 'AVAX', price: 38, cap: 15000000000, cat: 'Layer 1' },
-      { name: 'Chainlink', symbol: 'LINK', price: 18.5, cap: 11000000000, cat: 'DeFi' },
-      { name: 'Shiba Inu', symbol: 'SHIB', price: 0.000024, cap: 14000000000, cat: 'Meme' },
-      { name: 'Artificial Superintelligence', symbol: 'FET', price: 1.45, cap: 3700000000, cat: 'AI' },
-      { name: 'Bittensor', symbol: 'TAO', price: 480, cap: 3500000000, cat: 'AI' },
-      { name: 'Polygon', symbol: 'POL', price: 0.48, cap: 3800000000, cat: 'Layer 2' },
-      { name: 'Arbitrum', symbol: 'ARB', price: 0.72, cap: 2800000000, cat: 'Layer 2' },
-      { name: 'Ondo Finance', symbol: 'ONDO', price: 1.12, cap: 1600000000, cat: 'Gold & RWA' },
-      { name: 'Pepe', symbol: 'PEPE', price: 0.000018, cap: 7500000000, cat: 'Meme' },
-      { name: 'Uniswap', symbol: 'UNI', price: 9.80, cap: 5900000000, cat: 'DeFi' },
-      { name: 'Aave', symbol: 'AAVE', price: 165, cap: 2400000000, cat: 'DeFi' },
-    ];
-
-    const list: CryptoCoinItem[] = [];
-
-    // Add explicit presets first
-    topPresets.forEach((p, idx) => {
-      list.push({
-        rank: idx + 1,
-        id: p.name.toLowerCase().replace(/ /g, '-'),
-        name: p.name,
-        symbol: p.symbol,
-        price: p.price,
-        change1h: Number(((Math.random() - 0.48) * 1.5).toFixed(2)),
-        change24h: Number(((Math.random() - 0.46) * 7.5).toFixed(2)),
-        change7d: Number(((Math.random() - 0.44) * 18.0).toFixed(2)),
-        marketCap: p.cap,
-        volume24h: Math.floor(p.cap * (0.05 + Math.random() * 0.15)),
-        circulatingSupply: Math.floor(p.cap / p.price),
-        category: p.cat as any,
-        isTradeableInSim: ['BTC', 'ETH', 'SOL', 'PAXG', 'BNB', 'XRP', 'DOGE'].includes(p.symbol),
-      });
-    });
-
-    // Procedurally generate up to 250 coins
-    for (let i = topPresets.length + 1; i <= 250; i++) {
-      const cat = categories[i % categories.length];
-      const cap = Math.floor(1900000000000 * Math.pow(0.965, i));
-      const price = Number((Math.random() * 80 + 0.05).toFixed(4));
-
-      list.push({
-        rank: i,
-        id: `coin-${i}`,
-        name: `Token ${i} (${cat})`,
-        symbol: `TKN${i}`,
-        price,
-        change1h: Number(((Math.random() - 0.49) * 1.8).toFixed(2)),
-        change24h: Number(((Math.random() - 0.47) * 9.0).toFixed(2)),
-        change7d: Number(((Math.random() - 0.45) * 22.0).toFixed(2)),
-        marketCap: cap,
-        volume24h: Math.floor(cap * 0.08),
-        circulatingSupply: Math.floor(cap / (price || 1)),
-        category: cat,
-        isTradeableInSim: false,
-      });
-    }
-
-    setCoins(list);
-    setIsLoading(false);
-  };
-
+  // Initial load & recurring 8-second auto-poll
   useEffect(() => {
+    isMountedRef.current = true;
     fetchTopCoins();
+
+    const intervalId = setInterval(() => {
+      fetchTopCoins();
+    }, 8000);
+
+    return () => {
+      isMountedRef.current = false;
+      clearInterval(intervalId);
+    };
   }, []);
+
+  // Real-time Binance WebSocket ticker stream for sub-second updates
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: any = null;
+    let pendingUpdates: Map<string, { price: number; change24h?: number; volume24h?: number }> = new Map();
+
+    const wsUrls = [
+      'wss://data-stream.binance.vision/ws/!miniTicker@arr',
+      'wss://stream.binance.com:9443/ws/!miniTicker@arr',
+    ];
+    let wsIndex = 0;
+
+    const connectWs = () => {
+      try {
+        ws = new WebSocket(wsUrls[wsIndex % wsUrls.length]);
+
+        ws.onopen = () => {
+          if (isMountedRef.current) setIsWsConnected(true);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (Array.isArray(data)) {
+              for (const item of data) {
+                if (typeof item.s === 'string' && item.s.endsWith('USDT')) {
+                  const sym = item.s.slice(0, -4).toUpperCase();
+                  const price = parseFloat(item.c);
+                  const open = parseFloat(item.o);
+                  const quoteVol = parseFloat(item.q);
+                  if (price > 0) {
+                    const chg = open > 0 ? ((price - open) / open) * 100 : undefined;
+                    pendingUpdates.set(sym, {
+                      price,
+                      change24h: chg !== undefined ? Number(chg.toFixed(2)) : undefined,
+                      volume24h: quoteVol > 0 ? quoteVol : undefined,
+                    });
+                  }
+                }
+              }
+            }
+          } catch {
+            // ignore JSON parse errors
+          }
+        };
+
+        ws.onerror = () => {
+          if (isMountedRef.current) setIsWsConnected(false);
+        };
+
+        ws.onclose = () => {
+          if (isMountedRef.current) {
+            setIsWsConnected(false);
+            wsIndex++;
+            reconnectTimeout = setTimeout(connectWs, 3000);
+          }
+        };
+      } catch {
+        if (isMountedRef.current) {
+          setIsWsConnected(false);
+          reconnectTimeout = setTimeout(connectWs, 3000);
+        }
+      }
+    };
+
+    connectWs();
+
+    // Batch apply updates to state every 1.5 seconds to keep table fluid & high performance
+    const flushInterval = setInterval(() => {
+      if (pendingUpdates.size === 0 || !isMountedRef.current) return;
+
+      const updates = new Map(pendingUpdates);
+      pendingUpdates.clear();
+
+      setCoins((prevCoins) =>
+        prevCoins.map((coin) => {
+          const u = updates.get(coin.symbol.toUpperCase());
+          if (!u) return coin;
+          const priceRatio = coin.price > 0 ? u.price / coin.price : 1;
+          return {
+            ...coin,
+            price: u.price,
+            change24h: u.change24h !== undefined ? u.change24h : coin.change24h,
+            volume24h: u.volume24h ? Math.round(u.volume24h) : coin.volume24h,
+            marketCap: Math.round(coin.marketCap * priceRatio),
+          };
+        })
+      );
+      setLastSyncTime(Date.now());
+    }, 1500);
+
+    return () => {
+      clearInterval(flushInterval);
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (ws) ws.close();
+    };
+  }, []);
+
+  // Sync simulator liveAssets if provided
+  useEffect(() => {
+    if (!liveAssets || Object.keys(liveAssets).length === 0) return;
+    setCoins((prev) =>
+      prev.map((c) => {
+        const live = liveAssets[c.symbol];
+        if (!live || !live.price) return c;
+        const priceRatio = c.price > 0 ? live.price / c.price : 1;
+        return {
+          ...c,
+          price: live.price,
+          change24h: live.change24h !== undefined ? live.change24h : c.change24h,
+          marketCap: Math.round(c.marketCap * priceRatio),
+        };
+      })
+    );
+  }, [liveAssets]);
 
   // Filter & Search Logic
   const filteredCoins = useMemo(() => {
@@ -270,28 +304,38 @@ export const CryptoMarketCapTable: React.FC<CryptoMarketCapTableProps> = ({
                 Crypto Market Cap (Top 250 Assets)
               </h2>
               <span className="px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] font-mono font-bold">
-                {coins.length} Assets Loaded
+                {coins.length} Assets Live
+              </span>
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-bold ${
+                isWsConnected
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${isWsConnected ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`} />
+                {isWsConnected ? 'BINANCE STREAM LIVE' : 'AUTO-POLL 8S'}
               </span>
             </div>
             <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-              Complete global market valuation, 1h/24h/7d metrics, liquidity, and quick trade execution
+              Complete global market valuation, real-time Binance 1h/24h/7d metrics, liquidity, and quick trade execution
             </p>
           </div>
         </div>
 
         {/* Sync Button */}
-        <button
-          onClick={fetchTopCoins}
-          disabled={isLoading}
-          className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
-            isLight
-              ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-              : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:text-amber-400'
-          }`}
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-400' : ''}`} />
-          <span>Sync Market Data</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchTopCoins}
+            disabled={isLoading}
+            className={`px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+              isLight
+                ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
+                : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:text-amber-400'
+            }`}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-400' : ''}`} />
+            <span>Sync Market Data</span>
+          </button>
+        </div>
       </div>
 
       {/* CONTROLS: SEARCH & CATEGORY FILTERS */}

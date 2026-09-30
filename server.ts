@@ -1430,6 +1430,99 @@ setTimeout(() => {
   }, 45000);
 }, 2000);
 
+// Proxy for Gemini Coin Quantitative & Fundamental Analysis
+app.post('/api/gemini/coin-analysis', async (req, res) => {
+  const {
+    symbol = 'BTC',
+    name = 'Bitcoin',
+    category = 'Layer 1',
+    price = 0,
+    change24h = 0,
+    marketCap = 0,
+    volume24h = 0,
+    rsi14 = 50,
+    fundingRate8h = 0,
+    athDrawdownPct = 0,
+    high24h = 0,
+    low24h = 0,
+    pivot = 0,
+    r1 = 0,
+    s1 = 0,
+    longShortRatio = 1.0,
+    sources = [],
+  } = req.body;
+
+  const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+
+  const fallbackReport = `### 🎯 Executive Market Regime for ${name} (${symbol})
+- **Market Bias:** ${change24h >= 0 ? 'Bullish Continuation' : 'Corrective Pullback'} (${change24h >= 0 ? '+' : ''}${Number(change24h).toFixed(2)}% in 24h).
+- **Spot Price:** $${Number(price).toLocaleString('en-US', { minimumFractionDigits: 2 })} (24h Range: $${Number(low24h).toLocaleString()} – $${Number(high24h).toLocaleString()}).
+- **Relative Strength:** RSI (14) at ${Number(rsi14).toFixed(1)} indicates ${rsi14 > 70 ? 'overbought momentum' : rsi14 < 30 ? 'oversold conditions' : 'balanced equilibrium'}.
+
+---
+
+### 📊 Multi-Source Liquidity & Orderflow
+- **Perpetual Funding Rate:** ${Number(fundingRate8h).toFixed(4)}% per 8h with Long/Short ratio at ${Number(longShortRatio).toFixed(2)}x.
+- **24h Trading Volume:** $${(Number(volume24h) / 1e6).toFixed(1)}M across major venues (Binance, Coinbase, Bybit, OKX, Kraken).
+- **Valuation Metrics:** Market Cap $${(Number(marketCap) / 1e9).toFixed(2)}B · ATH Drawdown: ${Number(athDrawdownPct).toFixed(1)}%.
+
+---
+
+### 🛡️ Critical Key Levels & Pivots
+- **Primary Resistance (R1):** $${Number(r1).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+- **Central Pivot (P):** $${Number(pivot).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+- **Key Support Floor (S1):** $${Number(s1).toLocaleString('en-US', { minimumFractionDigits: 2 })}
+
+---
+
+### ⚡ Strategic Action Plan & Grid Parameters
+- **Accumulation / DCA Zone:** $${Number(s1 * 0.995).toFixed(2)} – $${Number(pivot).toFixed(2)}.
+- **Grid Upper Target:** $${Number(r1 * 1.02).toFixed(2)}.
+- **Risk Management:** Maintain a maximum 2% portfolio risk per leveraged position with trailing stop-loss below $${Number(s1 * 0.985).toFixed(2)}.`;
+
+  if (!apiKey || apiKey === 'MY_GEMINI_API_KEY') {
+    return res.json({ success: true, analysis: fallbackReport, source: 'fallback' });
+  }
+
+  try {
+    const { GoogleGenAI } = await import('@google/genai');
+    const ai = new GoogleGenAI({ apiKey, httpOptions: { headers: { 'User-Agent': 'aistudio-build' } } });
+
+    const prompt = `You are an elite institutional cryptocurrency quantitative analyst and derivatives strategist.
+Perform a comprehensive, professional real-time market analysis for ${name} (${symbol}/USDT).
+
+Current Real-Time Metrics:
+- Current Spot Price: $${price} (24h Change: ${change24h}%)
+- 24h High: $${high24h} | 24h Low: $${low24h}
+- Market Cap: $${marketCap} | 24h Volume: $${volume24h}
+- RSI (14): ${rsi14} | 8h Perp Funding Rate: ${fundingRate8h}% | Long/Short Ratio: ${longShortRatio}x
+- ATH Drawdown: ${athDrawdownPct}%
+- Support/Resistance Pivots: Central Pivot $${pivot}, Resistance R1 $${r1}, Support S1 $${s1}
+- Category: ${category}
+
+Provide a structured, razor-sharp institutional intelligence report formatted in clean Markdown with these 4 sections:
+1. 🎯 Executive Regime & Bias (Current market trend, momentum strength, volatility cycle)
+2. 📊 Multi-Venue Order Flow & Derivatives Intelligence (Perp funding dynamics, liquidity across Binance/Coinbase/Bybit, taker dominance)
+3. 🛡️ Key Price Levels & Pivots (Detailed breakdown of breakout triggers, key accumulation levels, and invalidation points)
+4. ⚡ Actionable Trading & Auto-Grid Plan (Specific DCA entries, optimal grid boundaries, stop-loss placement, and risk mitigation tips)
+
+Keep the analysis quantitative, rigorous, highly actionable, and within 250 words.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash',
+      contents: prompt,
+    });
+
+    if (response.text) {
+      return res.json({ success: true, analysis: response.text.trim(), source: 'gemini-3.8-flash' });
+    }
+  } catch (err: any) {
+    console.error('Gemini coin analysis error:', err?.message);
+  }
+
+  return res.json({ success: true, analysis: fallbackReport, source: 'fallback' });
+});
+
 // Proxy for Gemini Portfolio Risk Analysis
 app.post('/api/gemini/risk-analysis', async (req, res) => {
   const { goldRatio = 0, cryptoRatio = 0, positions = [] } = req.body;
@@ -2057,9 +2150,6 @@ async function startServer() {
 
   app.listen(Number(PORT), '0.0.0.0', () => {
     console.log(`🚀 Full-Stack Market Terminal Server running on http://0.0.0.0:${PORT}`);
-    // Populate cache immediately then start interval
-    processTop500BatchUpdate(false).catch(err => console.error('[StartupSync] Error:', err));
-    startBackgroundPriceSync();
   });
 }
 

@@ -38,6 +38,21 @@ function readInitialUsdInrRate(): number {
   }
 }
 
+export function updateLiveUsdInrFromSnapshot(rate: number): void {
+  if (!Number.isFinite(rate) || rate <= 40 || rate >= 200) return;
+  cachedLiveUsdInrRate = Number(rate.toFixed(2));
+  cachedRateIsLive = true;
+  lastFetchTimestamp = Date.now();
+  try {
+    localStorage.setItem(STORAGE_KEY_USD_INR_RATE, String(cachedLiveUsdInrRate));
+  } catch {
+    // ignore storage error
+  }
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(SYNC_EVENT_NAME));
+  }
+}
+
 export async function fetchLiveUsdInrRate(force = false): Promise<number> {
   const now = Date.now();
   if (!force && cachedRateIsLive && now - lastFetchTimestamp < 45_000) {
@@ -58,10 +73,6 @@ export async function fetchLiveUsdInrRate(force = false): Promise<number> {
         url: 'https://api.frankfurter.app/latest?from=USD&to=INR',
         extract: (data: any) => data?.rates?.INR,
       },
-      {
-        url: 'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/usd.json',
-        extract: (data: any) => data?.usd?.inr,
-      },
     ];
 
     for (const ep of endpoints) {
@@ -74,17 +85,7 @@ export async function fetchLiveUsdInrRate(force = false): Promise<number> {
           const json = await res.json();
           const rate = Number(ep.extract(json));
           if (Number.isFinite(rate) && rate > 40 && rate < 200) {
-            cachedLiveUsdInrRate = Number(rate.toFixed(2));
-            cachedRateIsLive = true;
-            lastFetchTimestamp = Date.now();
-            try {
-              localStorage.setItem(STORAGE_KEY_USD_INR_RATE, String(cachedLiveUsdInrRate));
-            } catch {
-              // ignore storage error
-            }
-            if (typeof window !== 'undefined') {
-              window.dispatchEvent(new CustomEvent(SYNC_EVENT_NAME));
-            }
+            updateLiveUsdInrFromSnapshot(rate);
             return cachedLiveUsdInrRate;
           }
         }

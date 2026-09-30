@@ -50,17 +50,10 @@ const AdvancedCryptoScreenerView = lazy(() =>
 const MarketAnalyticsDashboard = lazy(() =>
   import('./components/Analytics/MarketAnalyticsDashboard').then((m) => ({ default: m.MarketAnalyticsDashboard }))
 );
-const GlobalIndicesView = lazy(() =>
-  import('./components/Markets/GlobalIndicesView').then((m) => ({ default: m.GlobalIndicesView }))
-);
-const ForexMarketView = lazy(() =>
-  import('./components/Markets/ForexMarketView').then((m) => ({ default: m.ForexMarketView }))
-);
-const CommoditiesMarketView = lazy(() =>
-  import('./components/Markets/CommoditiesMarketView').then((m) => ({ default: m.CommoditiesMarketView }))
-);
-const NiftyIndicesView = lazy(() =>
-  import('./components/Markets/NiftyIndicesView').then((m) => ({ default: m.NiftyIndicesView }))
+const FastInfoMarketOverview = lazy(() =>
+  import('./components/Markets/FastInfoMarketOverview').then((m) => ({
+    default: m.FastInfoMarketOverview,
+  }))
 );
 const StockConstituentsView = lazy(() =>
   import('./components/Markets/StockConstituentsView').then((m) => ({ default: m.StockConstituentsView }))
@@ -117,7 +110,7 @@ export default function App() {
   const [mainMarketTab, setMainMarketTab] = useState<MainMarketTab>('COIN');
   const [optionsSubTab, setOptionsSubTab] = useState<OptionsSubTab>('INDEX');
   const [equityHubSubTab, setEquityHubSubTab] = useState<EquityHubSubTab>('PORTFOLIO');
-  const [marketOverviewSubTab, setMarketOverviewSubTab] = useState<MarketOverviewSubTab>('ALL');
+  const [marketOverviewSubTab, setMarketOverviewSubTab] = useState<MarketOverviewSubTab>('indian_indices');
 
   // Crypto (formerly Section A) & Coin (formerly Section B) sub-tab states
   const [sectionATab, setSectionATab] = useState<CryptoSectionATab>('CRYPTO_TABLE');
@@ -330,25 +323,25 @@ export default function App() {
     }
     if (asset.category === 'INDIAN_INDEX') {
       setMainMarketTab('MARKET_OVERVIEW');
-      setMarketOverviewSubTab('INDIAN_INDICES');
+      setMarketOverviewSubTab('indian_indices');
       addNotification('info', 'Indian Indices', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'GLOBAL_INDEX') {
       setMainMarketTab('MARKET_OVERVIEW');
-      setMarketOverviewSubTab('GLOBAL_INDICES');
+      setMarketOverviewSubTab('global_indices');
       addNotification('info', 'Market Overview · Global Indices', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'FOREX') {
       setMainMarketTab('MARKET_OVERVIEW');
-      setMarketOverviewSubTab('FOREX');
+      setMarketOverviewSubTab('forex_major');
       addNotification('info', 'Market Overview · Forex Exchange', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
     if (asset.category === 'COMMODITY') {
       setMainMarketTab('MARKET_OVERVIEW');
-      setMarketOverviewSubTab('COMMODITIES');
+      setMarketOverviewSubTab('commodities');
       addNotification('info', 'Market Overview · Commodities', `Viewing ${asset.name} (${asset.symbol}).`);
       return;
     }
@@ -401,24 +394,13 @@ export default function App() {
             </div>
           }
         >
-        {/* NON-CRYPTO MARKET DESKS */}
-        {mainMarketTab === 'MARKET_OVERVIEW' && (
-          <div className="space-y-6">
-            {(marketOverviewSubTab === 'INDIAN_INDICES' || marketOverviewSubTab === 'ALL') && (
-              <NiftyIndicesView />
-            )}
-            {(marketOverviewSubTab === 'GLOBAL_INDICES' || marketOverviewSubTab === 'ALL') && (
-              <GlobalIndicesView />
-            )}
-            {(marketOverviewSubTab === 'FOREX' || marketOverviewSubTab === 'ALL') && (
-              <ForexMarketView />
-            )}
-            {(marketOverviewSubTab === 'COMMODITIES' || marketOverviewSubTab === 'ALL') && (
-              <CommoditiesMarketView />
-            )}
-          </div>
+        {/* FASTINFO MARKET OVERVIEW (eshan6704/marketapi2) */}
+        {(mainMarketTab === 'MARKET_OVERVIEW' || mainMarketTab === 'NIFTY_INDICES') && (
+          <FastInfoMarketOverview
+            activeGroup={marketOverviewSubTab}
+            onSelectGroup={setMarketOverviewSubTab}
+          />
         )}
-        {mainMarketTab === 'NIFTY_INDICES' && <NiftyIndicesView />}
         {mainMarketTab === 'STOCK_CONSTITUENTS' && (
           <StockConstituentsView externalSymbol={searchedStockSymbol} />
         )}
@@ -449,6 +431,7 @@ export default function App() {
               {sectionATab === 'CRYPTO_TABLE' && (
                 <CryptoMarketCapTable
                   selectedSymbol={activeAsset.symbol}
+                  liveAssets={assets}
                   onSelectCoinToTrade={handleSelectCoinFromTable}
                   onCoinsLoaded={setCryptoTableCoins}
                 />

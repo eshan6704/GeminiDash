@@ -30,10 +30,13 @@ interface OptionSummary {
   gamma: number;
 }
 
+export const DERIBIT_SUPPORTED_SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP'] as const;
+export type DeribitCurrency = (typeof DERIBIT_SUPPORTED_SYMBOLS)[number];
+
 interface OptionPositionItem {
   id: string;
   instrument_name: string;
-  currency: 'BTC' | 'ETH' | 'SOL' | 'PAXG';
+  currency: DeribitCurrency;
   expiry: string;
   strike: number;
   type: 'call' | 'put';
@@ -57,28 +60,37 @@ interface DeribitOptionsChainProps {
 
 export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
   selectedSymbol,
+  selectedCoinPrice,
   currentBtcPrice = 96500,
   currentEthPrice = 3450,
   currentSolPrice = 210,
   currentPaxgPrice = 2750,
   onSelectStrikePrice,
 }) => {
-  const resolveCurrency = (sym?: string): 'BTC' | 'ETH' | 'SOL' | 'PAXG' => {
+  const upperSym = (selectedSymbol || '').toUpperCase();
+
+  // If a specific symbol is selected and Deribit does not offer options for it, leave it blank (return null)
+  if (selectedSymbol && !DERIBIT_SUPPORTED_SYMBOLS.includes(upperSym as DeribitCurrency)) {
+    return null;
+  }
+
+  const resolveCurrency = (sym?: string): DeribitCurrency => {
     const upper = (sym || 'BTC').toUpperCase();
     if (upper === 'ETH') return 'ETH';
     if (upper === 'SOL') return 'SOL';
-    if (upper === 'PAXG' || upper === 'XAUT') return 'PAXG';
+    if (upper === 'XRP') return 'XRP';
     return 'BTC';
   };
-  const [currency, setCurrency] = useState<'BTC' | 'ETH' | 'SOL' | 'PAXG'>(() =>
+
+  const [currency, setCurrency] = useState<DeribitCurrency>(() =>
     resolveCurrency(selectedSymbol)
   );
 
   useEffect(() => {
-    if (selectedSymbol) {
+    if (selectedSymbol && DERIBIT_SUPPORTED_SYMBOLS.includes(upperSym as DeribitCurrency)) {
       setCurrency(resolveCurrency(selectedSymbol));
     }
-  }, [selectedSymbol]);
+  }, [selectedSymbol, upperSym]);
 
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [strikeFilter, setStrikeFilter] = useState<'ALL' | 'ATM' | 'ITM' | 'OTM'>('ATM');
@@ -94,13 +106,14 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
     if (currency === 'BTC') return currentBtcPrice;
     if (currency === 'ETH') return currentEthPrice;
     if (currency === 'SOL') return currentSolPrice;
-    return currentPaxgPrice;
-  }, [currency, currentBtcPrice, currentEthPrice, currentSolPrice, currentPaxgPrice]);
+    if (currency === 'XRP') return selectedCoinPrice || 2.40;
+    return currentBtcPrice;
+  }, [currency, currentBtcPrice, currentEthPrice, currentSolPrice, selectedCoinPrice]);
 
   // Fetch or simulate Deribit Options Data
   const fetchDeribitData = async () => {
     setIsLoading(true);
-    const currSymbol = currency === 'PAXG' ? 'BTC' : currency;
+    const currSymbol = currency;
     const deribitUrl = `https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=${currSymbol}&kind=option`;
 
     try {
@@ -265,7 +278,7 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
       if (prev.some((p) => p.currency === currency)) return prev;
       const spot = underlyingIndexPrice || activeSpotPrice;
       const step =
-        currency === 'BTC' ? 1000 : currency === 'ETH' ? 50 : currency === 'SOL' ? 5 : 25;
+        currency === 'BTC' ? 1000 : currency === 'ETH' ? 50 : currency === 'SOL' ? 5 : 0.05;
       const atmStrike = Math.round(spot / step) * step;
       const exp = selectedExpiry || expiryList[0] || '26SEP26';
       const atmCall = optionsData.find(
@@ -430,7 +443,7 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
         {/* Currency Tabs & Refresh Button */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex p-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] text-[11px] font-mono font-bold">
-            {(['BTC', 'ETH', 'SOL', 'PAXG'] as const).map((sym) => (
+            {DERIBIT_SUPPORTED_SYMBOLS.map((sym) => (
               <button
                 key={sym}
                 type="button"

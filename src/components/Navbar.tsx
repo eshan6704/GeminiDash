@@ -37,11 +37,14 @@ export type MainMarketTab =
 export type OptionsSubTab = 'INDEX' | 'STOCK' | 'BOTH';
 export type EquityHubSubTab = 'PORTFOLIO' | 'WATCHLIST' | 'SCREENER' | 'ALL';
 export type MarketOverviewSubTab =
-  | 'ALL'
-  | 'INDIAN_INDICES'
-  | 'GLOBAL_INDICES'
-  | 'FOREX'
-  | 'COMMODITIES';
+  | 'indian_indices'
+  | 'global_indices'
+  | 'crypto'
+  | 'nifty50_stocks'
+  | 'commodities'
+  | 'forex_major'
+  | 'forex_emerging'
+  | 'bonds';
 
 export type CryptoSubTab =
   | 'CRYPTO_TABLE'
@@ -121,7 +124,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectOptionsSubTab,
   equityHubSubTab,
   onSelectEquityHubSubTab,
-  marketOverviewSubTab = 'ALL',
+  marketOverviewSubTab = 'indian_indices',
   onSelectMarketOverviewSubTab,
   cryptoSubTab = 'CRYPTO_TABLE',
   onSelectCryptoSubTab,
@@ -174,33 +177,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               );
             })}
           </div>
-
-          {/* Inline Sub-Mode Switcher for Market Overview (All / Indian / Global / Forex / Commodities) */}
-          {mainMarketTab === 'MARKET_OVERVIEW' && onSelectMarketOverviewSubTab && (
-            <div className="flex items-center gap-1 flex-wrap">
-              {[
-                { id: 'ALL', label: 'All', icon: <Activity className="w-3.5 h-3.5" /> },
-                { id: 'INDIAN_INDICES', label: 'Indian', icon: <BarChart3 className="w-3.5 h-3.5" /> },
-                { id: 'GLOBAL_INDICES', label: 'Global', icon: <Globe className="w-3.5 h-3.5" /> },
-                { id: 'FOREX', label: 'Forex', icon: <DollarSign className="w-3.5 h-3.5" /> },
-                { id: 'COMMODITIES', label: 'Commodities', icon: <Box className="w-3.5 h-3.5" /> },
-              ].map((sub) => (
-                <button
-                  key={sub.id}
-                  type="button"
-                  onClick={() => onSelectMarketOverviewSubTab(sub.id as MarketOverviewSubTab)}
-                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer border whitespace-nowrap ${
-                    marketOverviewSubTab === sub.id
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                      : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
-                  }`}
-                >
-                  {sub.icon}
-                  <span>{sub.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
 
           {/* Inline Sub-Mode Switcher for Options Hub */}
           {mainMarketTab === 'OPTIONS_HUB' && (
