@@ -9,6 +9,7 @@ import {
   Navbar,
   MainMarketTab,
   OptionsSubTab,
+  StocksSubTab,
   EquityHubSubTab,
   MarketOverviewSubTab,
   CryptoSubTab,
@@ -120,6 +121,7 @@ type CryptoSectionBTab = CoinSubTab;
 export default function App() {
   const [mainMarketTab, setMainMarketTab] = useState<MainMarketTab>('COIN');
   const [optionsSubTab, setOptionsSubTab] = useState<OptionsSubTab>('INDEX');
+  const [stocksSubTab, setStocksSubTab] = useState<StocksSubTab>('CONSTITUENT');
   const [equityHubSubTab, setEquityHubSubTab] = useState<EquityHubSubTab>('PORTFOLIO');
   const [marketOverviewSubTab, setMarketOverviewSubTab] = useState<MarketOverviewSubTab>('indian_indices');
 
@@ -406,7 +408,7 @@ export default function App() {
     if (asset.category === 'INDIAN_STOCK') {
       setSearchedStockSymbol(asset.symbol);
       setMainMarketTab('STOCK_CONSTITUENTS');
-      addNotification('info', 'Stocks Research', `Loaded ${asset.name} (${asset.symbol}) into 9-Tab Deep Research Station.`);
+      addNotification('info', 'Stocks Research', `Loaded ${asset.name} (${asset.symbol}) into Stocks Station.`);
       return;
     }
     if (asset.category === 'INDIAN_INDEX') {
@@ -436,7 +438,7 @@ export default function App() {
     if (asset.category === 'US_STOCK') {
       setSearchedStockSymbol(asset.symbol);
       setMainMarketTab('STOCK_CONSTITUENTS');
-      addNotification('info', 'Stocks Research', `Loaded ${asset.name} (${asset.symbol}) into 9-Tab Deep Research Station.`);
+      addNotification('info', 'Stocks Research', `Loaded ${asset.name} (${asset.symbol}) into Stocks Station.`);
       return;
     }
   };
@@ -457,6 +459,8 @@ export default function App() {
         }}
         optionsSubTab={optionsSubTab}
         onSelectOptionsSubTab={setOptionsSubTab}
+        stocksSubTab={stocksSubTab}
+        onSelectStocksSubTab={setStocksSubTab}
         equityHubSubTab={equityHubSubTab}
         onSelectEquityHubSubTab={setEquityHubSubTab}
         marketOverviewSubTab={marketOverviewSubTab}
@@ -490,7 +494,10 @@ export default function App() {
           />
         )}
         {mainMarketTab === 'STOCK_CONSTITUENTS' && (
-          <StockConstituentsView externalSymbol={searchedStockSymbol} />
+          <StockConstituentsView
+            externalSymbol={searchedStockSymbol}
+            activeSubTab={stocksSubTab}
+          />
         )}
 
         {mainMarketTab === 'OPTIONS_HUB' && (

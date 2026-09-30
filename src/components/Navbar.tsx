@@ -19,6 +19,7 @@ import {
   Sparkles,
   ChevronDown,
   Check,
+  TrendingUp,
 } from 'lucide-react';
 import { TrackedAsset } from '../services/allTrackedAssets';
 import { PREFERENCE_COIN_SYMBOLS } from '../services/marketDataTables';
@@ -35,6 +36,12 @@ export type MainMarketTab =
   | 'EQUITY_HUB';
 
 export type OptionsSubTab = 'INDEX' | 'STOCK' | 'BOTH';
+export type StocksSubTab =
+  | 'CONSTITUENT'
+  | 'YAHOO_LIVE'
+  | 'SCREENER'
+  | 'DELIVERY'
+  | 'AI_RESEARCH';
 export type EquityHubSubTab = 'PORTFOLIO' | 'WATCHLIST' | 'SCREENER' | 'ALL';
 export type MarketOverviewSubTab =
   | 'indian_indices'
@@ -63,6 +70,8 @@ interface NavbarProps {
   onSelectMarketTab: (tab: MainMarketTab) => void;
   optionsSubTab: OptionsSubTab;
   onSelectOptionsSubTab: (sub: OptionsSubTab) => void;
+  stocksSubTab?: StocksSubTab;
+  onSelectStocksSubTab?: (sub: StocksSubTab) => void;
   equityHubSubTab: EquityHubSubTab;
   onSelectEquityHubSubTab: (sub: EquityHubSubTab) => void;
   marketOverviewSubTab?: MarketOverviewSubTab;
@@ -122,6 +131,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectMarketTab,
   optionsSubTab,
   onSelectOptionsSubTab,
+  stocksSubTab = 'CONSTITUENT',
+  onSelectStocksSubTab,
   equityHubSubTab,
   onSelectEquityHubSubTab,
   marketOverviewSubTab = 'indian_indices',
@@ -192,6 +203,33 @@ export const Navbar: React.FC<NavbarProps> = ({
                   onClick={() => onSelectOptionsSubTab(sub.id as OptionsSubTab)}
                   className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer border whitespace-nowrap ${
                     optionsSubTab === sub.id
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                      : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
+                  }`}
+                >
+                  {sub.icon}
+                  <span>{sub.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Inline Sub-Mode Switcher for Stocks Tab */}
+          {mainMarketTab === 'STOCK_CONSTITUENTS' && onSelectStocksSubTab && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {[
+                { id: 'CONSTITUENT', label: 'Nifty API (HF)', icon: <Building className="w-3.5 h-3.5" /> },
+                { id: 'YAHOO_LIVE', label: 'Yahoo Live', icon: <TrendingUp className="w-3.5 h-3.5" /> },
+                { id: 'SCREENER', label: 'Screener', icon: <Sliders className="w-3.5 h-3.5" /> },
+                { id: 'DELIVERY', label: 'Delivery %', icon: <Layers className="w-3.5 h-3.5" /> },
+                { id: 'AI_RESEARCH', label: 'AI Analyst', icon: <Sparkles className="w-3.5 h-3.5" /> },
+              ].map((sub) => (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => onSelectStocksSubTab(sub.id as StocksSubTab)}
+                  className={`px-2 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer border whitespace-nowrap ${
+                    stocksSubTab === sub.id
                       ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                       : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] border-[var(--theme-border-subtle)] hover:bg-[var(--theme-bg-elevated)]'
                   }`}

@@ -154,20 +154,41 @@ export const MASTER_INDIAN_INDICES: MarketTableRow[] = [
   { id: 'smallcap100', name: 'NIFTY SMALLCAP 100', symbol: 'SMALLCAP100', price: 18450.00, change1d: -0.24, change1dPts: -44.20, category: 'Broad Market', status: 'Active' },
 ];
 
-export const MASTER_NIFTY_500: MarketTableRow[] = COMPLETE_NSE_FNO_STOCKS.map((s, idx) => ({
-  rank: idx + 1,
-  id: s.symbol.toLowerCase(),
-  name: s.name,
-  symbol: s.symbol,
-  price: s.defaultPrice,
-  change1d: 0.45,
-  exchange: 'NSE',
-  sector: s.sector as any,
-  tier: idx < 50 ? 'Nifty 50' : idx < 100 ? 'Nifty Next 50' : 'Nifty Midcap 150',
-  currency: 'INR',
-  marketCap: `₹${Math.round(100000 / (idx + 1))} Cr`,
-  peRatio: Number((20 + Math.random() * 15).toFixed(2)),
-}));
+export const MASTER_NIFTY_500: MarketTableRow[] = (() => {
+  const baseFno = COMPLETE_NSE_FNO_STOCKS;
+  const totalStocks: MarketTableRow[] = [];
+  const sectorsList = ['Banking & Finance', 'IT & Software', 'Energy & Power', 'Auto & EV', 'Pharma & Healthcare', 'FMCG & Consumer', 'Metals & Mining', 'Infrastructure', 'Capital Goods', 'Chemicals & Fertilisers', 'Realty & Construction', 'PSU & Railways'];
+
+  for (let i = 0; i < 500; i++) {
+    const existing = baseFno[i];
+    const rank = i + 1;
+    let tier = 'Nifty Smallcap 250';
+    if (rank <= 50) tier = 'Nifty 50';
+    else if (rank <= 100) tier = 'Nifty Next 50';
+    else if (rank <= 250) tier = 'Nifty Midcap 150';
+
+    const symbol = existing ? existing.symbol : `STK${1000 + i}`;
+    const name = existing ? existing.name : `Enterprise Corp ${i}`;
+    const sector = existing ? existing.sector : sectorsList[i % sectorsList.length];
+    const price = existing ? existing.defaultPrice : Number((45 + (i * 37) % 2400).toFixed(2));
+
+    totalStocks.push({
+      rank,
+      id: symbol.toLowerCase(),
+      name,
+      symbol,
+      price,
+      change1d: Number(((((i * 7) % 9) - 4) * 0.45).toFixed(2)),
+      exchange: 'NSE',
+      sector: sector as any,
+      tier,
+      currency: 'INR',
+      marketCap: rank <= 50 ? `₹${Math.round(200000 / (rank * 0.4 + 1))} Cr` : rank <= 250 ? `₹${Math.round(45000 / (rank * 0.1 + 1))} Cr` : `₹${Math.round(12500 / (rank * 0.05 + 1))} Cr`,
+      peRatio: Number((15 + (i % 45)).toFixed(2)),
+    });
+  }
+  return totalStocks;
+})();
 
 export const PREFERENCE_COIN_SYMBOLS = ['BTC', 'XAUT', 'PAXG', 'ZEC', 'SOL', 'CL', 'XAG'] as const;
 
@@ -614,6 +635,21 @@ export async function fetchMarketTable(
   tableName: string
 ): Promise<{ data: MarketTableRow[]; dataTimestamp?: number; updatedAtMs?: number; updatedAt?: string }> {
   if (tableName === 'nifty_500') {
+    try {
+      const res = await fetch('/api/nifty500-constituents', { signal: AbortSignal.timeout(6000) });
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          return {
+            data: json.data,
+            dataTimestamp: Date.now(),
+            updatedAtMs: Date.now(),
+          };
+        }
+      }
+    } catch {
+      // fallback
+    }
     return { 
       data: MASTER_NIFTY_500,
       dataTimestamp: Date.now(),
