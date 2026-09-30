@@ -13,29 +13,24 @@ import {
 import { INITIAL_ASSETS, fetchLiveMarketData } from '../services/marketData';
 import { liveWebSocketFeed } from '../services/liveWebSocketFeed';
 import { updateRememberedPrice, getHydratedPrice } from '../services/priceMemoryStore';
-import { 
-  saveSimulatorStateToB2, 
-  loadSimulatorStateFromB2, 
-  scheduleSimulatorSync, 
-  subscribeSyncStatus, 
-  getSimulatorId,
-  SyncStatusInfo
-} from '../services/simulatorSyncService';
 import { usePersistentSymbols } from '../services/symbolPersistenceService';
 
 const DEFAULT_CONFIG: SimulatorConfig = {
-  initialBalance: 100,
+  initialBalance: 1000,
   brokerName: SHARK_EXCHANGE.name, // 'Shark Exchange'
   takerFeeRate: SHARK_EXCHANGE.takerBrokerageRateDecimal, // 0.064% of trade value (4x maker)
   makerFeeRate: SHARK_EXCHANGE.makerBrokerageRateDecimal, // 0.016% of trade value (0.00016)
   slippageRate: 0.0004, // 0.04% average market slippage
-  enableSlippage: true,
+  enableSlippage: false,
   enableFees: true,
 };
 
 const STORAGE_KEYS = {
-  CONFIG: 'aurumx_config_v4',
-  CASH: 'aurumx_cash_v2',
+  CONFIG: 'aurumx_config_v5',
+  CASH: 'aurumx_manual_cash_v5',
+  FORECAST_BALANCE: 'aurumx_forecast_balance_v5',
+  GRID_CASH: 'aurumx_grid_cash_v5',
+  GRID_INITIAL: 'aurumx_grid_initial_v5',
   POSITIONS: 'aurumx_positions_v2',
   LIMIT_ORDERS: 'aurumx_limits_v2',
   HISTORY: 'aurumx_history_v2',
@@ -61,7 +56,7 @@ export interface AlertNotification {
   timestamp: number;
 }
 
-export function useTradeSimulator() {
+export function useTradeSimulator(isActiveCryptoOrCoinPage: boolean = true) {
   const [assets, setAssets] = useState<Record<string, MarketAsset>>(() => {
     const hydrated: Record<string, MarketAsset> = {};
     Object.entries(INITIAL_ASSETS).forEach(([sym, asset]) => {
@@ -96,7 +91,17 @@ export function useTradeSimulator() {
   const [config, setConfig] = useState<SimulatorConfig>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.CONFIG);
-      return saved ? JSON.parse(saved) : DEFAULT_CONFIG;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          ...DEFAULT_CONFIG,
+          ...parsed,
+          makerFeeRate: SHARK_EXCHANGE.makerBrokerageRateDecimal, // 0.016%
+          takerFeeRate: SHARK_EXCHANGE.takerBrokerageRateDecimal, // 0.064% (4x maker)
+          enableSlippage: false,
+        };
+      }
+      return DEFAULT_CONFIG;
     } catch {
       return DEFAULT_CONFIG;
     }
@@ -108,6 +113,35 @@ export function useTradeSimulator() {
       return saved !== null ? Number(saved) : DEFAULT_CONFIG.initialBalance;
     } catch {
       return DEFAULT_CONFIG.initialBalance;
+    }
+  });
+
+  // Separate PnL Forecasting Balance ($1,000 default, editable)
+  const [forecastBalance, setForecastBalance] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.FORECAST_BALANCE);
+      return saved !== null ? Number(saved) : 1000;
+    } catch {
+      return 1000;
+    }
+  });
+
+  // Separate Grid-Based Auto Simulation Balance ($1,000 default, editable)
+  const [gridInitialBalance, setGridInitialBalance] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.GRID_INITIAL);
+      return saved !== null ? Number(saved) : 1000;
+    } catch {
+      return 1000;
+    }
+  });
+
+  const [gridCashBalance, setGridCashBalance] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.GRID_CASH);
+      return saved !== null ? Number(saved) : 1000;
+    } catch {
+      return 1000;
     }
   });
 
@@ -165,6 +199,12 @@ export function useTradeSimulator() {
   priceAlertsRef.current = priceAlerts;
   const cashRef = useRef(cashBalance);
   cashRef.current = cashBalance;
+  const gridCashRef = useRef(gridCashBalance);
+  gridCashRef.current = gridCashBalance;
+  const gridInitialRef = useRef(gridInitialBalance);
+  gridInitialRef.current = gridInitialBalance;
+  const forecastBalanceRef = useRef(forecastBalance);
+  forecastBalanceRef.current = forecastBalance;
   const assetsRef = useRef(assets);
   assetsRef.current = assets;
   const configRef = useRef(config);
@@ -184,6 +224,9 @@ export function useTradeSimulator() {
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.CASH, cashBalance.toString());
+      localStorage.setItem(STORAGE_KEYS.FORECAST_BALANCE, forecastBalance.toString());
+      localStorage.setItem(STORAGE_KEYS.GRID_CASH, gridCashBalance.toString());
+      localStorage.setItem(STORAGE_KEYS.GRID_INITIAL, gridInitialBalance.toString());
       localStorage.setItem(STORAGE_KEYS.POSITIONS, JSON.stringify(positions));
       localStorage.setItem(STORAGE_KEYS.LIMIT_ORDERS, JSON.stringify(limitOrders));
       localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify(tradeHistory));
@@ -192,97 +235,7 @@ export function useTradeSimulator() {
     } catch (e) {
       console.warn('Storage save failed', e);
     }
-  }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts]);
-
-  // B2 Storage Synchronization Status & Hydration across Page Refreshes
-  const [syncInfo, setSyncInfo] = useState<SyncStatusInfo>(() => ({
-    status: 'idle',
-    lastSyncedAt: null,
-    error: null,
-    simulatorId: getSimulatorId(),
-    source: 'local',
-  }));
-  const [isHydrated, setIsHydrated] = useState<boolean>(false);
-
-  // Subscribe to status updates & hydrate simulator state from B2 Storage on mount
-  useEffect(() => {
-    const unsub = subscribeSyncStatus(setSyncInfo);
-
-    loadSimulatorStateFromB2()
-      .then((cloudState: any) => {
-        if (cloudState) {
-          if (typeof cloudState.cashBalance === 'number') {
-            setCashBalance(cloudState.cashBalance);
-          }
-          if (Array.isArray(cloudState.positions) && cloudState.positions.length > 0) {
-            setPositions(cloudState.positions);
-          }
-          if (Array.isArray(cloudState.limitOrders)) {
-            setLimitOrders(cloudState.limitOrders);
-          }
-          if (Array.isArray(cloudState.tradeHistory)) {
-            setTradeHistory(cloudState.tradeHistory);
-          }
-          if (Array.isArray(cloudState.spotHoldings)) {
-            setSpotHoldings(cloudState.spotHoldings);
-          }
-          if (Array.isArray(cloudState.priceAlerts)) {
-            setPriceAlerts(cloudState.priceAlerts);
-          }
-          if (cloudState.config && typeof cloudState.config.initialBalance === 'number') {
-            setConfig((prev) => ({ ...prev, ...cloudState.config }));
-          }
-          if (cloudState.assets && Object.keys(cloudState.assets).length > 0) {
-            setAssets((prev) => {
-              const merged = { ...prev };
-              Object.entries(cloudState.assets!).forEach(([sym, val]: [string, any]) => {
-                if (merged[sym] && val && val.price) {
-                  merged[sym] = {
-                    ...merged[sym],
-                    price: val.price,
-                    change24h: val.change24h ?? merged[sym].change24h,
-                    high24h: val.high24h ?? merged[sym].high24h,
-                    low24h: val.low24h ?? merged[sym].low24h,
-                    volume24h: val.volume24h ?? merged[sym].volume24h,
-                    lastUpdated: val.lastUpdated ?? merged[sym].lastUpdated,
-                  };
-                }
-              });
-              return merged;
-            });
-          }
-        }
-        setIsHydrated(true);
-      })
-      .catch((err) => {
-        console.warn('[Simulator] B2 Storage initial hydration warning:', err);
-        setIsHydrated(true);
-      });
-
-    return () => {
-      unsub();
-    };
-  }, []);
-
-  // Synchronize state with B2 Storage whenever balances, positions, orders, or config change
-  useEffect(() => {
-    if (!isHydrated) return;
-
-    scheduleSimulatorSync(
-      {
-        simulatorId: getSimulatorId(),
-        cashBalance,
-        positions,
-        assets: assetsRef.current,
-        limitOrders,
-        tradeHistory,
-        spotHoldings,
-        priceAlerts,
-        config,
-        updatedAt: new Date().toISOString(),
-      }
-    );
-  }, [cashBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts, config, isHydrated]);
+  }, [cashBalance, forecastBalance, gridCashBalance, gridInitialBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts]);
 
   // Push notification helper
   const addNotification = useCallback((type: AlertNotification['type'], title: string, message: string) => {
@@ -361,10 +314,42 @@ export function useTradeSimulator() {
     });
   }, [persistentPrices]);
 
-  // Initial REST fetch & relaxed background fallback (Cloud Storage handles real-time persistence)
+  const selectedSymbolRef = useRef(selectedSymbol);
+  selectedSymbolRef.current = selectedSymbol;
+  const isActivePageRef = useRef(isActiveCryptoOrCoinPage);
+  isActivePageRef.current = isActiveCryptoOrCoinPage;
+
+  // Update WebSocket stream scope so only active page/tab symbols are streamed
+  useEffect(() => {
+    const openSymbols = Array.from(
+      new Set([
+        ...positions.map((p) => p.assetSymbol),
+        ...limitOrders.map((o) => o.assetSymbol),
+      ])
+    );
+    liveWebSocketFeed.setNetworkScope({
+      isActivePage: isActiveCryptoOrCoinPage,
+      activeSymbol: selectedSymbol,
+      requiredSymbols: openSymbols,
+    });
+  }, [isActiveCryptoOrCoinPage, selectedSymbol, positions, limitOrders]);
+
+  // Initial REST fetch & relaxed background fallback (scoped to active coin + open positions)
   const refreshPrices = useCallback(async () => {
+    if (typeof document !== 'undefined' && document.hidden) return;
+    const hasOpenPositionsOrOrders =
+      positionsRef.current.length > 0 || limitOrdersRef.current.length > 0;
+    if (!isActivePageRef.current && !hasOpenPositionsOrOrders) return;
+
     try {
-      const updated = await fetchLiveMarketData(assetsRef.current);
+      const targetSymbols = Array.from(
+        new Set([
+          selectedSymbolRef.current,
+          ...positionsRef.current.map((p) => p.assetSymbol),
+          ...limitOrdersRef.current.map((o) => o.assetSymbol),
+        ])
+      );
+      const updated = await fetchLiveMarketData(assetsRef.current, targetSymbols);
       setAssets((prev) => {
         const next = { ...prev };
         let changed = false;
@@ -417,10 +402,11 @@ export function useTradeSimulator() {
   }, []);
 
   useEffect(() => {
+    if (!isActiveCryptoOrCoinPage && positionsRef.current.length === 0) return;
     refreshPrices();
-    const interval = setInterval(refreshPrices, 60000); // 60s relaxed fallback
+    const interval = setInterval(refreshPrices, 90000); // 90s relaxed fallback
     return () => clearInterval(interval);
-  }, [refreshPrices]);
+  }, [refreshPrices, isActiveCryptoOrCoinPage, selectedSymbol]);
 
   // Real-time Exchange WebSocket Stream (Binance & Bitfinex)
   useEffect(() => {
@@ -489,7 +475,8 @@ export function useTradeSimulator() {
     if (currentPositions.length > 0) {
       const remainingPositions: Position[] = [];
       const closedRecords: TradeRecord[] = [];
-      let cashRefund = 0;
+      let manualCashRefund = 0;
+      let gridCashRefund = 0;
 
       for (const pos of currentPositions) {
         const asset = currentAssets[pos.assetSymbol];
@@ -530,40 +517,15 @@ export function useTradeSimulator() {
         }
         // ---------------------------------
 
-        const priceDiff = isLong ? price - pos.entryPrice : pos.entryPrice - price;
-        const unrealizedPnL = pos.amount * priceDiff;
-        const unrealizedPnLPercent = (unrealizedPnL / pos.margin) * 100;
+        const entryTradeValue = pos.entryPrice * pos.amount;
+        const currentTradeValue = price * pos.amount;
+        const tradeValueDiff = isLong
+          ? currentTradeValue - entryTradeValue
+          : entryTradeValue - currentTradeValue;
+        const unrealizedPnL = tradeValueDiff;
+        const unrealizedPnLPercent = pos.margin > 0 ? (unrealizedPnL / pos.margin) * 100 : 0;
 
-        // Check Liquidation
-        const isLiquidated = isLong
-          ? price <= pos.liquidationPrice
-          : price >= pos.liquidationPrice;
-
-        if (isLiquidated) {
-          // ... (existing liquidation logic)
-          closedRecords.push({
-            id: Math.random().toString(36).substring(2, 9),
-            assetSymbol: pos.assetSymbol,
-            side: pos.side,
-            mode: 'LEVERAGED',
-            entryPrice: pos.entryPrice,
-            exitPrice: pos.liquidationPrice,
-            amount: pos.amount,
-            leverage: pos.leverage,
-            realizedPnL: -pos.margin,
-            realizedPnLPercent: -100,
-            fees: pos.feePaid,
-            openTime: pos.openTime,
-            closeTime: Date.now(),
-            closeReason: 'LIQUIDATION',
-          });
-          addNotification(
-            'danger',
-            `Margin Call: ${pos.assetSymbol} Liquidated!`,
-            `Your ${pos.leverage}x ${pos.side} position on ${pos.assetSymbol} reached liquidation price $${pos.liquidationPrice.toFixed(2)}. Loss: -$${pos.margin.toFixed(2)}`
-          );
-          continue;
-        }
+        // After liquidation price is reached, treat position as still OPEN so loss is not capped and keeps increasing
 
         // Check Take Profit
         const isTP = pos.takeProfitPrice && (
@@ -571,10 +533,17 @@ export function useTradeSimulator() {
         );
         if (isTP && pos.takeProfitPrice) {
           const exitPrice = pos.takeProfitPrice;
-          const exitDiff = isLong ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice;
-          const pnl = pos.amount * exitDiff;
-          const pnlPct = (pnl / pos.margin) * 100;
-          cashRefund += pos.margin + pnl;
+          const exitTradeValue = exitPrice * pos.amount;
+          const exitTradeValueDiff = isLong
+            ? exitTradeValue - entryTradeValue
+            : entryTradeValue - exitTradeValue;
+          const pnl = exitTradeValueDiff;
+          const pnlPct = pos.margin > 0 ? (pnl / pos.margin) * 100 : 0;
+          if (pos.accountSource === 'AUTO_GRID') {
+            gridCashRefund += pos.margin + pnl;
+          } else {
+            manualCashRefund += pos.margin + pnl;
+          }
 
           closedRecords.push({
             id: Math.random().toString(36).substring(2, 9),
@@ -591,11 +560,12 @@ export function useTradeSimulator() {
             openTime: pos.openTime,
             closeTime: Date.now(),
             closeReason: 'TAKE_PROFIT',
+            accountSource: pos.accountSource || 'MANUAL',
           });
           addNotification(
             'success',
             `Take-Profit Hit: ${pos.assetSymbol}`,
-            `Position closed at target $${exitPrice.toFixed(2)}. Realized Profit: +$${pnl.toFixed(2)} (+${pnlPct.toFixed(1)}%)`
+            `Position closed at target $${exitPrice.toFixed(2)}. Return (Change in Trade Value): +$${pnl.toFixed(4)} (+${pnlPct.toFixed(1)}%)`
           );
           continue;
         }
@@ -606,10 +576,17 @@ export function useTradeSimulator() {
         );
         if (isSL && stopLossPrice) {
           const exitPrice = stopLossPrice;
-          const exitDiff = isLong ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice;
-          const pnl = pos.amount * exitDiff;
-          const pnlPct = (pnl / pos.margin) * 100;
-          cashRefund += Math.max(0, pos.margin + pnl);
+          const exitTradeValue = exitPrice * pos.amount;
+          const exitTradeValueDiff = isLong
+            ? exitTradeValue - entryTradeValue
+            : entryTradeValue - exitTradeValue;
+          const pnl = exitTradeValueDiff;
+          const pnlPct = pos.margin > 0 ? (pnl / pos.margin) * 100 : 0;
+          if (pos.accountSource === 'AUTO_GRID') {
+            gridCashRefund += pos.margin + pnl;
+          } else {
+            manualCashRefund += pos.margin + pnl;
+          }
 
           closedRecords.push({
             id: Math.random().toString(36).substring(2, 9),
@@ -626,16 +603,17 @@ export function useTradeSimulator() {
             openTime: pos.openTime,
             closeTime: Date.now(),
             closeReason: 'STOP_LOSS',
+            accountSource: pos.accountSource || 'MANUAL',
           });
           addNotification(
             'warning',
             `Stop-Loss Triggered: ${pos.assetSymbol}`,
-            `Protected capital at $${exitPrice.toFixed(2)}. Realized PnL: -$${Math.abs(pnl).toFixed(2)} (${pnlPct.toFixed(1)}%)`
+            `Protected capital at $${exitPrice.toFixed(2)}. Return (Change in Trade Value): -$${Math.abs(pnl).toFixed(4)} (${pnlPct.toFixed(1)}%)`
           );
           continue;
         }
 
-        // Keep position active with live mark PnL and updated SL/Peak
+        // Keep position active with live mark PnL (uncapped even past liquidation) and updated SL/Peak
         remainingPositions.push({
           ...pos,
           peakPrice,
@@ -648,9 +626,14 @@ export function useTradeSimulator() {
       if (closedRecords.length > 0) {
         setPositions(remainingPositions);
         setTradeHistory((prev) => [...closedRecords, ...prev]);
-        if (cashRefund > 0) {
-          setCashBalance((prev) => prev + cashRefund);
+        if (manualCashRefund !== 0) {
+          setCashBalance((prev) => prev + manualCashRefund);
         }
+        if (gridCashRefund !== 0) {
+          setGridCashBalance((prev) => prev + gridCashRefund);
+        }
+      } else {
+        setPositions(remainingPositions);
       }
     }
 
@@ -698,13 +681,20 @@ export function useTradeSimulator() {
               continue;
             }
 
-            // Leveraged position fill
+            // Leveraged position fill (Limit Order = Maker Order = 0.016% fee on Trade Value)
             const isLong = order.side === 'BUY';
             const leverage = order.leverage;
-            const mmr = 0.008;
+            const limitLiqCap = 3; // $3 default lot-based liquidation buffer (e.g. 3 / 0.002 = 1500 pts)
+            const limitLiqPoints = order.amount > 0 ? limitLiqCap / order.amount : 0;
             const liqPrice = isLong
-              ? order.targetPrice * (1 - 1 / leverage + mmr)
-              : order.targetPrice * (1 + 1 / leverage - mmr);
+              ? Math.max(0, order.targetPrice - limitLiqPoints)
+              : order.targetPrice + limitLiqPoints;
+
+            const fillTradeValue = order.targetPrice * order.amount;
+            const fillMargin = fillTradeValue / leverage;
+            const makerFee = currentConfig.enableFees
+              ? fillTradeValue * SHARK_EXCHANGE.makerBrokerageRateDecimal
+              : 0;
 
             const newPos: Position = {
               id: Math.random().toString(36).substring(2, 9),
@@ -712,7 +702,7 @@ export function useTradeSimulator() {
               side: isLong ? 'LONG' : 'SHORT',
               entryPrice: order.targetPrice,
               amount: order.amount,
-              margin: order.margin,
+              margin: fillMargin,
               leverage: order.leverage,
               liquidationPrice: liqPrice,
               takeProfitPrice: order.takeProfitPrice,
@@ -722,7 +712,8 @@ export function useTradeSimulator() {
               openTime: Date.now(),
               unrealizedPnL: 0,
               unrealizedPnLPercent: 0,
-              feePaid: currentConfig.enableFees ? order.margin * leverage * currentConfig.makerFeeRate : 0,
+              feePaid: makerFee,
+              accountSource: order.accountSource || 'MANUAL',
             };
 
             setPositions((prev) => [newPos, ...prev]);
@@ -778,19 +769,24 @@ export function useTradeSimulator() {
     }
   };
 
-  // Place Order Action (Market or Limit)
+  // Place Order Action (Market or Limit) — supports separate MANUAL vs AUTO_GRID balances
   const placeOrder = useCallback(
     (params: {
       symbol: string;
       mode: TradeMode;
       side: OrderSide;
       orderType: 'MARKET' | 'LIMIT';
-      margin: number; // USDT margin allocated
-      leverage: number; // 1 to 50
+      margin: number; // USDT margin allocated (tradeValue / leverage)
+      leverage: number; // 1 to 150
+      amount?: number; // Explicit lot size (e.g. 0.002)
+      isMaker?: boolean; // Explicit Maker (0.016%) vs Taker (0.064% / 4x) fee selection
+      customSymbolPrice?: number; // Optional override symbol price (e.g. 80000)
       targetPrice?: number;
       takeProfitPrice?: number;
       stopLossPrice?: number;
       trailingStopPercent?: number;
+      liqDollarCap?: number; // Dollar liquidation/SL buffer (default $3 -> 1500 pts at 0.002 lot)
+      accountSource?: 'MANUAL' | 'AUTO_GRID';
     }) => {
       const {
         symbol,
@@ -799,14 +795,20 @@ export function useTradeSimulator() {
         orderType,
         margin,
         leverage,
+        amount: explicitLot,
+        isMaker,
+        customSymbolPrice,
         targetPrice,
         takeProfitPrice,
         stopLossPrice,
         trailingStopPercent,
+        liqDollarCap = 3,
+        accountSource = 'MANUAL',
       } = params;
 
       const currentAssets = assetsRef.current;
-      const currentCash = cashRef.current;
+      const isGridAccount = accountSource === 'AUTO_GRID';
+      const currentCash = isGridAccount ? gridCashRef.current : cashRef.current;
       const currentConfig = configRef.current;
       const currentSpot = spotHoldingsRef.current;
 
@@ -816,8 +818,31 @@ export function useTradeSimulator() {
         return false;
       }
 
-      if (margin <= 0) {
-        addNotification('warning', 'Invalid Margin', 'Please specify a positive trade margin amount.');
+      const effLeverage = mode === 'SPOT' ? 1 : Math.max(1, leverage);
+      const isLong = side === 'BUY';
+
+      // Base symbol price
+      let execPrice = customSymbolPrice && customSymbolPrice > 0 ? customSymbolPrice : asset.price;
+      if (orderType === 'MARKET' && currentConfig.enableSlippage && !customSymbolPrice) {
+        const slippage = asset.price * currentConfig.slippageRate;
+        execPrice = isLong ? asset.price + slippage : asset.price - slippage;
+      }
+
+      // Formula:
+      // Let symbol price = execPrice (e.g. 80000), lot = amount (e.g. 0.002), leverage = 150x
+      // Trade value = symbolPrice * lot
+      // Margin required = trade value / leverage
+      const amount =
+        explicitLot && explicitLot > 0
+          ? explicitLot
+          : execPrice > 0
+          ? (margin * effLeverage) / execPrice
+          : 0;
+      const tradeValue = execPrice * amount;
+      const requiredMargin = effLeverage > 0 ? tradeValue / effLeverage : tradeValue;
+
+      if (requiredMargin <= 0 || amount <= 0) {
+        addNotification('warning', 'Invalid Order Size', 'Please specify a positive lot size or margin amount.');
         return false;
       }
 
@@ -831,35 +856,19 @@ export function useTradeSimulator() {
         return false;
       }
 
-      // Check balance
-      if (margin > currentCash) {
+      // Fees = tradeValue * 0.016% if Maker order (Taker has 4x brokerage = 0.064%)
+      const useMakerFee = isMaker !== undefined ? isMaker : orderType === 'LIMIT';
+      const feeRate = useMakerFee
+        ? SHARK_EXCHANGE.makerBrokerageRateDecimal // 0.016% (0.00016)
+        : SHARK_EXCHANGE.takerBrokerageRateDecimal; // 0.064% (4x maker = 0.00064)
+      const fee = currentConfig.enableFees ? tradeValue * feeRate : 0;
+
+      // Check balance against active account (Grid Auto Sim vs Manual Trade)
+      if (requiredMargin + fee > currentCash) {
         addNotification(
           'danger',
-          'Insufficient Funds',
-          `Required: $${margin.toFixed(2)} USDT, Available: $${currentCash.toFixed(2)} USDT`
-        );
-        return false;
-      }
-
-      const notional = margin * (mode === 'SPOT' ? 1 : leverage);
-      const isLong = side === 'BUY';
-
-      // Estimate real-world slippage
-      let execPrice = asset.price;
-      if (orderType === 'MARKET' && currentConfig.enableSlippage) {
-        const slippage = asset.price * currentConfig.slippageRate;
-        execPrice = isLong ? asset.price + slippage : asset.price - slippage;
-      }
-
-      const amount = notional / execPrice;
-      const feeRate = orderType === 'MARKET' ? currentConfig.takerFeeRate : currentConfig.makerFeeRate;
-      const fee = currentConfig.enableFees ? notional * feeRate : 0;
-
-      if (margin + fee > currentCash) {
-        addNotification(
-          'danger',
-          'Insufficient Funds for Fees',
-          `Order + fee: $${(margin + fee).toFixed(2)} USDT exceeds balance $${currentCash.toFixed(2)} USDT.`
+          isGridAccount ? 'Auto Grid: Insufficient Balance' : 'Insufficient Manual Trade Balance',
+          `Required Margin ($${requiredMargin.toFixed(4)}) + Fee ($${fee.toFixed(4)}) = $${(requiredMargin + fee).toFixed(4)} USDT, Available: $${currentCash.toFixed(2)} USDT`
         );
         return false;
       }
@@ -871,7 +880,10 @@ export function useTradeSimulator() {
           return false;
         }
 
-        const limitAmount = notional / targetPrice;
+        const limitAmount = explicitLot && explicitLot > 0 ? explicitLot : (requiredMargin * effLeverage) / targetPrice;
+        const limitTradeValue = targetPrice * limitAmount;
+        const limitMargin = effLeverage > 0 ? limitTradeValue / effLeverage : limitTradeValue;
+
         const newLimit: LimitOrder = {
           id: Math.random().toString(36).substring(2, 9),
           assetSymbol: symbol,
@@ -879,20 +891,25 @@ export function useTradeSimulator() {
           mode,
           targetPrice,
           amount: limitAmount,
-          margin,
-          leverage: mode === 'SPOT' ? 1 : leverage,
+          margin: limitMargin,
+          leverage: effLeverage,
           takeProfitPrice,
           stopLossPrice,
           trailingStopPercent,
           createdAt: Date.now(),
+          accountSource,
         };
 
-        setCashBalance((prev) => prev - margin);
+        if (isGridAccount) {
+          setGridCashBalance((prev) => prev - limitMargin);
+        } else {
+          setCashBalance((prev) => prev - limitMargin);
+        }
         setLimitOrders((prev) => [newLimit, ...prev]);
         addNotification(
           'info',
-          `Limit Order Placed`,
-          `${side} ${limitAmount.toFixed(4)} ${symbol} @ $${targetPrice.toFixed(2)} placed in order book.`
+          `Limit (Maker 0.016%) Order Placed`,
+          `${side} ${limitAmount.toFixed(4)} ${symbol} @ $${targetPrice.toFixed(2)} | Trade Value: $${limitTradeValue.toFixed(2)} | Margin Req: $${limitMargin.toFixed(4)}`
         );
         return true;
       }
@@ -900,7 +917,7 @@ export function useTradeSimulator() {
       // 2. SPOT MARKET ORDER
       if (mode === 'SPOT') {
         if (side === 'BUY') {
-          setCashBalance((prev) => prev - (margin + fee));
+          setCashBalance((prev) => prev - (requiredMargin + fee));
           setSpotHoldings((prev) => {
             const existing = prev.find((h) => h.symbol === symbol);
             if (existing) {
@@ -914,7 +931,7 @@ export function useTradeSimulator() {
           addNotification(
             'success',
             `Spot Buy Filled: ${symbol}`,
-            `Bought ${amount.toFixed(4)} ${symbol} @ $${execPrice.toFixed(2)} (Fee: $${fee.toFixed(2)})`
+            `Bought ${amount.toFixed(4)} ${symbol} @ $${execPrice.toFixed(2)} (Trade Value: $${tradeValue.toFixed(2)}, Fee: $${fee.toFixed(4)})`
           );
           return true;
         } else {
@@ -927,10 +944,10 @@ export function useTradeSimulator() {
 
           const sellAmount = Math.min(holding.amount, amount);
           const grossUsdt = sellAmount * execPrice;
-          const sellFee = currentConfig.enableFees ? grossUsdt * currentConfig.takerFeeRate : 0;
+          const sellFee = currentConfig.enableFees ? grossUsdt * feeRate : 0;
           const netUsdt = grossUsdt - sellFee;
           const costBasis = sellAmount * holding.avgCostPrice;
-          const pnl = grossUsdt - costBasis - sellFee;
+          const pnl = grossUsdt - costBasis; // Return = Change in Trade Value
           const pnlPct = costBasis > 0 ? (pnl / costBasis) * 100 : 0;
 
           setSpotHoldings((prev) =>
@@ -956,6 +973,7 @@ export function useTradeSimulator() {
             openTime: Date.now(),
             closeTime: Date.now(),
             closeReason: 'SPOT_SELL',
+            accountSource: 'MANUAL',
           };
 
           setTradeHistory((prev) => [record, ...prev]);
@@ -963,17 +981,22 @@ export function useTradeSimulator() {
           addNotification(
             pnl >= 0 ? 'success' : 'warning',
             `Spot Sold: ${symbol}`,
-            `Sold ${sellAmount.toFixed(4)} ${symbol} @ $${execPrice.toFixed(2)}. Realized PnL: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} (${pnlPct.toFixed(1)}%)`
+            `Sold ${sellAmount.toFixed(4)} ${symbol} @ $${execPrice.toFixed(2)}. Return (Change in Trade Value): ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(4)} (${pnlPct.toFixed(1)}%)`
           );
           return true;
         }
       }
 
-      // 3. LEVERAGED MARKET ORDER (Futures / Margin Long or Short)
-      const mmr = 0.008; // 0.8% maintenance margin
+      // 3. LEVERAGED ORDER (Futures / Margin Long or Short)
+      // Liquidation depends on contract lot size:
+      // Points = Dollar Cap (default $3) / Lot Size
+      // 1 lot -> 3 pts | 0.1 lot -> 30 pts | 0.01 lot -> 300 pts | 0.002 lot -> 1500 pts
+      // Example: Buy at 80000 with 0.002 lot & $3 cap -> 80000 - 1500 = 78500
+      const effectiveLiqCap = liqDollarCap && liqDollarCap > 0 ? liqDollarCap : 3;
+      const liqPoints = amount > 0 ? effectiveLiqCap / amount : 0;
       const liqPrice = isLong
-        ? execPrice * (1 - 1 / leverage + mmr)
-        : execPrice * (1 + 1 / leverage - mmr);
+        ? Math.max(0, execPrice - liqPoints)
+        : execPrice + liqPoints;
 
       const newPosition: Position = {
         id: Math.random().toString(36).substring(2, 9),
@@ -981,8 +1004,8 @@ export function useTradeSimulator() {
         side: isLong ? 'LONG' : 'SHORT',
         entryPrice: execPrice,
         amount,
-        margin,
-        leverage,
+        margin: requiredMargin,
+        leverage: effLeverage,
         liquidationPrice: Math.max(0, liqPrice),
         takeProfitPrice,
         stopLossPrice,
@@ -992,15 +1015,21 @@ export function useTradeSimulator() {
         unrealizedPnL: 0,
         unrealizedPnLPercent: 0,
         feePaid: fee,
+        accountSource,
       };
 
-      setCashBalance((prev) => prev - (margin + fee));
+      // Deduct requiredMargin when opening; when closed, requiredMargin + Return (Change in Trade Value) is refunded
+      if (isGridAccount) {
+        setGridCashBalance((prev) => prev - requiredMargin);
+      } else {
+        setCashBalance((prev) => prev - requiredMargin);
+      }
       setPositions((prev) => [newPosition, ...prev]);
 
       addNotification(
         'success',
-        `Position Opened: ${symbol} ${leverage}x ${newPosition.side}`,
-        `Filled @ $${execPrice.toFixed(2)} | Margin: $${margin.toFixed(2)} | Liq: $${liqPrice.toFixed(2)}`
+        `Position Opened: ${symbol} ${effLeverage}x ${newPosition.side}`,
+        `Price: $${execPrice.toFixed(2)} × Lot ${amount} = Trade Value $${tradeValue.toFixed(2)} | Margin Req: $${requiredMargin.toFixed(4)} | Fee (${useMakerFee ? 'Maker 0.016%' : 'Taker 4x 0.064%'}): $${fee.toFixed(4)}`
       );
       return true;
     },
@@ -1008,6 +1037,7 @@ export function useTradeSimulator() {
   );
 
   // Close Leveraged Position Manually (partial or full)
+  // Return = Change in Trade Value
   const closePosition = useCallback(
     (positionId: string, percentage: number = 100) => {
       const pos = positionsRef.current.find((p) => p.id === positionId);
@@ -1018,7 +1048,6 @@ export function useTradeSimulator() {
       const asset = currentAssets[pos.assetSymbol];
       const curPrice = asset ? asset.price : pos.entryPrice;
 
-      // Realistic slippage on close
       let exitPrice = curPrice;
       if (currentConfig.enableSlippage) {
         const slippage = curPrice * currentConfig.slippageRate;
@@ -1030,18 +1059,22 @@ export function useTradeSimulator() {
       const closedMargin = pos.margin * fraction;
 
       const isLong = pos.side === 'LONG';
-      const diff = isLong ? exitPrice - pos.entryPrice : pos.entryPrice - exitPrice;
-      const grossPnL = closedAmount * diff;
+      const entryTradeValue = pos.entryPrice * closedAmount;
+      const exitTradeValue = exitPrice * closedAmount;
+      const tradeValueDiff = isLong
+        ? exitTradeValue - entryTradeValue
+        : entryTradeValue - exitTradeValue;
 
-      const closeFee = currentConfig.enableFees
-        ? closedAmount * exitPrice * currentConfig.takerFeeRate
-        : 0;
+      const fees = (pos.feePaid || 0) * fraction;
+      const netPnL = tradeValueDiff;
+      const netPnLPercent = closedMargin > 0 ? (netPnL / closedMargin) * 100 : 0;
+      const cashReturned = closedMargin + netPnL;
 
-      const netPnL = grossPnL - closeFee;
-      const netPnLPercent = (netPnL / closedMargin) * 100;
-      const cashReturned = Math.max(0, closedMargin + netPnL);
-
-      setCashBalance((prev) => prev + cashReturned);
+      if (pos.accountSource === 'AUTO_GRID') {
+        setGridCashBalance((prev) => prev + cashReturned);
+      } else {
+        setCashBalance((prev) => prev + cashReturned);
+      }
 
       const record: TradeRecord = {
         id: Math.random().toString(36).substring(2, 9),
@@ -1054,10 +1087,11 @@ export function useTradeSimulator() {
         leverage: pos.leverage,
         realizedPnL: netPnL,
         realizedPnLPercent: netPnLPercent,
-        fees: pos.feePaid * fraction + closeFee,
+        fees,
         openTime: pos.openTime,
         closeTime: Date.now(),
         closeReason: 'MANUAL',
+        accountSource: pos.accountSource || 'MANUAL',
       };
 
       setTradeHistory((prev) => [record, ...prev]);
@@ -1072,6 +1106,7 @@ export function useTradeSimulator() {
                   ...p,
                   amount: p.amount - closedAmount,
                   margin: p.margin - closedMargin,
+                  feePaid: Math.max(0, (p.feePaid || 0) - fees),
                 }
               : p
           )
@@ -1081,7 +1116,7 @@ export function useTradeSimulator() {
       addNotification(
         netPnL >= 0 ? 'success' : 'warning',
         `Closed ${pos.assetSymbol} ${pos.side}`,
-        `Closed @ $${exitPrice.toFixed(2)}. Net PnL: ${netPnL >= 0 ? '+' : ''}$${netPnL.toFixed(2)} (${netPnLPercent.toFixed(1)}%)`
+        `Exit @ $${exitPrice.toFixed(2)} | Entry Val $${entryTradeValue.toFixed(2)} → Exit Val $${exitTradeValue.toFixed(2)} | Return (Change in Trade Value): ${netPnL >= 0 ? '+' : ''}$${netPnL.toFixed(4)} (${netPnLPercent.toFixed(1)}%)`
       );
     },
     [addNotification]
@@ -1093,7 +1128,11 @@ export function useTradeSimulator() {
       const order = limitOrdersRef.current.find((o) => o.id === orderId);
       if (!order) return;
 
-      setCashBalance((prev) => prev + order.margin);
+      if (order.accountSource === 'AUTO_GRID') {
+        setGridCashBalance((prev) => prev + order.margin);
+      } else {
+        setCashBalance((prev) => prev + order.margin);
+      }
       setLimitOrders((prev) => prev.filter((o) => o.id !== orderId));
       addNotification('info', 'Order Cancelled', `Refunded $${order.margin.toFixed(2)} USDT collateral.`);
     },
@@ -1117,17 +1156,28 @@ export function useTradeSimulator() {
 
   // Reset previous closed trade returns & trade history log while preserving live running positions
   const resetTradeHistory = useCallback(() => {
-    const lockedMargin = positionsRef.current.reduce((acc, p) => acc + p.margin, 0);
-    const lockedLimit = limitOrdersRef.current.reduce((acc, o) => acc + o.margin, 0);
+    const manualLockedMargin = positionsRef.current
+      .filter((p) => p.accountSource !== 'AUTO_GRID')
+      .reduce((acc, p) => acc + p.margin, 0);
+    const manualLockedLimit = limitOrdersRef.current
+      .filter((o) => o.accountSource !== 'AUTO_GRID')
+      .reduce((acc, o) => acc + o.margin, 0);
     const spotCost = spotHoldingsRef.current.reduce((acc, s) => acc + s.amount * s.avgCostPrice, 0);
-    const baseInitial = configRef.current.initialBalance || 100;
-    const restoredCash = Math.max(0, Number((baseInitial - lockedMargin - lockedLimit - spotCost).toFixed(2)));
+    const baseInitial = configRef.current.initialBalance || 1000;
+    const restoredCash = Math.max(0, Number((baseInitial - manualLockedMargin - manualLockedLimit - spotCost).toFixed(2)));
+
+    const gridLockedMargin = positionsRef.current
+      .filter((p) => p.accountSource === 'AUTO_GRID')
+      .reduce((acc, p) => acc + p.margin, 0);
+    const restoredGridCash = Math.max(0, Number(((gridInitialRef.current || 1000) - gridLockedMargin).toFixed(2)));
 
     setTradeHistory([]);
     setCashBalance(restoredCash);
+    setGridCashBalance(restoredGridCash);
     try {
       localStorage.setItem(STORAGE_KEYS.HISTORY, JSON.stringify([]));
       localStorage.setItem(STORAGE_KEYS.CASH, restoredCash.toString());
+      localStorage.setItem(STORAGE_KEYS.GRID_CASH, restoredGridCash.toString());
     } catch {
       // ignore storage errors
     }
@@ -1137,6 +1187,68 @@ export function useTradeSimulator() {
       `Cleared previous closed trade returns and trade log. Active running positions preserved.`
     );
   }, [addNotification]);
+
+  // Edit Coin Manual Trade Balance directly
+  const updateManualBalance = useCallback(
+    (newBalance: number) => {
+      const clean = Math.max(0, Number(newBalance.toFixed(2)));
+      setConfig((prev) => ({ ...prev, initialBalance: clean }));
+      setCashBalance(clean);
+      addNotification(
+        'info',
+        'Manual Trade Balance Updated',
+        `Coin Manual Trade balance set to $${clean.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT.`
+      );
+    },
+    [addNotification]
+  );
+
+  // Edit PnL Forecasting Balance directly
+  const updateForecastBalance = useCallback(
+    (newBalance: number) => {
+      const clean = Math.max(0, Number(newBalance.toFixed(2)));
+      setForecastBalance(clean);
+      addNotification(
+        'info',
+        'PnL Forecasting Balance Updated',
+        `PnL Forecasting account balance set to $${clean.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT.`
+      );
+    },
+    [addNotification]
+  );
+
+  // Edit Grid-Based Auto Simulation Balance directly
+  const updateGridBalance = useCallback(
+    (newBalance: number) => {
+      const clean = Math.max(0, Number(newBalance.toFixed(2)));
+      setGridInitialBalance(clean);
+      setGridCashBalance(clean);
+      addNotification(
+        'info',
+        'Auto Grid Simulation Balance Updated',
+        `Grid-Based Auto Simulation balance set to $${clean.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT.`
+      );
+    },
+    [addNotification]
+  );
+
+  // Reset Grid-Based Auto Simulation only
+  const resetGridSimulation = useCallback(
+    (newBalance?: number) => {
+      const balance = newBalance !== undefined ? Math.max(0, Number(newBalance.toFixed(2))) : gridInitialRef.current || 1000;
+      setGridInitialBalance(balance);
+      setGridCashBalance(balance);
+      setPositions((prev) => prev.filter((p) => p.accountSource !== 'AUTO_GRID'));
+      setLimitOrders((prev) => prev.filter((o) => o.accountSource !== 'AUTO_GRID'));
+      setTradeHistory((prev) => prev.filter((t) => t.accountSource !== 'AUTO_GRID'));
+      addNotification(
+        'info',
+        'Auto Grid Account Reset',
+        `Grid-Based Auto Simulation reset with $${balance.toLocaleString()} USDT.`
+      );
+    },
+    [addNotification]
+  );
 
   // Reset entire simulation to initial funds
   const resetSimulation = useCallback(
@@ -1203,15 +1315,18 @@ export function useTradeSimulator() {
     addNotification('info', 'Alerts Cleared', 'All price alerts have been cleared.');
   }, [addNotification]);
 
-  // Portfolio aggregates
+  // Portfolio aggregates (Manual Trade vs Auto Grid Simulation)
   const totalSpotValue = spotHoldings.reduce((acc, h) => {
     const p = assets[h.symbol]?.price || h.avgCostPrice;
     return acc + h.amount * p;
   }, 0);
 
-  const totalMarginLocked = positions.reduce((acc, p) => acc + p.margin, 0);
-  const totalLimitLocked = limitOrders.reduce((acc, o) => acc + o.margin, 0);
-  const totalUnrealizedPnL = positions.reduce((acc, p) => {
+  const manualPositions = positions.filter((p) => p.accountSource !== 'AUTO_GRID');
+  const gridPositions = positions.filter((p) => p.accountSource === 'AUTO_GRID');
+
+  const totalMarginLocked = manualPositions.reduce((acc, p) => acc + p.margin, 0);
+  const totalLimitLocked = limitOrders.filter((o) => o.accountSource !== 'AUTO_GRID').reduce((acc, o) => acc + o.margin, 0);
+  const totalUnrealizedPnL = manualPositions.reduce((acc, p) => {
     const asset = assets[p.assetSymbol];
     const price = asset ? asset.price : p.entryPrice;
     const isLong = p.side === 'LONG';
@@ -1219,8 +1334,19 @@ export function useTradeSimulator() {
     return acc + p.amount * priceDiff;
   }, 0);
 
-  // Net Portfolio Equity
+  // Net Manual Trade Portfolio Equity
   const totalEquity = cashBalance + totalMarginLocked + totalUnrealizedPnL + totalSpotValue;
+
+  // Grid-Based Auto Simulation aggregates
+  const gridMarginLocked = gridPositions.reduce((acc, p) => acc + p.margin, 0);
+  const gridUnrealizedPnL = gridPositions.reduce((acc, p) => {
+    const asset = assets[p.assetSymbol];
+    const price = asset ? asset.price : p.entryPrice;
+    const isLong = p.side === 'LONG';
+    const priceDiff = isLong ? price - p.entryPrice : p.entryPrice - price;
+    return acc + p.amount * priceDiff;
+  }, 0);
+  const gridTotalEquity = gridCashBalance + gridMarginLocked + gridUnrealizedPnL;
 
   // Realized stats
   const totalTrades = tradeHistory.length;
@@ -1244,44 +1370,6 @@ export function useTradeSimulator() {
   });
   const goldHedgeRatio = totalEquity > 0 ? (totalGoldValue / totalEquity) * 100 : 0;
 
-  // Manual B2 Storage Sync helper
-  const syncSimulatorToCloud = useCallback(async (immediate = true) => {
-    const data = {
-      simulatorId: getSimulatorId(),
-      cashBalance: cashRef.current,
-      positions: positionsRef.current,
-      assets: assetsRef.current,
-      limitOrders: limitOrdersRef.current,
-      tradeHistory,
-      spotHoldings: spotHoldingsRef.current,
-      priceAlerts: priceAlertsRef.current,
-      config: configRef.current,
-      totalEquity,
-      totalRealizedPnL,
-      updatedAt: new Date().toISOString(),
-    };
-    if (immediate) {
-      return await saveSimulatorStateToB2(data);
-    }
-    scheduleSimulatorSync(data);
-    return true;
-  }, [tradeHistory, totalEquity, totalRealizedPnL]);
-
-  const reloadSimulatorFromCloud = useCallback(async () => {
-    const cloudState = await loadSimulatorStateFromB2();
-    if (cloudState) {
-      if (typeof cloudState.cashBalance === 'number') setCashBalance(cloudState.cashBalance);
-      if (Array.isArray(cloudState.positions)) setPositions(cloudState.positions);
-      if (Array.isArray(cloudState.limitOrders)) setLimitOrders(cloudState.limitOrders);
-      if (Array.isArray(cloudState.tradeHistory)) setTradeHistory(cloudState.tradeHistory);
-      if (Array.isArray(cloudState.spotHoldings)) setSpotHoldings(cloudState.spotHoldings);
-      if (Array.isArray(cloudState.priceAlerts)) setPriceAlerts(cloudState.priceAlerts);
-      if (cloudState.config) setConfig((prev) => ({ ...prev, ...cloudState.config }));
-      return true;
-    }
-    return false;
-  }, []);
-
   return {
     assets,
     selectedSymbol,
@@ -1291,7 +1379,7 @@ export function useTradeSimulator() {
     notifications,
     dismissNotification,
     refreshPrices,
-    // Balances & Analytics
+    // Balances & Analytics (Separate Manual Trade, PnL Forecasting, and Auto Grid Simulation)
     cashBalance,
     totalEquity,
     totalSpotValue,
@@ -1303,13 +1391,18 @@ export function useTradeSimulator() {
     winRate,
     totalTrades,
     goldHedgeRatio,
-    // B2 Storage Simulator Synchronization
-    cloudSyncStatus: syncInfo.status,
-    lastCloudSync: syncInfo.lastSyncedAt,
-    syncSource: syncInfo.source,
-    simulatorId: syncInfo.simulatorId,
-    syncSimulatorToCloud,
-    reloadSimulatorFromCloud,
+    // Separate PnL Forecasting Balance ($1,000 default, editable)
+    forecastBalance,
+    updateForecastBalance,
+    // Separate Grid-Based Auto Simulation Balance ($1,000 default, editable)
+    gridCashBalance,
+    gridInitialBalance,
+    gridMarginLocked,
+    gridUnrealizedPnL,
+    gridTotalEquity,
+    updateGridBalance,
+    resetGridSimulation,
+    updateManualBalance,
     // Entities
     positions,
     limitOrders,

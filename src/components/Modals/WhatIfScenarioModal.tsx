@@ -73,9 +73,14 @@ export const WhatIfScenarioModal: React.FC<WhatIfScenarioModalProps> = ({
       ? postCrashPrice <= pos.liquidationPrice
       : false;
 
-    const simulatedLoss = wouldLiquidate
-      ? pos.margin
-      : Math.min(pos.margin, pos.amount * (pos.entryPrice - postCrashPrice));
+    const entryTradeVal = pos.entryPrice * pos.amount;
+    const crashTradeVal = postCrashPrice * pos.amount;
+    const changeInTradeVal = isLong
+      ? crashTradeVal - entryTradeVal
+      : entryTradeVal - crashTradeVal;
+
+    // Treat position as still open after liquidation so loss is not capped and keeps increasing
+    const simulatedLoss = Math.max(0, -changeInTradeVal);
 
     return {
       pos,

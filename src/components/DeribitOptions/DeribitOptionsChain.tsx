@@ -1,19 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useTheme } from '../../context/ThemeContext';
 import {
   Zap,
-  TrendingUp,
-  TrendingDown,
-  Layers,
-  Percent,
   RefreshCw,
   Sliders,
-  DollarSign,
-  Activity,
-  AlertCircle,
-  BarChart2,
   Calendar,
-  Sparkles,
 } from 'lucide-react';
 
 interface OptionSummary {
@@ -22,7 +12,7 @@ interface OptionSummary {
   strike: number;
   type: 'call' | 'put';
   expiryDateStr: string;
-  mark_price: number; // in coin (e.g. BTC)
+  mark_price: number;
   mark_price_usd: number;
   bid_price: number;
   ask_price: number;
@@ -46,14 +36,12 @@ interface DeribitOptionsChainProps {
 
 export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
   selectedSymbol,
-  selectedCoinPrice,
   currentBtcPrice = 96500,
   currentEthPrice = 3450,
   currentSolPrice = 210,
   currentPaxgPrice = 2750,
   onSelectStrikePrice,
 }) => {
-  const { isLight } = useTheme();
   const resolveCurrency = (sym?: string): 'BTC' | 'ETH' | 'SOL' | 'PAXG' => {
     const upper = (sym || 'BTC').toUpperCase();
     if (upper === 'ETH') return 'ETH';
@@ -61,20 +49,22 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
     if (upper === 'PAXG' || upper === 'XAUT') return 'PAXG';
     return 'BTC';
   };
-  const [currency, setCurrency] = useState<'BTC' | 'ETH' | 'SOL' | 'PAXG'>(() => resolveCurrency(selectedSymbol));
+  const [currency, setCurrency] = useState<'BTC' | 'ETH' | 'SOL' | 'PAXG'>(() =>
+    resolveCurrency(selectedSymbol)
+  );
 
   useEffect(() => {
     if (selectedSymbol) {
       setCurrency(resolveCurrency(selectedSymbol));
     }
   }, [selectedSymbol]);
+
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [strikeFilter, setStrikeFilter] = useState<'ALL' | 'ATM' | 'ITM' | 'OTM'>('ATM');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [optionsData, setOptionsData] = useState<OptionSummary[]>([]);
   const [expiryList, setExpiryList] = useState<string[]>([]);
   const [underlyingIndexPrice, setUnderlyingIndexPrice] = useState<number>(currentBtcPrice);
-  const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
 
   const activeSpotPrice = useMemo(() => {
     if (currency === 'BTC') return currentBtcPrice;
@@ -86,7 +76,7 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
   // Fetch or simulate Deribit Options Data
   const fetchDeribitData = async () => {
     setIsLoading(true);
-    const currSymbol = currency === 'PAXG' ? 'BTC' : currency; // PAXG maps to BTC options structure scaled
+    const currSymbol = currency === 'PAXG' ? 'BTC' : currency;
     const deribitUrl = `https://www.deribit.com/api/v2/public/get_book_summary_by_currency?currency=${currSymbol}&kind=option`;
 
     try {
@@ -101,7 +91,7 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
           const expSet = new Set<string>();
 
           json.result.forEach((item: any) => {
-            const name = item.instrument_name; // e.g. BTC-27SEP26-95000-C
+            const name = item.instrument_name;
             const parts = name.split('-');
             if (parts.length >= 4) {
               const expStr = parts[1];
@@ -113,7 +103,6 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
               const markPriceCoin = item.mark_price || 0;
               const markPriceUsd = markPriceCoin * spotPrice;
 
-              // Estimated Delta / IV from Deribit or Black-Scholes approx
               const moneyness = (spotPrice - strike) / spotPrice;
               let approxDelta = type === 'call' ? 0.5 + moneyness * 2 : -0.5 + moneyness * 2;
               approxDelta = Math.max(-0.99, Math.min(0.99, approxDelta));
@@ -131,7 +120,7 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
                 underlying_price: spotPrice,
                 volume: item.volume || Math.floor(Math.random() * 500 + 10),
                 open_interest: item.open_interest || Math.floor(Math.random() * 2000 + 100),
-                iv: item.mark_iv || (52 + Math.abs(moneyness) * 40),
+                iv: Number((item.mark_iv || 52 + Math.abs(moneyness) * 40).toFixed(1)),
                 delta: Number(approxDelta.toFixed(2)),
                 gamma: 0.015,
               });
@@ -144,16 +133,14 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
             setSelectedExpiry(sortedExpiries[0] || '');
           }
           setOptionsData(parsed);
-          setLastUpdated(new Date());
           setIsLoading(false);
           return;
         }
       }
-    } catch (err) {
+    } catch {
       // Fallback to institutional Deribit simulation
     }
 
-    // Fallback Deribit Data Generator if API is rate limited
     generateFallbackOptionsData();
   };
 
@@ -161,16 +148,15 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
     const spot = activeSpotPrice;
     setUnderlyingIndexPrice(spot);
 
-    // Expiry dates: Nearest 7D, 14D, 30D, 60D
-    const now = new Date();
     const expiries = ['26SEP26', '03OCT26', '30OCT26', '27NOV26'];
     setExpiryList(expiries);
 
-    const activeExp = selectedExpiry && expiries.includes(selectedExpiry) ? selectedExpiry : expiries[0];
+    const activeExp =
+      selectedExpiry && expiries.includes(selectedExpiry) ? selectedExpiry : expiries[0];
     setSelectedExpiry(activeExp);
 
-    // Create Strikes around spot (-20% to +20%)
-    const step = currency === 'BTC' ? 1000 : currency === 'ETH' ? 50 : currency === 'SOL' ? 5 : 25;
+    const step =
+      currency === 'BTC' ? 1000 : currency === 'ETH' ? 50 : currency === 'SOL' ? 5 : 25;
     const baseStrike = Math.round(spot / step) * step;
     const strikes: number[] = [];
 
@@ -184,7 +170,6 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
       const callIv = 55 + Math.abs(moneyness) * 35;
       const putIv = 58 + Math.abs(moneyness) * 40;
 
-      // Intrinsic value + Time value
       const callIntrinsic = Math.max(0, spot - strike);
       const putIntrinsic = Math.max(0, strike - spot);
       const timeVal = spot * 0.02 * Math.exp(-Math.abs(moneyness) * 3);
@@ -195,8 +180,9 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
       const callDelta = Math.min(0.99, Math.max(0.01, 0.5 + moneyness * 2.5));
       const putDelta = Math.max(-0.99, Math.min(-0.01, -0.5 + moneyness * 2.5));
 
-      // Call option
-      const seedVal = Math.abs(Math.sin(strike * 12.34 + (currency === 'ETH' ? 1 : currency === 'SOL' ? 2 : 0)));
+      const seedVal = Math.abs(
+        Math.sin(strike * 12.34 + (currency === 'ETH' ? 1 : currency === 'SOL' ? 2 : 0))
+      );
       const callVol = Math.floor(seedVal * 700 + 80);
       const callOi = Math.floor(seedVal * 2500 + 300);
 
@@ -218,7 +204,6 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
         gamma: 0.012,
       });
 
-      // Put option
       const putVol = Math.floor((1 - seedVal) * 650 + 60);
       const putOi = Math.floor((1 - seedVal) * 2200 + 250);
 
@@ -242,11 +227,9 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
     });
 
     setOptionsData(generated);
-    setLastUpdated(new Date());
     setIsLoading(false);
   };
 
-  // Stable effect: Only re-fetch or rebuild when user changes currency tab
   useEffect(() => {
     fetchDeribitData();
   }, [currency]);
@@ -267,10 +250,8 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
 
     let allStrikes = Array.from(strikesMap.keys()).sort((a, b) => a - b);
 
-    // Apply Strike Range Filter
     const spot = underlyingIndexPrice || activeSpotPrice;
     if (strikeFilter === 'ATM') {
-      // ATM: Within ±10% of spot
       allStrikes = allStrikes.filter((s) => Math.abs((s - spot) / spot) <= 0.12);
     } else if (strikeFilter === 'ITM') {
       allStrikes = allStrikes.filter((s) => s <= spot);
@@ -306,11 +287,11 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
 
     const pcRatioVol = totalCallVol > 0 ? totalPutVol / totalCallVol : 0.85;
     const pcRatioOi = totalCallOi > 0 ? totalPutOi / totalCallOi : 0.78;
-    const avgIv = activeData.length > 0
-      ? activeData.reduce((acc, o) => acc + o.iv, 0) / activeData.length
-      : 58.5;
+    const avgIv =
+      activeData.length > 0
+        ? activeData.reduce((acc, o) => acc + o.iv, 0) / activeData.length
+        : 58.5;
 
-    // Approximate Max Pain Strike
     const spot = underlyingIndexPrice || activeSpotPrice;
     const maxPain = Math.round(spot * 0.98);
 
@@ -325,155 +306,119 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
   }, [optionsData, selectedExpiry, underlyingIndexPrice, activeSpotPrice]);
 
   return (
-    <div
-      className={`rounded-2xl p-4 sm:p-5 shadow-xl border space-y-4 transition-colors ${
-        isLight
-          ? 'bg-white border-slate-200 text-slate-800 shadow-slate-200/50'
-          : 'bg-neutral-900 border-neutral-800 text-neutral-100 shadow-black/50'
-      }`}
-    >
+    <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)] p-4 sm:p-5 shadow-sm space-y-4">
       {/* HEADER BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-neutral-800/80">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--theme-border-subtle)]">
         <div className="flex items-center gap-2.5">
-          <div className="p-2.5 rounded-xl bg-gradient-to-br from-amber-500/20 to-orange-500/20 text-amber-400 border border-amber-500/30">
-            <Zap className="w-5 h-5 animate-pulse" />
-          </div>
+          <Zap className="w-4 h-4 text-emerald-600 shrink-0" />
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className={`text-base font-extrabold tracking-wide ${isLight ? 'text-slate-900' : 'text-white'}`}>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
                 Deribit Institutional Options Chain
               </h2>
-              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono font-bold">
-                Nearest Expiry ({selectedExpiry || '26SEP26'})
+              <span aria-hidden="true" className="text-[var(--theme-text-muted)]">·</span>
+              <span className="text-[11px] font-mono font-bold text-emerald-600">
+                Active Expiry: {selectedExpiry || '26SEP26'}
               </span>
             </div>
-            <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-neutral-400'}`}>
-              Real-time Calls vs Puts, Strike Volatility (IV), Delta Greeks, and Put/Call Ratios
+            <p className="text-[11px] text-[var(--theme-text-muted)]">
+              Side-by-side Calls vs Puts, Implied Volatility (IV), Delta Greeks, Open Interest &amp; Max Pain
             </p>
           </div>
         </div>
 
         {/* Currency Tabs & Refresh Button */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className={`flex p-1 rounded-xl border text-xs font-bold font-mono ${
-            isLight ? 'bg-slate-100 border-slate-300' : 'bg-neutral-950 border-neutral-800'
-          }`}>
+          <div className="flex p-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] text-[11px] font-mono font-bold">
             {(['BTC', 'ETH', 'SOL', 'PAXG'] as const).map((sym) => (
               <button
                 key={sym}
+                type="button"
                 onClick={() => setCurrency(sym)}
-                className={`px-3 py-1.5 rounded-lg transition-all ${
+                className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
                   currency === sym
-                    ? 'bg-amber-500 text-neutral-950 font-black shadow-sm'
-                    : isLight
-                    ? 'text-slate-600 hover:text-slate-900'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
                 }`}
               >
-                {sym} Options
+                {sym}
               </button>
             ))}
           </div>
 
           <button
+            type="button"
             onClick={fetchDeribitData}
             disabled={isLoading}
-            className={`p-2 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
-              isLight
-                ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-                : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:text-amber-400'
-            }`}
+            className="px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-amber-400' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-emerald-600' : ''}`} />
             <span>Sync</span>
           </button>
         </div>
       </div>
 
       {/* METRICS DASHBOARD BANNER */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono">
-        {/* Underlying Price */}
-        <div className={`p-3 rounded-xl border flex flex-col justify-between ${
-          isLight ? 'bg-slate-50 border-slate-200' : 'bg-neutral-950/70 border-neutral-800/80'
-        }`}>
-          <div className="flex items-center justify-between text-neutral-400 text-[11px]">
-            <span>Underlying Index</span>
-            <Activity className="w-3.5 h-3.5 text-amber-400" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono tabular-nums">
+        <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
+          <div className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+            Underlying Index ({currency}/USDT)
           </div>
-          <div className="mt-1">
-            <span className="text-base font-extrabold text-amber-400">
-              ${(underlyingIndexPrice || activeSpotPrice).toLocaleString('en-US', { minimumFractionDigits: 2 })}
-            </span>
-            <span className="text-[10px] text-neutral-400 block">{currency}/USDT Spot</span>
+          <div className="text-sm sm:text-base font-extrabold text-[var(--theme-text-primary)] mt-0.5">
+            ${(underlyingIndexPrice || activeSpotPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
-        {/* Put / Call Ratio */}
-        <div className={`p-3 rounded-xl border flex flex-col justify-between ${
-          isLight ? 'bg-slate-50 border-slate-200' : 'bg-neutral-950/70 border-neutral-800/80'
-        }`}>
-          <div className="flex items-center justify-between text-neutral-400 text-[11px]">
-            <span>Put / Call Ratio (Vol)</span>
-            <Percent className="w-3.5 h-3.5 text-emerald-400" />
+        <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
+          <div className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+            Put / Call Ratio (Vol · OI)
           </div>
-          <div className="mt-1">
-            <span className={`text-base font-extrabold ${metrics.pcRatioVol > 1 ? 'text-rose-400' : 'text-emerald-400'}`}>
-              {metrics.pcRatioVol} {metrics.pcRatioVol < 0.8 ? '🟢 Bullish Calls' : metrics.pcRatioVol > 1.2 ? '🔴 Bearish Puts' : '⚖️ Neutral'}
-            </span>
-            <span className="text-[10px] text-neutral-400 block">Open Interest P/C: {metrics.pcRatioOi}</span>
+          <div
+            className={`text-sm sm:text-base font-extrabold mt-0.5 ${
+              metrics.pcRatioVol > 1 ? 'text-rose-600' : 'text-emerald-600'
+            }`}
+          >
+            {metrics.pcRatioVol}x <span className="text-[11px] font-normal text-[var(--theme-text-muted)]">({metrics.pcRatioOi}x OI)</span>
           </div>
         </div>
 
-        {/* Max Pain Strike */}
-        <div className={`p-3 rounded-xl border flex flex-col justify-between ${
-          isLight ? 'bg-slate-50 border-slate-200' : 'bg-neutral-950/70 border-neutral-800/80'
-        }`}>
-          <div className="flex items-center justify-between text-neutral-400 text-[11px]">
-            <span>Max Pain Price</span>
-            <BarChart2 className="w-3.5 h-3.5 text-purple-400" />
+        <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
+          <div className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+            Max Pain Strike
           </div>
-          <div className="mt-1">
-            <span className="text-base font-extrabold text-purple-400">
-              ${metrics.maxPain.toLocaleString()}
-            </span>
-            <span className="text-[10px] text-neutral-400 block">Expiry Gravity Pull</span>
+          <div className="text-sm sm:text-base font-extrabold text-[var(--theme-text-primary)] mt-0.5">
+            ${metrics.maxPain.toLocaleString()}
           </div>
         </div>
 
-        {/* Average Volatility (IV) */}
-        <div className={`p-3 rounded-xl border flex flex-col justify-between ${
-          isLight ? 'bg-slate-50 border-slate-200' : 'bg-neutral-950/70 border-neutral-800/80'
-        }`}>
-          <div className="flex items-center justify-between text-neutral-400 text-[11px]">
-            <span>Implied Volatility (IV)</span>
-            <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+        <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
+          <div className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+            Implied Volatility (ATM IV)
           </div>
-          <div className="mt-1">
-            <span className="text-base font-extrabold text-cyan-400">
-              {metrics.avgIv}% IV
-            </span>
-            <span className="text-[10px] text-neutral-400 block">ATM Option Volatility</span>
+          <div className="text-sm sm:text-base font-extrabold text-amber-600 mt-0.5">
+            {metrics.avgIv}% IV
           </div>
         </div>
       </div>
 
       {/* FILTER & EXPIRY TOOLBAR */}
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-mono pt-1">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
         {/* Expiry Selector */}
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-amber-500" />
-          <span className={isLight ? 'text-slate-600 font-bold' : 'text-neutral-300 font-bold'}>Expiry Date:</span>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {expiryList.map((exp) => (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="font-sans text-[11px] font-bold text-[var(--theme-text-secondary)]">
+            Expiry:
+          </span>
+          <div className="flex items-center gap-1 flex-wrap">
+            {expiryList.slice(0, 6).map((exp) => (
               <button
                 key={exp}
+                type="button"
                 onClick={() => setSelectedExpiry(exp)}
-                className={`px-2.5 py-1 rounded-lg border font-bold transition-all ${
+                className={`px-2.5 py-1 rounded-md border text-[11px] font-bold transition-colors cursor-pointer ${
                   selectedExpiry === exp
-                    ? 'bg-amber-500 text-neutral-950 border-amber-500 font-extrabold shadow-sm'
-                    : isLight
-                    ? 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200'
-                    : 'bg-neutral-950 border-neutral-800 text-neutral-300 hover:text-white'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
                 }`}
               >
                 {exp}
@@ -484,24 +429,23 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
 
         {/* Strike Range Filter */}
         <div className="flex items-center gap-2">
-          <Sliders className="w-4 h-4 text-amber-500" />
-          <span className={isLight ? 'text-slate-600 font-bold' : 'text-neutral-300 font-bold'}>Strike Range:</span>
-          <div className={`flex p-0.5 rounded-lg border ${
-            isLight ? 'bg-slate-100 border-slate-300' : 'bg-neutral-950 border-neutral-800'
-          }`}>
+          <Sliders className="w-3.5 h-3.5 text-emerald-600" />
+          <span className="font-sans text-[11px] font-bold text-[var(--theme-text-secondary)]">
+            Moneyness:
+          </span>
+          <div className="flex p-0.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)]">
             {(['ATM', 'ALL', 'ITM', 'OTM'] as const).map((filter) => (
               <button
                 key={filter}
+                type="button"
                 onClick={() => setStrikeFilter(filter)}
-                className={`px-2 py-0.5 rounded text-[11px] font-bold transition-all ${
+                className={`px-2 py-0.5 rounded-md text-[11px] font-bold transition-colors cursor-pointer ${
                   strikeFilter === filter
-                    ? 'bg-amber-500 text-neutral-950'
-                    : isLight
-                    ? 'text-slate-600'
-                    : 'text-neutral-400 hover:text-white'
+                    ? 'bg-emerald-600 text-white'
+                    : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
                 }`}
               >
-                {filter === 'ATM' ? 'Near Money (±10%)' : filter}
+                {filter === 'ATM' ? 'Near ATM (±12%)' : filter}
               </button>
             ))}
           </div>
@@ -509,46 +453,49 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
       </div>
 
       {/* OPTIONS CHAIN MATRIX TABLE */}
-      <div className="overflow-x-auto max-h-[420px] overflow-y-auto pr-1">
-        <table className="w-full text-left border-collapse text-xs font-mono">
+      <div className="overflow-x-auto max-h-[420px] overflow-y-auto rounded-lg border border-[var(--theme-border)]">
+        <table className="w-full text-left border-collapse text-xs font-mono tabular-nums">
           <thead>
             {/* Top Category Header */}
-            <tr className={`text-[10px] uppercase font-extrabold tracking-wider border-b ${
-              isLight ? 'bg-slate-200 text-slate-800 border-slate-300' : 'bg-neutral-950 text-neutral-300 border-neutral-800'
-            }`}>
-              <th colSpan={5} className="py-2 px-3 text-center bg-emerald-500/10 text-emerald-400 border-r border-neutral-800">
-                🟢 CALL OPTIONS (BULLISH BETS)
+            <tr className="text-[11px] font-sans font-bold border-b border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)]">
+              <th
+                colSpan={6}
+                className="py-2 px-3 text-center text-emerald-600 border-r border-[var(--theme-border)]"
+              >
+                Calls (Bullish Contracts)
               </th>
-              <th className="py-2 px-3 text-center bg-amber-500/20 text-amber-300 font-black border-r border-neutral-800">
-                STRIKE ($)
+              <th className="py-2 px-3 text-center text-[var(--theme-text-primary)] font-extrabold border-r border-[var(--theme-border)]">
+                Strike ($)
               </th>
-              <th colSpan={5} className="py-2 px-3 text-center bg-rose-500/10 text-rose-400">
-                🔴 PUT OPTIONS (BEARISH BETS)
+              <th colSpan={6} className="py-2 px-3 text-center text-rose-600">
+                Puts (Bearish Contracts)
               </th>
             </tr>
             {/* Column Sub-headers */}
-            <tr className={`sticky top-0 z-20 text-[10px] uppercase font-bold border-b ${
-              isLight ? 'bg-slate-100 text-slate-600 border-slate-300' : 'bg-neutral-950 text-neutral-400 border-neutral-800'
-            }`}>
+            <tr className="sticky top-0 z-20 text-[10px] font-sans font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-card-subtle)] border-b border-[var(--theme-border)]">
               {/* Calls headers */}
+              <th className="py-1.5 px-2 text-right">OI</th>
               <th className="py-1.5 px-2 text-right">Vol</th>
               <th className="py-1.5 px-2 text-right">Delta</th>
               <th className="py-1.5 px-2 text-right">IV</th>
-              <th className="py-1.5 px-2 text-right">Bid/Ask ($)</th>
-              <th className="py-1.5 px-2 text-right text-emerald-400 border-r border-neutral-800">Mark Price</th>
+              <th className="py-1.5 px-2 text-right">Bid / Ask ($)</th>
+              <th className="py-1.5 px-2.5 text-right text-emerald-600 border-r border-[var(--theme-border)]">
+                Call Mark
+              </th>
               {/* Strike Header */}
-              <th className="py-1.5 px-3 text-center text-amber-400 font-black border-r border-neutral-800 bg-amber-500/10">
-                STRIKE
+              <th className="py-1.5 px-3 text-center text-[var(--theme-text-primary)] font-extrabold border-r border-[var(--theme-border)]">
+                Strike
               </th>
               {/* Puts headers */}
-              <th className="py-1.5 px-2 text-left text-rose-400">Mark Price</th>
-              <th className="py-1.5 px-2 text-left">Bid/Ask ($)</th>
+              <th className="py-1.5 px-2.5 text-left text-rose-600">Put Mark</th>
+              <th className="py-1.5 px-2 text-left">Bid / Ask ($)</th>
               <th className="py-1.5 px-2 text-left">IV</th>
               <th className="py-1.5 px-2 text-left">Delta</th>
               <th className="py-1.5 px-2 text-left">Vol</th>
+              <th className="py-1.5 px-2 text-left">OI</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-neutral-800/40">
+          <tbody className="divide-y divide-[var(--theme-border-subtle)]">
             {optionMatrix.map((row) => {
               const spot = underlyingIndexPrice || activeSpotPrice;
               const isCallItm = row.strike < spot;
@@ -557,73 +504,87 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
               return (
                 <tr
                   key={row.strike}
-                  className={`transition-colors hover:bg-neutral-800/40 ${
-                    row.isAtm
-                      ? isLight ? 'bg-amber-100/70 font-bold' : 'bg-amber-500/20 font-bold'
-                      : ''
+                  className={`transition-colors hover:bg-[var(--theme-bg-card-subtle)] ${
+                    row.isAtm ? 'bg-amber-500/10 font-bold' : ''
                   }`}
                 >
                   {/* CALLS SIDE */}
-                  {/* Vol */}
-                  <td className="py-1.5 px-2 text-right text-neutral-400 text-[11px]">
+                  <td className="py-1.5 px-2 text-right text-[var(--theme-text-muted)] text-[11px]">
+                    {row.call?.open_interest ? row.call.open_interest.toLocaleString() : '-'}
+                  </td>
+                  <td className="py-1.5 px-2 text-right text-[var(--theme-text-secondary)] text-[11px]">
                     {row.call?.volume || '-'}
                   </td>
-                  {/* Delta */}
-                  <td className="py-1.5 px-2 text-right text-emerald-400 font-bold">
+                  <td className="py-1.5 px-2 text-right text-emerald-600 font-bold">
                     {row.call?.delta ? `+${row.call.delta}` : '-'}
                   </td>
-                  {/* IV */}
-                  <td className="py-1.5 px-2 text-right text-neutral-300">
+                  <td className="py-1.5 px-2 text-right text-[var(--theme-text-primary)]">
                     {row.call?.iv ? `${row.call.iv}%` : '-'}
                   </td>
-                  {/* Bid / Ask */}
-                  <td className="py-1.5 px-2 text-right text-[10px] text-neutral-400 whitespace-nowrap">
-                    {row.call ? `$${row.call.bid_price.toFixed(0)} / $${row.call.ask_price.toFixed(0)}` : '-'}
+                  <td className="py-1.5 px-2 text-right text-[11px] text-[var(--theme-text-secondary)] whitespace-nowrap">
+                    {row.call
+                      ? `$${row.call.bid_price.toFixed(0)} / $${row.call.ask_price.toFixed(0)}`
+                      : '-'}
                   </td>
-                  {/* Mark Price (Calls) */}
-                  <td className={`py-1.5 px-2 text-right font-extrabold border-r border-neutral-800 ${
-                    isCallItm ? 'text-emerald-400 bg-emerald-500/5' : 'text-neutral-200'
-                  }`}>
-                    {row.call ? `$${row.call.mark_price_usd.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
+                  <td
+                    className={`py-1.5 px-2.5 text-right font-extrabold border-r border-[var(--theme-border)] ${
+                      isCallItm
+                        ? 'text-emerald-600 bg-emerald-500/[0.06]'
+                        : 'text-[var(--theme-text-primary)]'
+                    }`}
+                  >
+                    {row.call
+                      ? `$${row.call.mark_price_usd.toLocaleString('en-US', {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}`
+                      : '-'}
                   </td>
 
                   {/* STRIKE COLUMN */}
                   <td
                     onClick={() => onSelectStrikePrice && onSelectStrikePrice(row.strike)}
-                    className={`py-1.5 px-3 text-center font-black cursor-pointer border-r border-neutral-800 ${
+                    className={`py-1.5 px-3 text-center font-black cursor-pointer border-r border-[var(--theme-border)] whitespace-nowrap ${
                       row.isAtm
-                        ? 'bg-amber-500 text-neutral-950 font-black scale-105 shadow'
-                        : isLight
-                        ? 'bg-slate-100 text-slate-900 hover:bg-amber-100'
-                        : 'bg-neutral-950 text-amber-300 hover:bg-amber-500/20'
+                        ? 'bg-amber-500/20 text-amber-700'
+                        : 'bg-[var(--theme-bg-card-subtle)] text-[var(--theme-text-primary)] hover:bg-emerald-500/10'
                     }`}
                     title="Click strike to set limit target price"
                   >
-                    ${row.strike.toLocaleString()} {row.isAtm && '🎯 ATM'}
+                    ${row.strike.toLocaleString()} {row.isAtm ? '· ATM' : ''}
                   </td>
 
                   {/* PUTS SIDE */}
-                  {/* Mark Price (Puts) */}
-                  <td className={`py-1.5 px-2 text-left font-extrabold ${
-                    isPutItm ? 'text-rose-400 bg-rose-500/5' : 'text-neutral-200'
-                  }`}>
-                    {row.put ? `$${row.put.mark_price_usd.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}` : '-'}
+                  <td
+                    className={`py-1.5 px-2.5 text-left font-extrabold ${
+                      isPutItm
+                        ? 'text-rose-600 bg-rose-500/[0.06]'
+                        : 'text-[var(--theme-text-primary)]'
+                    }`}
+                  >
+                    {row.put
+                      ? `$${row.put.mark_price_usd.toLocaleString('en-US', {
+                          minimumFractionDigits: 1,
+                          maximumFractionDigits: 1,
+                        })}`
+                      : '-'}
                   </td>
-                  {/* Bid / Ask */}
-                  <td className="py-1.5 px-2 text-left text-[10px] text-neutral-400 whitespace-nowrap">
-                    {row.put ? `$${row.put.bid_price.toFixed(0)} / $${row.put.ask_price.toFixed(0)}` : '-'}
+                  <td className="py-1.5 px-2 text-left text-[11px] text-[var(--theme-text-secondary)] whitespace-nowrap">
+                    {row.put
+                      ? `$${row.put.bid_price.toFixed(0)} / $${row.put.ask_price.toFixed(0)}`
+                      : '-'}
                   </td>
-                  {/* IV */}
-                  <td className="py-1.5 px-2 text-left text-neutral-300">
+                  <td className="py-1.5 px-2 text-left text-[var(--theme-text-primary)]">
                     {row.put?.iv ? `${row.put.iv}%` : '-'}
                   </td>
-                  {/* Delta */}
-                  <td className="py-1.5 px-2 text-left text-rose-400 font-bold">
+                  <td className="py-1.5 px-2 text-left text-rose-600 font-bold">
                     {row.put?.delta ? `${row.put.delta}` : '-'}
                   </td>
-                  {/* Vol */}
-                  <td className="py-1.5 px-2 text-left text-neutral-400 text-[11px]">
+                  <td className="py-1.5 px-2 text-left text-[var(--theme-text-secondary)] text-[11px]">
                     {row.put?.volume || '-'}
+                  </td>
+                  <td className="py-1.5 px-2 text-left text-[var(--theme-text-muted)] text-[11px]">
+                    {row.put?.open_interest ? row.put.open_interest.toLocaleString() : '-'}
                   </td>
                 </tr>
               );

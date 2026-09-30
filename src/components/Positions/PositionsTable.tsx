@@ -172,8 +172,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   <th className="px-4 py-2.5 font-bold">Entry</th>
                   <th className="px-4 py-2.5 font-bold">Mark</th>
                   <th className="px-4 py-2.5 font-bold">Liq.</th>
-                  <th className="px-4 py-2.5 font-bold">Margin</th>
-                  <th className="px-4 py-2.5 font-bold">PnL</th>
+                  <th className="px-4 py-2.5 font-bold">Margin &amp; Trade Val</th>
+                  <th className="px-4 py-2.5 font-bold">Return (Change in Trade Val)</th>
                   <th className="px-4 py-2.5 font-bold">Risk</th>
                   <th className="px-4 py-2.5 font-bold text-right">Actions</th>
                 </tr>
@@ -184,10 +184,13 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   const curPrice = asset ? asset.price : pos.entryPrice;
                   const isLong = pos.side === 'LONG';
                   const isProfit = pos.unrealizedPnL >= 0;
+                  const isPastLiq = isLong
+                    ? curPrice <= pos.liquidationPrice
+                    : curPrice >= pos.liquidationPrice;
                   const distLiqPct = curPrice > 0
                     ? Math.abs((pos.liquidationPrice - curPrice) / curPrice) * 100
                     : 100;
-                  const isNearLiq = distLiqPct < 6;
+                  const isNearLiq = isPastLiq || distLiqPct < 6;
 
                   return (
                     <tr
@@ -236,22 +239,43 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                             ${pos.liquidationPrice.toFixed(2)}
                           </span>
                         </div>
+                        {isPastLiq && (
+                          <div className="text-[8px] font-bold text-rose-400 uppercase">
+                            PAST LIQ (OPEN · UNCAPPED)
+                          </div>
+                        )}
                       </td>
 
-                      {/* Margin */}
+                      {/* Margin & Trade Value */}
                       <td className="px-4 py-3">
-                        <div className="font-bold text-[var(--theme-text-secondary)]">${pos.margin.toFixed(2)}</div>
-                        <div className="text-[9px] text-[var(--theme-text-muted)]">Val: ${(pos.entryPrice * pos.amount).toFixed(0)}</div>
+                        <div className="font-bold text-amber-500">
+                          ${pos.margin < 10 ? pos.margin.toFixed(4) : pos.margin.toFixed(2)}
+                        </div>
+                        <div className="text-[9px] text-[var(--theme-text-muted)]">
+                          Trade Val: ${(pos.entryPrice * pos.amount).toFixed(2)}
+                        </div>
                       </td>
 
-                      {/* Unrealized PnL */}
+                      {/* Return = Change in Trade Value */}
                       <td className="px-4 py-3">
-                        <div className={`font-bold ${isProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {isProfit ? '+' : ''}${pos.unrealizedPnL.toFixed(2)}
-                        </div>
-                        <div className={`text-[9px] ${isProfit ? 'text-emerald-500/70' : 'text-rose-500/70'}`}>
-                          {isProfit ? '+' : ''}{pos.unrealizedPnLPercent.toFixed(1)}%
-                        </div>
+                        {(() => {
+                          const entryVal = pos.entryPrice * pos.amount;
+                          const curVal = curPrice * pos.amount;
+                          const valDiff = isLong ? curVal - entryVal : entryVal - curVal;
+                          const roePct = pos.margin > 0 ? (valDiff / pos.margin) * 100 : 0;
+                          const isValProfit = valDiff >= 0;
+                          const fee = pos.feePaid || 0;
+                          return (
+                            <>
+                              <div className={`font-bold ${isValProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {isValProfit ? '+' : ''}${valDiff.toFixed(4)} ({isValProfit ? '+' : ''}{roePct.toFixed(1)}%)
+                              </div>
+                              <div className="text-[9px] text-[var(--theme-text-muted)]">
+                                Val: ${entryVal.toFixed(2)} → ${curVal.toFixed(2)} · Fee: ${fee.toFixed(4)}
+                              </div>
+                            </>
+                          );
+                        })()}
                       </td>
 
                       {/* TP / SL */}
@@ -453,13 +477,19 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   <th className="px-4 py-2.5 font-bold">Mode</th>
                   <th className="px-4 py-2.5 font-bold">Entry</th>
                   <th className="px-4 py-2.5 font-bold">Exit</th>
-                  <th className="px-4 py-2.5 font-bold">Realized PnL</th>
+                  <th className="px-4 py-2.5 font-bold">Entry → Exit Val</th>
+                  <th className="px-4 py-2.5 font-bold">Fees</th>
+                  <th className="px-4 py-2.5 font-bold">Return (Change in Trade Val)</th>
                   <th className="px-4 py-2.5 font-bold text-right">Reason</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--theme-border-subtle)]">
                 {tradeHistory.map((rec) => {
-                  const isProfit = rec.realizedPnL >= 0;
+                  const isLong = rec.side === 'LONG' || rec.side === 'BUY';
+                  const entryVal = rec.entryPrice * rec.amount;
+                  const exitVal = rec.exitPrice * rec.amount;
+                  const valDiff = isLong ? exitVal - entryVal : entryVal - exitVal;
+                  const isProfit = valDiff >= 0;
                   const dateStr = new Date(rec.closeTime).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -471,7 +501,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                         {dateStr}
                       </td>
                       <td className="px-4 py-3 font-bold text-[var(--theme-text-primary)] uppercase">
-                        {rec.assetSymbol}
+                        {rec.assetSymbol} <span className="text-[9px] text-[var(--theme-text-muted)]">({rec.amount})</span>
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -490,9 +520,15 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                       <td className="px-4 py-3 text-[var(--theme-text-secondary)]">
                         ${rec.exitPrice.toFixed(2)}
                       </td>
+                      <td className="px-4 py-3 text-[var(--theme-text-secondary)]">
+                        ${entryVal.toFixed(2)} → ${exitVal.toFixed(2)}
+                      </td>
+                      <td className="px-4 py-3 text-amber-500">
+                        ${(rec.fees || 0).toFixed(4)}
+                      </td>
                       <td className="px-4 py-3">
                         <span className={`font-bold ${isProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
-                          {isProfit ? '+' : ''}${rec.realizedPnL.toFixed(2)}
+                          {isProfit ? '+' : ''}${valDiff.toFixed(4)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">

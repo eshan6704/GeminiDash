@@ -11,6 +11,8 @@ import {
   OptionsSubTab,
   EquityHubSubTab,
   MarketOverviewSubTab,
+  CryptoSubTab,
+  CoinSubTab,
 } from './components/Navbar';
 import { CryptoHeaderBar } from './components/CryptoHeaderBar';
 import { TickerBar } from './components/TickerBar';
@@ -20,7 +22,6 @@ import { PositionsTable } from './components/Positions/PositionsTable';
 import { PortfolioOverview } from './components/Portfolio/PortfolioOverview';
 import { NotificationToast } from './components/Notifications/NotificationToast';
 import type { CryptoCoinItem } from './components/MarketCap/CryptoMarketCapTable';
-import { VolatilityAlertBanner } from './components/Notifications/VolatilityAlertBanner';
 
 const WhatIfScenarioModal = lazy(() =>
   import('./components/Modals/WhatIfScenarioModal').then((m) => ({ default: m.WhatIfScenarioModal }))
@@ -30,12 +31,6 @@ const AiRiskModal = lazy(() =>
 );
 const SettingsModal = lazy(() =>
   import('./components/Modals/SettingsModal').then((m) => ({ default: m.SettingsModal }))
-);
-const BatchWriterModal = lazy(() =>
-  import('./components/Modals/BatchWriterModal').then((m) => ({ default: m.BatchWriterModal }))
-);
-const StorageManagerModal = lazy(() =>
-  import('./components/Modals/StorageManagerModal').then((m) => ({ default: m.StorageManagerModal }))
 );
 const DailyPnLChart = lazy(() =>
   import('./components/Portfolio/DailyPnLChart').then((m) => ({ default: m.DailyPnLChart }))
@@ -115,23 +110,8 @@ import {
   Search,
 } from 'lucide-react';
 
-type CryptoSectionATab =
-  | 'CRYPTO_TABLE'
-  | 'ADVANCED_CRYPTO_SCREENER'
-  | 'MICRO_VOLATILITY'
-  | 'WHALE_ORDERS'
-  | 'CRYPTO_COMMON';
-
-type CryptoSectionBTab =
-  | 'COIN_INFO'
-  | 'TICK_ANALYSIS'
-  | 'COIN_CHART'
-  | 'ORDERBOOK'
-  | 'BINANCE_RECENT_TRADES'
-  | 'OPTION_CHAIN'
-  | 'PAPER_PORTFOLIO_FORECAST'
-  | 'AUTO_GRID_SIMULATION'
-  | 'REMAINING_CRYPTO';
+type CryptoSectionATab = CryptoSubTab;
+type CryptoSectionBTab = CoinSubTab;
 
 export default function App() {
   const [mainMarketTab, setMainMarketTab] = useState<MainMarketTab>('COIN');
@@ -139,16 +119,10 @@ export default function App() {
   const [equityHubSubTab, setEquityHubSubTab] = useState<EquityHubSubTab>('PORTFOLIO');
   const [marketOverviewSubTab, setMarketOverviewSubTab] = useState<MarketOverviewSubTab>('ALL');
 
-  // Crypto (formerly Section A) & Coin (formerly Section B) single-selection dropdown states
-  // Implemented as main tabs so strictly ONE is active at a time
+  // Crypto (formerly Section A) & Coin (formerly Section B) sub-tab states
   const [sectionATab, setSectionATab] = useState<CryptoSectionATab>('CRYPTO_TABLE');
   const [sectionBTab, setSectionBTab] = useState<CryptoSectionBTab>('COIN_INFO');
-  const [isDropdownAOpen, setIsDropdownAOpen] = useState<boolean>(false);
-  const [isDropdownBOpen, setIsDropdownBOpen] = useState<boolean>(false);
   const [isCoinPickerOpen, setIsCoinPickerOpen] = useState<boolean>(false);
-  const dropdownARef = useRef<HTMLDivElement | null>(null);
-  const dropdownBRef = useRef<HTMLDivElement | null>(null);
-  const coinPickerRef = useRef<HTMLDivElement | null>(null);
 
   // Available coins synced directly from the Binance Crypto Table
   const [cryptoTableCoins, setCryptoTableCoins] = useState<CryptoCoinItem[]>(() =>
@@ -173,51 +147,33 @@ export default function App() {
   const [selectedCoinMeta, setSelectedCoinMeta] = useState<CryptoCoinItem | null>(null);
   const [searchedStockSymbol, setSearchedStockSymbol] = useState<string | null>(null);
 
-  // Load live Binance USDT crypto table coins after initial render so startup stays lightweight
+  // Only fetch 250-coin table from Binance when the user opens the Coin dropdown or the CRYPTO tab
   useEffect(() => {
+    if (!isCoinPickerOpen && mainMarketTab !== 'CRYPTO') return;
     let mounted = true;
-    const timer = setTimeout(() => {
-      fetchBinanceCryptoTableRows().then((rows) => {
-        if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
-        const mapped: CryptoCoinItem[] = rows.map((m, idx) => ({
-          rank: m.rank || idx + 1,
-          id: m.id,
-          name: m.name,
-          symbol: m.symbol,
-          price: m.price,
-          change1h: Number((m.change1d * 0.2).toFixed(2)),
-          change24h: m.change1d,
-          change7d: Number((m.change1d * 2.2).toFixed(2)),
-          marketCap: Number(m.marketCap || 1000000000),
-          volume24h: Number(m.volume24h || 50000000),
-          circulatingSupply: 100000000,
-          category: (m.category as any) || 'Layer 1',
-          isTradeableInSim: ['BTC', 'XAUT', 'PAXG', 'ZEC', 'SOL', 'CL', 'XAG', 'ETH', 'XRP', 'DOGE', 'BNB'].includes(m.symbol),
-        }));
-        setCryptoTableCoins(mapped);
-      });
-    }, 1500);
+    fetchBinanceCryptoTableRows().then((rows) => {
+      if (!mounted || !Array.isArray(rows) || rows.length === 0) return;
+      const mapped: CryptoCoinItem[] = rows.map((m, idx) => ({
+        rank: m.rank || idx + 1,
+        id: m.id,
+        name: m.name,
+        symbol: m.symbol,
+        price: m.price,
+        change1h: Number((m.change1d * 0.2).toFixed(2)),
+        change24h: m.change1d,
+        change7d: Number((m.change1d * 2.2).toFixed(2)),
+        marketCap: Number(m.marketCap || 1000000000),
+        volume24h: Number(m.volume24h || 50000000),
+        circulatingSupply: 100000000,
+        category: (m.category as any) || 'Layer 1',
+        isTradeableInSim: ['BTC', 'XAUT', 'PAXG', 'ZEC', 'SOL', 'CL', 'XAG', 'ETH', 'XRP', 'DOGE', 'BNB'].includes(m.symbol),
+      }));
+      setCryptoTableCoins(mapped);
+    });
     return () => {
       mounted = false;
-      clearTimeout(timer);
     };
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (dropdownARef.current && !dropdownARef.current.contains(e.target as Node)) {
-        setIsDropdownAOpen(false);
-      }
-      if (dropdownBRef.current && !dropdownBRef.current.contains(e.target as Node)) {
-        setIsDropdownBOpen(false);
-      }
-      if (coinPickerRef.current && !coinPickerRef.current.contains(e.target as Node)) {
-        setIsCoinPickerOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isCoinPickerOpen, mainMarketTab]);
 
   const {
     assets,
@@ -226,7 +182,7 @@ export default function App() {
     isLiveConnected,
     notifications,
     dismissNotification,
-    // Balances
+    // Balances (Separate Manual Trade, PnL Forecasting, and Grid Auto Simulation — $1,000 default each)
     cashBalance,
     totalEquity,
     totalMarginLocked,
@@ -236,6 +192,15 @@ export default function App() {
     winRate,
     totalTrades,
     goldHedgeRatio,
+    forecastBalance,
+    updateForecastBalance,
+    gridCashBalance,
+    gridMarginLocked,
+    gridUnrealizedPnL,
+    gridTotalEquity,
+    updateGridBalance,
+    resetGridSimulation,
+    updateManualBalance,
     // Data
     positions,
     limitOrders,
@@ -252,18 +217,12 @@ export default function App() {
     resetSimulation,
     adjustCashBalance,
     addNotification,
-    // B2 Cloud Storage synchronization
-    cloudSyncStatus,
-    lastCloudSync,
-    syncSimulatorToCloud,
-  } = useTradeSimulator();
+  } = useTradeSimulator(mainMarketTab === 'COIN' || mainMarketTab === 'CRYPTO');
 
   // Modal visibility states
   const [isWhatIfOpen, setIsWhatIfOpen] = useState<boolean>(false);
   const [isAiReviewOpen, setIsAiReviewOpen] = useState<boolean>(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
-  const [isBatchModalOpen, setIsBatchModalOpen] = useState<boolean>(false);
-  const [isStorageOpen, setIsStorageOpen] = useState<boolean>(false);
 
   // Resolve active selected coin (defaults to BTC if no coin is selected)
   const activeAsset: MarketAsset = useMemo(() => {
@@ -401,135 +360,12 @@ export default function App() {
     }
   };
 
-  // Compact dropdown options for Crypto tab
-  const sectionAOptions: {
-    id: CryptoSectionATab;
-    num: string;
-    label: string;
-    subtitle: string;
-    icon: React.ReactNode;
-  }[] = [
-    {
-      id: 'CRYPTO_TABLE',
-      num: '1',
-      label: 'Top 250 Coins',
-      subtitle: 'Market Cap Table',
-      icon: <Coins className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'ADVANCED_CRYPTO_SCREENER',
-      num: '2',
-      label: 'Screener',
-      subtitle: '250-Coin Filter',
-      icon: <Sliders className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'MICRO_VOLATILITY',
-      num: '3',
-      label: 'Volatility',
-      subtitle: 'ATR & Regimes',
-      icon: <Activity className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'WHALE_ORDERS',
-      num: '4',
-      label: 'Whale Orders',
-      subtitle: 'Block Trades > $10k',
-      icon: <Waves className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'CRYPTO_COMMON',
-      num: '5',
-      label: 'Overview & Sync',
-      subtitle: 'Ticker, PnL & Cloud',
-      icon: <BarChart3 className="w-4 h-4 text-emerald-600" />,
-    },
-  ];
-
-  // Compact dropdown options for Coin tab
-  const sectionBOptions: {
-    id: CryptoSectionBTab;
-    num: string;
-    label: string;
-    subtitle: string;
-    icon: React.ReactNode;
-  }[] = [
-    {
-      id: 'COIN_INFO',
-      num: '1',
-      label: 'Coin Info',
-      subtitle: 'Metrics & Pivots',
-      icon: <Info className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'TICK_ANALYSIS',
-      num: '2',
-      label: 'Tick Analysis',
-      subtitle: '1s FIFO & Tick Ratios',
-      icon: <Activity className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'COIN_CHART',
-      num: '3',
-      label: 'Chart',
-      subtitle: 'Candlestick & Volume',
-      icon: <BarChart3 className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'ORDERBOOK',
-      num: '4',
-      label: 'Orderbook',
-      subtitle: 'Market Depth',
-      icon: <Layers className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'BINANCE_RECENT_TRADES',
-      num: '5',
-      label: 'Recent Trades',
-      subtitle: 'Live Tape',
-      icon: <Zap className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'OPTION_CHAIN',
-      num: '6',
-      label: 'Option Chain',
-      subtitle: 'Calls, Puts & IV',
-      icon: <Waves className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'PAPER_PORTFOLIO_FORECAST',
-      num: '7',
-      label: 'PnL & Trade Analyser',
-      subtitle: 'Trade, Log & PnL Forecast',
-      icon: <Briefcase className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'AUTO_GRID_SIMULATION',
-      num: '8',
-      label: 'Auto Grid',
-      subtitle: 'Grid Bot & Logs',
-      icon: <Sparkles className="w-4 h-4 text-emerald-600" />,
-    },
-    {
-      id: 'REMAINING_CRYPTO',
-      num: '9',
-      label: 'Positions & Alerts',
-      subtitle: 'Orders, Spot & Alerts',
-      icon: <Sliders className="w-4 h-4 text-emerald-600" />,
-    },
-  ];
-
-  const activeOptionA =
-    sectionAOptions.find((o) => o.id === sectionATab) || sectionAOptions[0];
-  const activeOptionB =
-    sectionBOptions.find((o) => o.id === sectionBTab) || sectionBOptions[0];
-
   return (
     <div
       className="min-h-screen flex flex-col font-sans transition-colors selection:bg-emerald-500 selection:text-white"
       style={{ backgroundColor: 'var(--theme-bg-page)', color: 'var(--theme-text-primary)' }}
     >
-      {/* Top Navigation with Master Page Dropdown */}
+      {/* Top Navigation with Master Page & Sub-Tab Switchers */}
       <Navbar
         mainMarketTab={mainMarketTab}
         onSelectMarketTab={(tab) => {
@@ -544,19 +380,16 @@ export default function App() {
         onSelectEquityHubSubTab={setEquityHubSubTab}
         marketOverviewSubTab={marketOverviewSubTab}
         onSelectMarketOverviewSubTab={setMarketOverviewSubTab}
-        onOpenBatchModal={() => setIsBatchModalOpen(true)}
-        onOpenStorage={() => setIsStorageOpen(true)}
+        cryptoSubTab={sectionATab}
+        onSelectCryptoSubTab={setSectionATab}
+        coinSubTab={sectionBTab}
+        onSelectCoinSubTab={setSectionBTab}
+        activeCoinAsset={activeAsset}
+        cryptoTableCoins={cryptoTableCoins}
+        liveAssets={assets}
+        onSelectCoinFromPicker={handleSelectCoinFromTable}
+        onCoinPickerToggle={setIsCoinPickerOpen}
         onSelectAsset={handleGlobalAssetSelect}
-      />
-
-      {/* Volatility Alert Banner */}
-      <VolatilityAlertBanner
-        symbol={activeAsset.symbol}
-        name={activeAsset.name}
-        change24h={activeAsset.change24h}
-        price={activeAsset.price}
-        high24h={activeAsset.high24h}
-        low24h={activeAsset.low24h}
       />
 
       {/* Main Container */}
@@ -608,87 +441,10 @@ export default function App() {
         )}
 
         {/* =====================================================================
-            CRYPTO PAGE: TWO DROPDOWN-DRIVEN SECTIONS (SECTION A & SECTION B)
-            Only ONE view is active in Section A (default: Crypto Table of 250 Coins)
-            Only ONE view is active in Section B (default: Selected Coin All Info, BTC)
-            ===================================================================== */}
-        {/* =====================================================================
-            MAIN TAB 4: CRYPTO (FORMERLY SECTION A — ONE ACTIVE AT A TIME)
+            MAIN TAB 4: CRYPTO (Sub-tabs in Top Bar)
             ===================================================================== */}
         {mainMarketTab === 'CRYPTO' && (
           <section className="space-y-3">
-            <div className="px-3.5 py-2 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-mono font-bold">
-                  CRYPTO
-                </span>
-
-                {/* Dropdown A Trigger (Compact) */}
-                <div className="relative" ref={dropdownARef}>
-                  <button
-                    type="button"
-                    title={activeOptionA.subtitle}
-                    onClick={() => setIsDropdownAOpen((prev) => !prev)}
-                    className="inline-flex items-center justify-between gap-2.5 min-w-[175px] px-3 py-1.5 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
-                  >
-                    <span className="flex items-center gap-1.5 truncate">
-                      {activeOptionA.icon}
-                      <span className="truncate">
-                        {activeOptionA.num}. {activeOptionA.label}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
-                        isDropdownAOpen ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {isDropdownAOpen && (
-                    <div className="absolute left-0 mt-1.5 w-[220px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1 divide-y divide-[var(--theme-border-subtle)]">
-                      {sectionAOptions.map((opt) => {
-                        const isSelected = sectionATab === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => {
-                              setSectionATab(opt.id);
-                              setIsDropdownAOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                              isSelected
-                                ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
-                                : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {opt.icon}
-                              <span className="text-xs font-semibold truncate">
-                                {opt.num}. {opt.label}
-                              </span>
-                            </div>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMainMarketTab('COIN')}
-                  className="px-2.5 py-1 rounded-lg border border-emerald-600/30 bg-emerald-600/10 hover:bg-emerald-600/20 text-[11px] font-bold text-emerald-700 cursor-pointer transition-colors"
-                >
-                  Coin ({activeAsset.symbol}) →
-                </button>
-              </div>
-            </div>
-
-            {/* Crypto Content (Strictly ONE active view) */}
             <div>
               {sectionATab === 'CRYPTO_TABLE' && (
                 <CryptoMarketCapTable
@@ -713,14 +469,6 @@ export default function App() {
                 />
               )}
 
-              {sectionATab === 'WHALE_ORDERS' && (
-                <WhaleTradesFeed
-                  selectedSymbol={activeAsset.symbol}
-                  assets={assets}
-                  mode="WHALE_ONLY"
-                />
-              )}
-
               {sectionATab === 'CRYPTO_COMMON' && (
                 <div className="space-y-4">
                   <CryptoHeaderBar
@@ -728,17 +476,6 @@ export default function App() {
                     totalEquity={totalEquity}
                     isLiveConnected={isLiveConnected}
                     goldHedgeRatio={goldHedgeRatio}
-                    cloudSyncStatus={cloudSyncStatus}
-                    lastCloudSync={lastCloudSync}
-                    onManualCloudSync={() => {
-                      syncSimulatorToCloud(true);
-                      addNotification(
-                        'success',
-                        'B2 Cloud Sync',
-                        'Simulator state successfully synced to Backblaze B2 persistent store.'
-                      );
-                    }}
-                    onOpenFirestoreModal={() => setIsStorageOpen(true)}
                     onOpenWhatIf={() => setIsWhatIfOpen(true)}
                     onOpenAiReview={() => setIsAiReviewOpen(true)}
                     onOpenSettings={() => setIsSettingsOpen(true)}
@@ -758,240 +495,49 @@ export default function App() {
         )}
 
         {/* =====================================================================
-            MAIN TAB 5: COIN (FORMERLY SECTION B — ONE ACTIVE AT A TIME)
+            MAIN TAB 5: COIN (Sub-tabs & Coin Selector in Top Bar)
             ===================================================================== */}
         {mainMarketTab === 'COIN' && (
           <section className="space-y-3">
-            <div className="px-3.5 py-2 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-sm flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 rounded bg-emerald-600 text-white text-[11px] font-mono font-bold">
-                  COIN
-                </span>
-
-                {/* Dropdown List of Available Coins from Binance Crypto Table */}
-                <div className="relative" ref={coinPickerRef}>
-                  <button
-                    type="button"
-                    onClick={() => setIsCoinPickerOpen((prev) => !prev)}
-                    className="inline-flex items-center justify-between gap-2.5 min-w-[205px] px-3 py-1.5 rounded-lg text-xs font-mono font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
-                    title="Select available coin from Binance Crypto Table"
-                  >
-                    <span className="flex items-center gap-1.5 truncate">
-                      <Coins className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                      <span className="text-emerald-600 font-extrabold">{activeAsset.symbol}</span>
-                      <span className="text-[var(--theme-text-secondary)] font-sans font-medium truncate max-w-[90px]">
-                        {activeAsset.name}
-                      </span>
-                      <span className="text-[11px] text-[var(--theme-text-primary)]">
-                        ${activeAsset.price < 1 ? activeAsset.price.toFixed(4) : activeAsset.price.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
-                        isCoinPickerOpen ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {isCoinPickerOpen && (
-                    <div className="absolute left-0 mt-1.5 w-[305px] sm:w-[340px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1">
-                      <div className="px-3 py-1.5 flex items-center justify-between text-[10px] font-mono text-emerald-600 font-bold border-b border-[var(--theme-border-subtle)] bg-emerald-600/5">
-                        <span>★ PREFERENCE COINS (BTC · XAUT · PAXG · ZEC · SOL · CL · XAG)</span>
-                      </div>
-
-                      <div className="max-h-[360px] overflow-y-auto divide-y divide-[var(--theme-border-subtle)]">
-                        {cryptoTableCoins.map((c, idx) => {
-                          const symUpper = c.symbol.toUpperCase();
-                          const isPreferred = (PREFERENCE_COIN_SYMBOLS as readonly string[]).includes(symUpper);
-                          const prevCoin = idx > 0 ? cryptoTableCoins[idx - 1] : null;
-                          const prevWasPreferred =
-                            prevCoin &&
-                            (PREFERENCE_COIN_SYMBOLS as readonly string[]).includes(
-                              prevCoin.symbol.toUpperCase()
-                            );
-                          const showOtherHeader = !isPreferred && prevWasPreferred;
-
-                          const isSelected = activeAsset.symbol === symUpper;
-                          const livePrice = assets[symUpper]?.price || c.price;
-                          const changePct = assets[symUpper]?.change24h ?? c.change24h;
-                          const displayName =
-                            symUpper === 'CL' ? 'Crude Oil (WTI)' : symUpper === 'XAG' ? 'Silver (XAG)' : c.name;
-
-                          return (
-                            <React.Fragment key={c.id || c.symbol}>
-                              {showOtherHeader && (
-                                <div className="px-3 py-1 flex items-center justify-between text-[10px] font-mono text-[var(--theme-text-muted)] bg-[var(--theme-bg-card-subtle)]">
-                                  <span>OTHER MARKET COINS</span>
-                                  <span>USDT SPOT</span>
-                                </div>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  handleSelectCoinFromTable(c.symbol, {
-                                    ...c,
-                                    name: displayName,
-                                    price: livePrice,
-                                  });
-                                  setIsCoinPickerOpen(false);
-                                }}
-                                className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                                  isSelected
-                                    ? 'bg-emerald-600/15 text-[var(--theme-text-primary)] font-bold'
-                                    : isPreferred
-                                    ? 'bg-emerald-600/[0.03] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-card-subtle)]'
-                                    : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
-                                }`}
-                              >
-                                <div className="flex items-center gap-2 min-w-0 font-mono">
-                                  <span
-                                    className={`text-[10px] w-6 shrink-0 ${
-                                      isPreferred ? 'text-emerald-600 font-bold' : 'text-[var(--theme-text-muted)]'
-                                    }`}
-                                  >
-                                    {isPreferred ? `★${idx + 1}` : `#${c.rank}`}
-                                  </span>
-                                  <span className="text-xs font-bold text-emerald-600 shrink-0">
-                                    {symUpper === 'CL' ? 'CL (Crude)' : symUpper}
-                                  </span>
-                                  <span className="text-[11px] text-[var(--theme-text-primary)] truncate font-sans">
-                                    {displayName}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0 font-mono">
-                                  <span className="text-xs font-semibold text-[var(--theme-text-primary)]">
-                                    ${livePrice < 1 ? livePrice.toFixed(4) : livePrice.toLocaleString('en-US', { maximumFractionDigits: 2 })}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] font-bold ${
-                                      changePct >= 0 ? 'text-emerald-600' : 'text-rose-500'
-                                    }`}
-                                  >
-                                    {changePct >= 0 ? '+' : ''}
-                                    {Number(changePct).toFixed(2)}%
-                                  </span>
-                                  {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                                </div>
-                              </button>
-                            </React.Fragment>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Dropdown B Trigger (Compact View Selector) */}
-                <div className="relative" ref={dropdownBRef}>
-                  <button
-                    type="button"
-                    title={activeOptionB.subtitle}
-                    onClick={() => setIsDropdownBOpen((prev) => !prev)}
-                    className="inline-flex items-center justify-between gap-2.5 min-w-[175px] px-3 py-1.5 rounded-lg text-xs font-bold border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-elevated)] transition-all cursor-pointer shadow-xs"
-                  >
-                    <span className="flex items-center gap-1.5 truncate">
-                      {activeOptionB.icon}
-                      <span className="truncate">
-                        {activeOptionB.num}. {activeOptionB.label}
-                      </span>
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-[var(--theme-text-muted)] shrink-0 transition-transform duration-150 ${
-                        isDropdownBOpen ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {isDropdownBOpen && (
-                    <div className="absolute left-0 mt-1.5 w-[225px] rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] shadow-xl z-50 py-1 divide-y divide-[var(--theme-border-subtle)] max-h-[380px] overflow-y-auto">
-                      {sectionBOptions.map((opt) => {
-                        const isSelected = sectionBTab === opt.id;
-                        return (
-                          <button
-                            key={opt.id}
-                            type="button"
-                            onClick={() => {
-                              setSectionBTab(opt.id);
-                              setIsDropdownBOpen(false);
-                            }}
-                            className={`w-full px-3 py-2 text-left flex items-center justify-between gap-2 transition-colors cursor-pointer ${
-                              isSelected
-                                ? 'bg-emerald-600/10 text-[var(--theme-text-primary)] font-bold'
-                                : 'text-[var(--theme-text-secondary)] hover:bg-[var(--theme-bg-card-subtle)] hover:text-[var(--theme-text-primary)]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              {opt.icon}
-                              <span className="text-xs font-semibold truncate">
-                                {opt.num}. {opt.label}
-                              </span>
-                            </div>
-                            {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" />}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-              {/* Background 1s FIFO Tick Collector when viewing other tabs so Tick Analysis stays warm */}
-              {sectionBTab !== 'TICK_ANALYSIS' && (
-                <CoinTickBackgroundCollector asset={activeAsset} />
+            <div>
+              {/* B1: Coin Info (Multi-Source Deep Info) */}
+              {sectionBTab === 'COIN_INFO' && (
+                <SelectedCoinAllInfoPanel
+                  asset={activeAsset}
+                  allAssets={assets}
+                  positions={positions}
+                  spotHoldings={spotHoldings}
+                  extraCoinMeta={
+                    selectedCoinMeta && selectedCoinMeta.symbol.toUpperCase() === activeAsset.symbol
+                      ? {
+                          rank: selectedCoinMeta.rank,
+                          marketCap: selectedCoinMeta.marketCap,
+                          change1h: selectedCoinMeta.change1h,
+                          change7d: selectedCoinMeta.change7d,
+                          circulatingSupply: selectedCoinMeta.circulatingSupply,
+                          categoryLabel: selectedCoinMeta.category,
+                        }
+                      : undefined
+                  }
+                  onSelectSymbol={setSelectedSymbol}
+                />
               )}
 
-              {/* Section B Content (Strictly ONE active view) */}
-              <div>
-                {/* B1: Selected Coin All Possible Info (Default) */}
-                {sectionBTab === 'COIN_INFO' && (
-                  <SelectedCoinAllInfoPanel
-                    asset={activeAsset}
-                    allAssets={assets}
-                    positions={positions}
-                    spotHoldings={spotHoldings}
-                    extraCoinMeta={
-                      selectedCoinMeta && selectedCoinMeta.symbol.toUpperCase() === activeAsset.symbol
-                        ? {
-                            rank: selectedCoinMeta.rank,
-                            marketCap: selectedCoinMeta.marketCap,
-                            change1h: selectedCoinMeta.change1h,
-                            change7d: selectedCoinMeta.change7d,
-                            circulatingSupply: selectedCoinMeta.circulatingSupply,
-                            categoryLabel: selectedCoinMeta.category,
-                          }
-                        : undefined
-                    }
-                    onSelectSymbol={setSelectedSymbol}
-                  />
-                )}
-
-                {/* B2: Dedicated Tick Analysis Tab (Per-Second Counting & Rolling FIFO Windows) */}
-                {sectionBTab === 'TICK_ANALYSIS' && (
-                  <CoinTickAnalysisPanel asset={activeAsset} />
-                )}
-
-                {/* B3: Separated Dedicated Chart Tab */}
-                {sectionBTab === 'COIN_CHART' && (
-                  <CoinChartPanel asset={activeAsset} positions={positions} />
-                )}
-
-                {/* B3: Orderbook as current */}
-                {sectionBTab === 'ORDERBOOK' && (
-                  <MiniMarketDepth asset={activeAsset} compact={false} />
-                )}
-
-                {/* B4: Binance Real Recent Trades */}
-                {sectionBTab === 'BINANCE_RECENT_TRADES' && (
-                  <WhaleTradesFeed
-                    selectedSymbol={activeAsset.symbol}
-                    assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                    mode="RECENT_ONLY"
-                  />
-                )}
-
-                {/* B5: Option Chain if available for selected symbol */}
-                {sectionBTab === 'OPTION_CHAIN' && (
+              {/* B2: Orderbook, Recent Trades, Whale Orders (below recent trades), and Option Chain merged */}
+              {sectionBTab === 'ORDERBOOK' && (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+                    <div className="xl:col-span-5">
+                      <MiniMarketDepth asset={activeAsset} compact={false} />
+                    </div>
+                    <div className="xl:col-span-7">
+                      <WhaleTradesFeed
+                        selectedSymbol={activeAsset.symbol}
+                        assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                        mode="ALL"
+                      />
+                    </div>
+                  </div>
                   <DeribitOptionsChain
                     selectedSymbol={activeAsset.symbol}
                     selectedCoinPrice={activeAsset.price}
@@ -1000,184 +546,135 @@ export default function App() {
                     currentSolPrice={assets.SOL?.price || 210}
                     currentPaxgPrice={assets.PAXG?.price || 2750}
                   />
-                )}
+                </div>
+              )}
 
-                {/* B7: PnL & Trade Analyser (Portfolio, Order Execution, Live Positions/Log, and PnL Forecasting at the End) */}
-                {sectionBTab === 'PAPER_PORTFOLIO_FORECAST' && (
-                  <div className="space-y-4">
-                    <PortfolioOverview
-                      totalEquity={totalEquity}
-                      cashBalance={cashBalance}
-                      marginLocked={totalMarginLocked}
-                      unrealizedPnL={totalUnrealizedPnL}
-                      realizedPnL={totalRealizedPnL}
-                      totalFeesPaid={totalFeesPaid}
-                      winRate={winRate}
-                      totalTrades={totalTrades}
-                      goldHedgeRatio={goldHedgeRatio}
-                      spotHoldings={spotHoldings}
-                      positions={positions}
-                      assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      tradeHistory={tradeHistory}
-                      brokerName="Shark Exchange"
-                      onResetTradeHistory={resetTradeHistory}
-                      onResetSimulation={() => resetSimulation()}
-                    />
+              {/* B3: Chart + Tick Analysis (just after chart) + PnL & Trade merged */}
+              {sectionBTab === 'PAPER_PORTFOLIO_FORECAST' && (
+                <div className="space-y-4">
+                  <CoinChartPanel asset={activeAsset} positions={positions} />
 
-                    <OrderForm
-                      asset={activeAsset}
-                      cashBalance={cashBalance}
-                      config={config}
-                      spotBalanceAmount={currentSpotAmount}
-                      allAssets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      positions={positions}
-                      initialTab="TRADE"
-                      hideTabSwitcher={true}
-                      onOpenWhatIf={() => setIsWhatIfOpen(true)}
-                      onClosePosition={closePosition}
-                      onUpdateSLTP={updatePositionSLTP}
-                      onNotify={addNotification}
-                      onPlaceOrder={placeOrder}
-                    />
+                  <CoinTickAnalysisPanel asset={activeAsset} />
 
-                    <PositionsTable
-                      positions={positions}
-                      limitOrders={limitOrders}
-                      tradeHistory={tradeHistory}
-                      spotHoldings={spotHoldings}
-                      assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      onClosePosition={closePosition}
-                      onCancelLimitOrder={cancelLimitOrder}
-                      onUpdateSLTP={updatePositionSLTP}
-                      onSelectSymbol={setSelectedSymbol}
-                      onResetTradeHistory={resetTradeHistory}
-                    />
+                  <PortfolioOverview
+                    totalEquity={totalEquity}
+                    cashBalance={cashBalance}
+                    marginLocked={totalMarginLocked}
+                    unrealizedPnL={totalUnrealizedPnL}
+                    realizedPnL={totalRealizedPnL}
+                    totalFeesPaid={totalFeesPaid}
+                    winRate={winRate}
+                    totalTrades={totalTrades}
+                    goldHedgeRatio={goldHedgeRatio}
+                    spotHoldings={spotHoldings}
+                    positions={positions}
+                    assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                    tradeHistory={tradeHistory}
+                    brokerName="Shark Exchange"
+                    onResetTradeHistory={resetTradeHistory}
+                    onResetSimulation={() => resetSimulation()}
+                    onUpdateManualBalance={updateManualBalance}
+                  />
 
-                    {/* PnL Forecasting placed at the END to simulate PnL forecasting of live running trades */}
-                    <PnlForecastingMatrixPanel
-                      asset={activeAsset}
-                      totalEquity={totalEquity}
-                      cashBalance={cashBalance}
-                      positions={positions}
-                      spotHoldings={spotHoldings}
-                      totalTrades={totalTrades}
-                      realizedPnL={totalRealizedPnL}
-                      onResetTradeHistory={resetTradeHistory}
-                      onResetSimulation={() => resetSimulation()}
-                      onPlaceLiveOrder={placeOrder}
-                    />
-                  </div>
-                )}
+                  <OrderForm
+                    asset={activeAsset}
+                    cashBalance={cashBalance}
+                    config={config}
+                    spotBalanceAmount={currentSpotAmount}
+                    allAssets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                    positions={positions}
+                    initialTab="TRADE"
+                    hideTabSwitcher={true}
+                    onOpenWhatIf={() => setIsWhatIfOpen(true)}
+                    onClosePosition={closePosition}
+                    onUpdateSLTP={updatePositionSLTP}
+                    onNotify={addNotification}
+                    onUpdateManualBalance={updateManualBalance}
+                    gridCashBalance={gridCashBalance}
+                    gridMarginLocked={gridMarginLocked}
+                    gridUnrealizedPnL={gridUnrealizedPnL}
+                    gridTotalEquity={gridTotalEquity}
+                    onUpdateGridBalance={updateGridBalance}
+                    onResetGridSimulation={resetGridSimulation}
+                    onPlaceOrder={placeOrder}
+                  />
 
-                {/* B8: Grid-Based Auto Simulation (Shark Terminal) and its History */}
-                {sectionBTab === 'AUTO_GRID_SIMULATION' && (
-                  <div className="space-y-4">
-                    <OrderForm
-                      asset={activeAsset}
-                      cashBalance={cashBalance}
-                      config={config}
-                      spotBalanceAmount={currentSpotAmount}
-                      allAssets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      positions={positions}
-                      initialTab="AUTOGRID"
-                      hideTabSwitcher={true}
-                      onOpenWhatIf={() => setIsWhatIfOpen(true)}
-                      onClosePosition={closePosition}
-                      onUpdateSLTP={updatePositionSLTP}
-                      onNotify={addNotification}
-                      onPlaceOrder={placeOrder}
-                    />
+                  <PositionsTable
+                    positions={positions}
+                    limitOrders={limitOrders}
+                    tradeHistory={tradeHistory}
+                    spotHoldings={spotHoldings}
+                    assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                    onClosePosition={closePosition}
+                    onCancelLimitOrder={cancelLimitOrder}
+                    onUpdateSLTP={updatePositionSLTP}
+                    onSelectSymbol={setSelectedSymbol}
+                    onResetTradeHistory={resetTradeHistory}
+                  />
 
-                    <PositionsTable
-                      positions={positions}
-                      limitOrders={limitOrders}
-                      tradeHistory={tradeHistory}
-                      spotHoldings={spotHoldings}
-                      assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      onClosePosition={closePosition}
-                      onCancelLimitOrder={cancelLimitOrder}
-                      onUpdateSLTP={updatePositionSLTP}
-                      onSelectSymbol={setSelectedSymbol}
-                      onResetTradeHistory={resetTradeHistory}
-                    />
-                  </div>
-                )}
+                  {/* PnL Forecasting placed at the END to simulate PnL forecasting of live running trades */}
+                  <PnlForecastingMatrixPanel
+                    asset={activeAsset}
+                    totalEquity={totalEquity}
+                    cashBalance={cashBalance}
+                    forecastBalance={forecastBalance}
+                    onUpdateForecastBalance={updateForecastBalance}
+                    positions={positions}
+                    spotHoldings={spotHoldings}
+                    totalTrades={totalTrades}
+                    realizedPnL={totalRealizedPnL}
+                    onResetTradeHistory={resetTradeHistory}
+                    onResetSimulation={() => resetSimulation()}
+                    onPlaceLiveOrder={placeOrder}
+                  />
+                </div>
+              )}
 
-                {/* B9: Rest / Remaining under current Crypto Page */}
-                {sectionBTab === 'REMAINING_CRYPTO' && (
-                  <div className="space-y-4">
-                    <CryptoHeaderBar
-                      cashBalance={cashBalance}
-                      totalEquity={totalEquity}
-                      isLiveConnected={isLiveConnected}
-                      goldHedgeRatio={goldHedgeRatio}
-                      cloudSyncStatus={cloudSyncStatus}
-                      lastCloudSync={lastCloudSync}
-                      onManualCloudSync={() => {
-                        syncSimulatorToCloud(true);
-                        addNotification(
-                          'success',
-                          'B2 Cloud Sync',
-                          'Simulator state successfully synced to Backblaze B2 persistent store.'
-                        );
-                      }}
-                      onOpenFirestoreModal={() => setIsStorageOpen(true)}
-                      onOpenWhatIf={() => setIsWhatIfOpen(true)}
-                      onOpenAiReview={() => setIsAiReviewOpen(true)}
-                      onOpenSettings={() => setIsSettingsOpen(true)}
-                      onReset={() => resetSimulation()}
-                      onAddFunds={() => adjustCashBalance(5000)}
-                    />
+              {/* B8: Grid-Based Auto Simulation (Shark Terminal) and its History */}
+              {sectionBTab === 'AUTO_GRID_SIMULATION' && (
+                <div className="space-y-4">
+                  <OrderForm
+                    asset={activeAsset}
+                    cashBalance={cashBalance}
+                    config={config}
+                    spotBalanceAmount={currentSpotAmount}
+                    allAssets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                    positions={positions}
+                    initialTab="AUTOGRID"
+                    hideTabSwitcher={true}
+                    onOpenWhatIf={() => setIsWhatIfOpen(true)}
+                    onClosePosition={closePosition}
+                    onUpdateSLTP={updatePositionSLTP}
+                    onNotify={addNotification}
+                    onUpdateManualBalance={updateManualBalance}
+                    gridCashBalance={gridCashBalance}
+                    gridMarginLocked={gridMarginLocked}
+                    gridUnrealizedPnL={gridUnrealizedPnL}
+                    gridTotalEquity={gridTotalEquity}
+                    onUpdateGridBalance={updateGridBalance}
+                    onResetGridSimulation={resetGridSimulation}
+                    onPlaceOrder={placeOrder}
+                  />
 
-                    <PositionsTable
-                      positions={positions}
-                      limitOrders={limitOrders}
-                      tradeHistory={tradeHistory}
-                      spotHoldings={spotHoldings}
-                      assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      onClosePosition={closePosition}
-                      onCancelLimitOrder={cancelLimitOrder}
-                      onUpdateSLTP={updatePositionSLTP}
-                      onSelectSymbol={setSelectedSymbol}
-                      onResetTradeHistory={resetTradeHistory}
-                    />
-
-                    <OrderForm
-                      asset={activeAsset}
-                      cashBalance={cashBalance}
-                      config={config}
-                      spotBalanceAmount={currentSpotAmount}
-                      allAssets={{ ...assets, [activeAsset.symbol]: activeAsset }}
-                      positions={positions}
-                      initialTab="ALERTS"
-                      hideTabSwitcher={true}
-                      onOpenWhatIf={() => setIsWhatIfOpen(true)}
-                      onClosePosition={closePosition}
-                      onUpdateSLTP={updatePositionSLTP}
-                      onNotify={addNotification}
-                      onPlaceOrder={placeOrder}
-                    />
-                  </div>
-                )}
-              </div>
-            </section>
+                  <PositionsTable
+                    positions={positions}
+                    limitOrders={limitOrders}
+                    tradeHistory={tradeHistory}
+                    spotHoldings={spotHoldings}
+                    assets={{ ...assets, [activeAsset.symbol]: activeAsset }}
+                    onClosePosition={closePosition}
+                    onCancelLimitOrder={cancelLimitOrder}
+                    onUpdateSLTP={updatePositionSLTP}
+                    onSelectSymbol={setSelectedSymbol}
+                    onResetTradeHistory={resetTradeHistory}
+                  />
+                </div>
+              )}
+            </div>
+          </section>
         )}
         </Suspense>
       </main>
-
-      {/* Footer */}
-      <footer
-        className="py-4 px-4 text-center text-[10px] font-mono border-t transition-colors"
-        style={{
-          backgroundColor: 'var(--theme-bg-card)',
-          borderColor: 'var(--theme-border)',
-          color: 'var(--theme-text-muted)',
-        }}
-      >
-        <p className="uppercase tracking-widest opacity-60">
-          AurumX Live Institutional Terminal • Real-time WebSocket execution • Institutional Durability
-        </p>
-      </footer>
 
       {/* Modals (Only mounted when opened) */}
       <Suspense fallback={null}>
@@ -1212,27 +709,6 @@ export default function App() {
             onReset={resetSimulation}
             onAddFunds={(amount) => adjustCashBalance(amount)}
             onClose={() => setIsSettingsOpen(false)}
-          />
-        )}
-
-        {isBatchModalOpen && (
-          <BatchWriterModal
-            isOpen={isBatchModalOpen}
-            onClose={() => setIsBatchModalOpen(false)}
-          />
-        )}
-
-        {isStorageOpen && (
-          <StorageManagerModal
-            isOpen={isStorageOpen}
-            onClose={() => setIsStorageOpen(false)}
-            simulatorData={{
-              cashBalance,
-              totalEquity,
-              tradeHistory,
-              positions,
-              spotHoldings,
-            }}
           />
         )}
       </Suspense>

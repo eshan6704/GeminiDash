@@ -87,7 +87,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 min="10"
                 step="10"
                 value={resetBalanceInput}
-                onChange={(e) => setResetBalanceInput(parseFloat(e.target.value) || 100)}
+                onChange={(e) => setResetBalanceInput(parseFloat(e.target.value) || 1000)}
                 className="flex-1 bg-[var(--theme-bg-main)] border border-[var(--theme-border-subtle)] px-3 py-1.5 rounded-sm text-[var(--theme-text-primary)] font-bold outline-none focus:border-[var(--theme-accent)]"
               />
               <button

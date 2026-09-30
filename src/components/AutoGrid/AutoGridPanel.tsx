@@ -39,6 +39,11 @@ import { MAX_RUNNING_TRADES, TRADE_TIER_CONFIGS } from '../../utils/tradeEntryCo
 interface AutoGridPanelProps {
   asset: MarketAsset;
   cashBalance: number;
+  gridMarginLocked?: number;
+  gridUnrealizedPnL?: number;
+  gridTotalEquity?: number;
+  onUpdateGridBalance?: (newBalance: number) => void;
+  onResetGridSimulation?: (newBalance?: number) => void;
   config: SimulatorConfig;
   gridConfig: AutoGridConfig;
   runtime: AutoGridRuntimeState;
@@ -61,6 +66,11 @@ interface AutoGridPanelProps {
 export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   asset,
   cashBalance,
+  gridMarginLocked = 0,
+  gridUnrealizedPnL = 0,
+  gridTotalEquity,
+  onUpdateGridBalance,
+  onResetGridSimulation,
   config,
   gridConfig,
   runtime,
@@ -84,6 +94,13 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   const [customAnchorInput, setCustomAnchorInput] = useState<string>(
     gridConfig.basePriceAnchor ? gridConfig.basePriceAnchor.toString() : asset.price.toString()
   );
+  const [gridBalanceInput, setGridBalanceInput] = useState<string>(cashBalance.toFixed(0));
+
+  React.useEffect(() => {
+    setGridBalanceInput(cashBalance.toFixed(0));
+  }, [cashBalance]);
+
+  const effectiveGridEquity = gridTotalEquity ?? (cashBalance + gridMarginLocked + gridUnrealizedPnL);
 
   const isGold = asset.category === 'gold' || asset.symbol === 'XAUT';
   const isRunning = gridConfig.enabled && (runtime.status === 'WAITING_FOR_ENTRY' || runtime.status === 'IN_POSITION');
@@ -107,12 +124,103 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
 
   const currentSL = runtime.currentTrailingSL || (isLong ? entryPrice + gridConfig.initialSlOffset : entryPrice - gridConfig.initialSlOffset);
 
-  // Calculate estimated margin for the configured lot size
+  // Calculate estimated margin, fees, and live return for the configured lot size
+  // Trade value = symbolPrice * lot
+  // Margin required = tradeValue / leverage
+  // Fees = tradeValue * 0.016% (Maker) or 0.064% (Taker 4x)
+  // Return = Change in Trade Value (currentTradeValue - entryTradeValue for LONG, entry - current for SHORT)
   const tradeValue = curPrice * gridConfig.lotSize;
+  const entryTradeValue = entryPrice * gridConfig.lotSize;
   const requiredMargin = gridConfig.leverage > 0 ? tradeValue / gridConfig.leverage : tradeValue;
+  const makerFee = tradeValue * 0.00016;
+  const takerFee = tradeValue * 0.00064;
+  const liveTradeValDiff = isLong
+    ? tradeValue - entryTradeValue
+    : entryTradeValue - tradeValue;
+  const liveNetReturn = liveTradeValDiff;
 
   return (
     <div className="flex flex-col space-y-3 text-neutral-200">
+      {/* Separate Grid-Based Auto Simulation Balance Bar ($1,000 Default, Editable) */}
+      <div className="bg-neutral-950 p-3 rounded-xl border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+        <div className="flex flex-wrap items-center gap-4">
+          <div>
+            <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block">
+              Auto Grid Free Cash
+            </span>
+            <span className="text-sm font-bold text-emerald-400">
+              ${cashBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
+            </span>
+          </div>
+          <div>
+            <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block">
+              Grid Margin Locked
+            </span>
+            <span className="text-sm font-bold text-amber-400">
+              ${gridMarginLocked.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+          <div>
+            <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block">
+              Grid Net Equity
+            </span>
+            <span className="text-sm font-bold text-neutral-100">
+              ${effectiveGridEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          </div>
+        </div>
+
+        {/* Editable Grid Balance Input ($1,000 Default) */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[10px] font-sans font-semibold text-neutral-300">
+            Grid Simulation Balance ($):
+          </span>
+          <input
+            type="number"
+            min={0}
+            step="any"
+            value={gridBalanceInput}
+            onChange={(e) => setGridBalanceInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && onUpdateGridBalance) {
+                const val = parseFloat(gridBalanceInput);
+                if (!isNaN(val) && val >= 0) onUpdateGridBalance(val);
+              }
+            }}
+            className="w-24 px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-emerald-400 font-bold text-xs focus:outline-none focus:border-emerald-500"
+          />
+          {onUpdateGridBalance && (
+            <>
+              <button
+                type="button"
+                onClick={() => {
+                  const val = parseFloat(gridBalanceInput);
+                  if (!isNaN(val) && val >= 0) onUpdateGridBalance(val);
+                }}
+                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase cursor-pointer transition-colors"
+              >
+                Set Balance
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setGridBalanceInput('1000');
+                  if (onResetGridSimulation) {
+                    onResetGridSimulation(1000);
+                  } else {
+                    onUpdateGridBalance(1000);
+                  }
+                }}
+                title="Reset Grid Auto Simulation Balance to $1,000 Default"
+                className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 font-bold text-[10px] cursor-pointer transition-colors"
+              >
+                $1,000 Default
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* 1. Header & Live Status HUD */}
       <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-800 space-y-2.5">
         <div className="flex items-center justify-between">
@@ -324,7 +432,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
               </div>
               <div className="font-mono font-bold text-emerald-400">
                 Live: {pointsGain >= 0 ? '+' : ''}
-                {pointsGain.toFixed(2)} pts (${(pointsGain * gridConfig.lotSize).toFixed(2)} USDT)
+                {pointsGain.toFixed(2)} pts | Return (Change in Trade Val): {liveNetReturn >= 0 ? '+' : ''}${liveNetReturn.toFixed(4)} USDT
               </div>
             </div>
 
@@ -993,31 +1101,35 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   step="0.001"
                   min="0.001"
                   value={gridConfig.lotSize}
-                  onChange={(e) => onUpdateConfig({ lotSize: parseFloat(e.target.value) || 0.1 })}
+                  onChange={(e) => onUpdateConfig({ lotSize: parseFloat(e.target.value) || 0.002 })}
                   className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
                 />
-                <div className="text-[9px] text-neutral-500 mt-0.5">
-                  Margin: ~${requiredMargin.toFixed(2)} USDT ({gridConfig.leverage}x)
+                <div className="text-[9px] text-neutral-400 mt-1 font-mono space-y-0.5">
+                  <div>Trade Val: <strong className="text-neutral-200">${tradeValue.toFixed(2)}</strong> (${curPrice.toFixed(0)} × {gridConfig.lotSize})</div>
+                  <div>Margin Req: <strong className="text-amber-400">${requiredMargin.toFixed(4)}</strong> (Val / {gridConfig.leverage})</div>
                 </div>
               </div>
 
               <div>
                 <label className="block text-[11px] text-neutral-400 mb-1">
-                  Leverage Multiplier
+                  Margin (Leverage Multiplier)
                 </label>
                 <div className="relative">
                   <input
                     type="number"
                     step="1"
                     min="1"
-                    max={isGold ? 75 : 150}
+                    max={150}
                     value={gridConfig.leverage}
-                    onChange={(e) => onUpdateConfig({ leverage: parseInt(e.target.value, 10) || 75 })}
+                    onChange={(e) => onUpdateConfig({ leverage: parseInt(e.target.value, 10) || 150 })}
                     className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
                   />
                   <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">x</span>
                 </div>
-                <div className="text-[9px] text-neutral-500 mt-0.5">Shark Brokerage Margin</div>
+                <div className="text-[9px] text-neutral-400 mt-1 font-mono space-y-0.5">
+                  <div>Maker Fee (0.016%): <strong className="text-emerald-400">${makerFee.toFixed(4)}</strong></div>
+                  <div>Taker Fee (4x = 0.064%): <strong className="text-amber-400">${takerFee.toFixed(4)}</strong></div>
+                </div>
               </div>
             </div>
 

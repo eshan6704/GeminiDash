@@ -491,7 +491,7 @@ export function useAutoGridTrader(
           return;
         }
 
-        // Execute order through the simulator with activeSide (BUY or SELL)
+        // Execute order through the simulator with activeSide (BUY or SELL) using separate AUTO_GRID balance
         const placed = placeOrderRef.current({
           symbol: cfg.symbol,
           mode: 'LEVERAGED',
@@ -499,7 +499,10 @@ export function useAutoGridTrader(
           orderType: 'MARKET',
           margin: requiredMargin,
           leverage: cfg.leverage,
+          amount: cfg.lotSize,
+          isMaker: true,
           stopLossPrice: initialSL,
+          accountSource: 'AUTO_GRID',
         });
 
         if (placed) {
@@ -698,7 +701,12 @@ export function useAutoGridTrader(
           }
 
           const exitPoints = isLong ? curPrice - entry : entry - curPrice;
-          const estPnL = exitPoints * cfg.lotSize;
+          const entryTradeValue = entry * cfg.lotSize;
+          const exitTradeValue = curPrice * cfg.lotSize;
+          const tradeValueDiff = isLong
+            ? exitTradeValue - entryTradeValue
+            : entryTradeValue - exitTradeValue;
+          const estPnL = tradeValueDiff; // Return = Change in Trade Value
 
           addLogRef.current(
             'EXIT',
@@ -968,14 +976,14 @@ export function useAutoGridTrader(
       directionMode: 'AUTO_TREND',
       timeframeFilter: 'CONFLUENCE',
       lotSize: 0.002,
-      leverage: 100,
+      leverage: 150,
       autoLoop: true,
       maxGridCycles: 10,
       basePriceAnchor: asset.price,
     }));
     addLog(
       'INFO',
-      'Applied BTC Scalp Spec: Auto-detects 1h/15m trend (Buy or Sell). Spacing 500 pts, Entry ±25, Initial SL ±500. Once price >+250 → SL moves to entry ±150, then chases. Size 0.002 BTC, 100x.'
+      'Applied BTC Scalp Spec: Auto-detects 1h/15m trend (Buy or Sell). Spacing 500 pts, Entry ±25, Initial SL ±500. Once price >+250 → SL moves to entry ±150, then chases. Lot 0.002 BTC, 150x margin.'
     );
   }, [asset.price, addLog]);
 

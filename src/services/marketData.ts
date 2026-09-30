@@ -166,8 +166,24 @@ const BINANCE_SYMBOL_MAP: Record<string, string> = {
   ZEC: 'ZECUSDT',
 };
 
-// Fetch live market data for all supported assets while preserving current live prices
-export async function fetchLiveMarketData(existingAssets?: Record<string, MarketAsset>): Promise<Record<string, MarketAsset>> {
+let lastMarketFetchTs = 0;
+let cachedMarketAssets: Record<string, MarketAsset> | null = null;
+const candleCache = new Map<string, { candles: Candle[]; timestamp: number }>();
+
+// Fetch live market data for supported assets while preserving current live prices
+export async function fetchLiveMarketData(
+  existingAssets?: Record<string, MarketAsset>,
+  targetSymbols?: string[]
+): Promise<Record<string, MarketAsset>> {
+  if (typeof document !== 'undefined' && document.hidden && cachedMarketAssets) {
+    return cachedMarketAssets;
+  }
+
+  // Reuse cached market data if fetched within last 15 seconds
+  if (cachedMarketAssets && Date.now() - lastMarketFetchTs < 15000 && !targetSymbols) {
+    return cachedMarketAssets;
+  }
+
   const updatedAssets: Record<string, MarketAsset> = {};
 
   Object.keys(INITIAL_ASSETS).forEach((symbol) => {
@@ -178,14 +194,37 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
   });
 
   try {
-    // Fetch Binance 24hr tickers for crypto & PAXG
-    const symbols = Object.values(BINANCE_SYMBOL_MAP);
+    // Only request target symbols if specified, otherwise core mapped symbols
+    const symbols =
+      Array.isArray(targetSymbols) && targetSymbols.length > 0
+        ? Array.from(
+            new Set(
+              targetSymbols
+                .map((s) => {
+                  const u = s.toUpperCase();
+                  if (u === 'XAUT') return 'PAXGUSDT';
+                  return BINANCE_SYMBOL_MAP[u];
+                })
+                .filter(Boolean)
+            )
+          )
+        : Object.values(BINANCE_SYMBOL_MAP);
+
+    if (symbols.length === 0) {
+      return updatedAssets;
+    }
+
     const symbolsParam = encodeURIComponent(JSON.stringify(symbols));
+    let binanceSucceeded = false;
     try {
-      const binanceRes = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbols=${symbolsParam}`);
+      const binanceRes = await fetch(
+        `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbolsParam}`,
+        { signal: AbortSignal.timeout(4000) }
+      );
       if (binanceRes.ok) {
         const binanceList = await binanceRes.json();
-        if (Array.isArray(binanceList)) {
+        if (Array.isArray(binanceList) && binanceList.length > 0) {
+          binanceSucceeded = true;
           binanceList.forEach((item) => {
             const sym = Object.keys(BINANCE_SYMBOL_MAP).find(
               (key) => BINANCE_SYMBOL_MAP[key] === item.symbol
@@ -211,7 +250,7 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
                 };
                 updateRememberedPrice(sym, price, sourceTime, { change24h: change, high24h: high, low24h: low });
 
-                // Sync XAUT closely to PAXG live spot gold if Bitfinex hasn't updated XAUT more recently
+                // Sync XAUT closely to PAXG live spot gold
                 if (sym === 'PAXG' && updatedAssets.XAUT) {
                   const xautPrice = Number((price * 1.0005).toFixed(2));
                   updatedAssets.XAUT = {
@@ -230,18 +269,17 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
           });
         }
       }
-    } catch (e) {
+    } catch {
       // Fallback handled gracefully
     }
 
-    // 3. Fallback check for any missing/stale coin data using CoinGecko simple price
-    const now = Date.now();
-    const needsGecko = Object.values(updatedAssets).some((a) => now - a.lastUpdated > 15000);
-    if (needsGecko) {
+    // Only call CoinGecko fallback if Binance request actually failed
+    if (!binanceSucceeded) {
       try {
-        const geckoIds = 'tether-gold,pax-gold,bitcoin,ethereum,solana,binancecoin,ripple,dogecoin,zcash';
+        const geckoIds = 'tether-gold,pax-gold,bitcoin,solana,zcash';
         const geckoRes = await fetch(
-          `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`
+          `https://api.coingecko.com/api/v3/simple/price?ids=${geckoIds}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`,
+          { signal: AbortSignal.timeout(4000) }
         );
         if (geckoRes.ok) {
           const geckoData = await geckoRes.json();
@@ -261,22 +299,30 @@ export async function fetchLiveMarketData(existingAssets?: Record<string, Market
             }
           });
         }
-      } catch (err) {
+      } catch {
         // Fallback handled gracefully
       }
     }
-  } catch (err) {
+  } catch {
     // Fallback handled gracefully
   }
 
+  lastMarketFetchTs = Date.now();
+  cachedMarketAssets = updatedAssets;
   return updatedAssets;
 }
 
-// Fetch historical candles for charting from Binance / Bitfinex API
+// Fetch historical candles for charting from Binance (with 25s cache per symbol+interval)
 export type ChartInterval = '1s' | '1m' | '3m' | '5m' | '15m' | '30m' | '1h' | '2h' | '4h' | '1d';
 
 export async function fetchCandles(symbol: string, interval: ChartInterval): Promise<Candle[]> {
   const upper = (symbol || 'BTC').toUpperCase();
+  const cacheKey = `${upper}:${interval}`;
+  const cached = candleCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < 25000) {
+    return cached.candles;
+  }
+
   // Non-Binance spot commodities (CL Crude Oil, XAG Silver) use price-anchored candles
   if (upper !== 'CL' && upper !== 'XAG') {
     try {
@@ -284,12 +330,13 @@ export async function fetchCandles(symbol: string, interval: ChartInterval): Pro
         BINANCE_SYMBOL_MAP[upper] ||
         (upper === 'XAUT' ? 'PAXGUSDT' : `${upper}USDT`);
       const bRes = await fetch(
-        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=100`
+        `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${interval}&limit=100`,
+        { signal: AbortSignal.timeout(4000) }
       );
       if (bRes.ok) {
         const data = await bRes.json();
         if (Array.isArray(data) && data.length > 0) {
-          return data.map((item: any[]) => ({
+          const candles = data.map((item: any[]) => ({
             time: item[0],
             open: parseFloat(item[1]),
             high: parseFloat(item[2]),
@@ -297,15 +344,19 @@ export async function fetchCandles(symbol: string, interval: ChartInterval): Pro
             close: parseFloat(item[4]),
             volume: parseFloat(item[5]),
           }));
+          candleCache.set(cacheKey, { candles, timestamp: Date.now() });
+          return candles;
         }
       }
-    } catch (e) {
+    } catch {
       // Fallback candles generated gracefully
     }
   }
 
   // Graceful fallback: generate procedural continuous candles anchored to current price
-  return generateFallbackCandles(upper, interval);
+  const fallback = generateFallbackCandles(upper, interval);
+  candleCache.set(cacheKey, { candles: fallback, timestamp: Date.now() });
+  return fallback;
 }
 
 function generateFallbackCandles(symbol: string, interval: string): Candle[] {

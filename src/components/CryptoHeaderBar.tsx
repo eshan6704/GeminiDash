@@ -15,10 +15,6 @@ interface CryptoHeaderBarProps {
   totalEquity: number;
   isLiveConnected: boolean;
   goldHedgeRatio: number;
-  cloudSyncStatus: 'idle' | 'syncing' | 'success' | 'error';
-  lastCloudSync: number | null;
-  onManualCloudSync: () => void;
-  onOpenFirestoreModal: () => void; // Using generic name to keep it compatible with App.tsx for now
   onOpenWhatIf: () => void;
   onOpenAiReview: () => void;
   onOpenSettings: () => void;
@@ -31,10 +27,6 @@ export const CryptoHeaderBar: React.FC<CryptoHeaderBarProps> = ({
   totalEquity,
   isLiveConnected,
   goldHedgeRatio,
-  cloudSyncStatus,
-  lastCloudSync,
-  onManualCloudSync,
-  onOpenFirestoreModal,
   onOpenWhatIf,
   onOpenAiReview,
   onOpenSettings,

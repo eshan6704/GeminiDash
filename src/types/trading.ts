@@ -48,6 +48,7 @@ export interface Position {
   unrealizedPnL: number;
   unrealizedPnLPercent: number;
   feePaid: number;
+  accountSource?: 'MANUAL' | 'AUTO_GRID';
 }
 
 export interface LimitOrder {
@@ -63,6 +64,7 @@ export interface LimitOrder {
   stopLossPrice?: number;
   trailingStopPercent?: number;
   createdAt: number;
+  accountSource?: 'MANUAL' | 'AUTO_GRID';
 }
 
 export interface TradeRecord {
@@ -80,6 +82,7 @@ export interface TradeRecord {
   openTime: number;
   closeTime: number;
   closeReason: 'MANUAL' | 'TAKE_PROFIT' | 'STOP_LOSS' | 'LIQUIDATION' | 'SPOT_SELL';
+  accountSource?: 'MANUAL' | 'AUTO_GRID';
 }
 
 export interface SpotHolding {
@@ -138,10 +141,132 @@ export const SHARK_EXCHANGE: SharkBrokerSpecs = {
   defaultLot: 0.002,
   goldDefaultSize: 0.1, // 0.1 XAUT / Gold
   btcDefaultLot: 0.002, // 0.002 BTC
-  goldMaxLeverage: 75, // 75x for Gold
+  goldMaxLeverage: 150, // Up to 150x supported
   btcMaxLeverage: 150, // 150x for BTC
-  restMaxLeverage: 25, // 25x for rest like SOL, ETH, etc.
+  restMaxLeverage: 150, // Up to 150x supported across symbols
 };
+
+export interface TradeMarginCalculation {
+  symbolPrice: number;
+  lot: number;
+  leverage: number;
+  tradeValue: number; // symbolPrice * lot
+  marginRequired: number; // tradeValue / leverage
+  makerFee: number; // tradeValue * 0.016% (0.00016)
+  takerFee: number; // tradeValue * 0.064% (4x maker = 0.00064)
+  activeFee: number; // makerFee if Maker, takerFee if Taker (4x)
+  exitPrice: number;
+  exitTradeValue: number; // exitPrice * lot
+  tradeValueDiff: number; // (exitTradeValue - tradeValue) for LONG, (tradeValue - exitTradeValue) for SHORT
+  netReturn: number; // Return = Change in Trade Value (tradeValueDiff)
+  netReturnAfterFees: number; // tradeValueDiff - activeFee
+  roePercent: number; // (netReturn / marginRequired) * 100
+}
+
+/**
+ * Canonical Margin, Fee & Return Calculator:
+ * - Trade value = symbolPrice * lot (e.g. 80000 * 0.002 = 160)
+ * - Margin required = tradeValue / leverage (e.g. 160 / 150 = 1.0667)
+ * - Fees = tradeValue * 0.016% if Maker order (Taker has 4x brokerage = 0.064%)
+ * - Return = Change in Trade Value (exitTradeValue - tradeValue for LONG, tradeValue - exitTradeValue for SHORT)
+ */
+export function calculateMarginAndReturn(params: {
+  symbolPrice: number;
+  lot: number;
+  leverage: number;
+  isMaker?: boolean;
+  exitPrice?: number;
+  side?: 'BUY' | 'SELL' | 'LONG' | 'SHORT';
+  enableFees?: boolean;
+}): TradeMarginCalculation {
+  const symbolPrice = Math.max(0, params.symbolPrice || 0);
+  const lot = Math.max(0, params.lot || 0);
+  const leverage = Math.max(1, params.leverage || 1);
+  const isMaker = params.isMaker ?? false;
+  const enableFees = params.enableFees ?? true;
+  const isLong = !params.side || params.side === 'BUY' || params.side === 'LONG';
+
+  const tradeValue = symbolPrice * lot;
+  const marginRequired = tradeValue / leverage;
+  const makerFee = enableFees ? tradeValue * SHARK_EXCHANGE.makerBrokerageRateDecimal : 0;
+  const takerFee = enableFees ? tradeValue * SHARK_EXCHANGE.takerBrokerageRateDecimal : 0;
+  const activeFee = isMaker ? makerFee : takerFee;
+
+  const exitPrice = params.exitPrice !== undefined ? Math.max(0, params.exitPrice) : symbolPrice;
+  const exitTradeValue = exitPrice * lot;
+  const tradeValueDiff = isLong
+    ? exitTradeValue - tradeValue
+    : tradeValue - exitTradeValue;
+  const netReturn = tradeValueDiff;
+  const netReturnAfterFees = tradeValueDiff - activeFee;
+  const roePercent = marginRequired > 0 ? (netReturn / marginRequired) * 100 : 0;
+
+  return {
+    symbolPrice,
+    lot,
+    leverage,
+    tradeValue,
+    marginRequired,
+    makerFee,
+    takerFee,
+    activeFee,
+    exitPrice,
+    exitTradeValue,
+    tradeValueDiff,
+    netReturn,
+    netReturnAfterFees,
+    roePercent,
+  };
+}
+
+export interface LotPointRiskCalculation {
+  entryPrice: number;
+  lotSize: number;
+  dollarRisk: number; // e.g. $3 on BTC
+  pointsDistance: number; // dollarRisk / lotSize (1 lot -> 3 pts, 0.1 -> 30 pts, 0.01 -> 300 pts, 0.002 -> 1500 pts)
+  buySlLiqPrice: number; // entryPrice - pointsDistance (e.g. 80000 - 1500 = 78500)
+  sellSlLiqPrice: number; // entryPrice + pointsDistance (e.g. 80000 + 1500 = 81500)
+  activeSlLiqPrice: number;
+  distancePercent: number;
+}
+
+/**
+ * Contract Size (Lot) Based Liquidation & Stop-Loss Point Calculator:
+ * - Points Distance = Dollar Risk ($) / Lot Size
+ *   Example for $3 on BTC:
+ *   - 1 lot     -> 3 / 1     = 3 points     (Buy @ 80000 -> 79997)
+ *   - 0.1 lot   -> 3 / 0.1   = 30 points    (Buy @ 80000 -> 79970)
+ *   - 0.01 lot  -> 3 / 0.01  = 300 points   (Buy @ 80000 -> 79700)
+ *   - 0.002 lot -> 3 / 0.002 = 1500 points  (Buy @ 80000 -> 78500)
+ */
+export function calculateLotPointsAndSlLiq(params: {
+  entryPrice: number;
+  lotSize: number;
+  dollarRisk?: number; // Default $3
+  side?: 'BUY' | 'SELL' | 'LONG' | 'SHORT';
+}): LotPointRiskCalculation {
+  const entryPrice = Math.max(0, params.entryPrice || 0);
+  const lotSize = Math.max(0.000001, params.lotSize || 0.002);
+  const dollarRisk = Math.max(0.01, params.dollarRisk ?? 3);
+  const isLong = !params.side || params.side === 'BUY' || params.side === 'LONG';
+
+  const pointsDistance = dollarRisk / lotSize;
+  const buySlLiqPrice = Math.max(0, entryPrice - pointsDistance);
+  const sellSlLiqPrice = entryPrice + pointsDistance;
+  const activeSlLiqPrice = isLong ? buySlLiqPrice : sellSlLiqPrice;
+  const distancePercent = entryPrice > 0 ? (pointsDistance / entryPrice) * 100 : 0;
+
+  return {
+    entryPrice,
+    lotSize,
+    dollarRisk,
+    pointsDistance,
+    buySlLiqPrice,
+    sellSlLiqPrice,
+    activeSlLiqPrice,
+    distancePercent,
+  };
+}
 
 export function getBrokerMaxLeverage(symbol: string): number {
   const s = symbol.toUpperCase();

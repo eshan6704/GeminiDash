@@ -120,11 +120,11 @@ export function exportTradeHistoryAndMetricsCSV(params: ExportReportParams) {
     'Amount / Lots',
     'Entry Price ($)',
     'Exit Price ($)',
-    'Trade Value / Notional ($)',
-    'Gross PnL ($)',
-    'Brokerage Fee (0.016%) ($)',
-    'Net Realized PnL ($)',
-    'Net Return (%)',
+    'Entry Trade Value ($)',
+    'Exit Trade Value ($)',
+    'Return (Change in Trade Value) ($)',
+    'Brokerage Fee ($)',
+    'Return ROE (%)',
     'Exit Reason',
   ];
   lines.push(historyHeaders.map(escapeCSV).join(','));
@@ -134,8 +134,10 @@ export function exportTradeHistoryAndMetricsCSV(params: ExportReportParams) {
   } else {
     tradeHistory.forEach((t) => {
       const closedDate = new Date(t.closeTime).toISOString();
-      const notional = t.amount * t.entryPrice;
-      const grossPnL = t.realizedPnL + t.fees;
+      const isLong = t.side === 'LONG' || t.side === 'BUY';
+      const entryTradeVal = t.amount * t.entryPrice;
+      const exitTradeVal = t.amount * t.exitPrice;
+      const changeInTradeVal = isLong ? exitTradeVal - entryTradeVal : entryTradeVal - exitTradeVal;
 
       const row = [
         t.id,
@@ -148,10 +150,10 @@ export function exportTradeHistoryAndMetricsCSV(params: ExportReportParams) {
         t.amount.toFixed(4),
         t.entryPrice.toFixed(2),
         t.exitPrice.toFixed(2),
-        notional.toFixed(2),
-        grossPnL.toFixed(2),
+        entryTradeVal.toFixed(2),
+        exitTradeVal.toFixed(2),
+        changeInTradeVal.toFixed(4),
         t.fees.toFixed(4),
-        t.realizedPnL.toFixed(2),
         `${t.realizedPnLPercent >= 0 ? '+' : ''}${t.realizedPnLPercent.toFixed(2)}%`,
         t.closeReason,
       ];
