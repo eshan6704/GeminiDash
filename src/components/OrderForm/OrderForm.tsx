@@ -33,6 +33,7 @@ import { AutoGridPanel } from '../AutoGrid/AutoGridPanel';
 import { TradeSlotLadderWidget } from './TradeSlotLadderWidget';
 import { MAX_RUNNING_TRADES } from '../../utils/tradeEntryConditions';
 import { useTheme } from '../../context/ThemeContext';
+import { useInrCurrency, InrCurrencyToggle } from '../../utils/inrCurrency';
 
 interface OrderFormProps {
   asset: MarketAsset;
@@ -97,6 +98,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 }) => {
   const [terminalTab, setTerminalTab] = useState<'TRADE' | 'AUTOGRID' | 'ALERTS'>(initialTab);
   const [manualBalEditInput, setManualBalEditInput] = useState<string>(cashBalance.toFixed(0));
+  const { showInr, formatInr } = useInrCurrency();
 
   useEffect(() => {
     setManualBalEditInput(cashBalance.toFixed(0));
@@ -390,9 +392,41 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const isBtc = asset?.symbol === 'BTC';
 
   if (!asset) return null;
+
+  if (hideTabSwitcher && terminalTab === 'AUTOGRID') {
+    return (
+      <AutoGridPanel
+        asset={asset}
+        cashBalance={effectiveGridCash}
+        gridMarginLocked={gridMarginLocked}
+        gridUnrealizedPnL={gridUnrealizedPnL}
+        gridTotalEquity={gridTotalEquity}
+        onUpdateGridBalance={onUpdateGridBalance}
+        onResetGridSimulation={onResetGridSimulation}
+        config={config}
+        gridConfig={autoGrid.gridConfig}
+        runtime={autoGrid.runtime}
+        gridLadder={autoGrid.gridLadder}
+        downsideLadder={autoGrid.downsideLadder}
+        positions={positions}
+        onOpenWhatIf={onOpenWhatIf}
+        onStartBot={autoGrid.startBot}
+        onPauseBot={autoGrid.pauseBot}
+        onResumeBot={autoGrid.resumeBot}
+        onStopBot={autoGrid.stopBot}
+        onResetBot={autoGrid.resetBot}
+        onUpdateConfig={autoGrid.updateConfig}
+        onApplyGoldPreset={autoGrid.applyGoldPreset}
+        onApplyBtcPreset={autoGrid.applyBtcPreset}
+        onClearLogs={autoGrid.clearLogs}
+        onRefreshTrends={autoGrid.refreshCandleTrends}
+      />
+    );
+  }
+
   return (
     <div
-      className="rounded-lg p-3.5 flex flex-col space-y-3 border transition-colors bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)]"
+      className="rounded-xl p-4 flex flex-col space-y-3 border transition-colors bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)] shadow-sm"
     >
       {/* Terminal View Switcher */}
       {!hideTabSwitcher && (
@@ -461,7 +495,16 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           onClose={() => setTerminalTab('TRADE')}
         />
       ) : (
-        <form noValidate onSubmit={handleSubmit} className="w-full">
+        <form noValidate onSubmit={handleSubmit} className="w-full space-y-2.5">
+          {/* Manual Trade Simulator Top Bar with INR Currency Toggle */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-[var(--theme-border-subtle)]">
+            <div className="flex items-center gap-2 text-xs font-extrabold text-[var(--theme-text-primary)]">
+              <Sliders className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Manual Trade &amp; Return Simulator ({asset.symbol}/USDT)</span>
+            </div>
+            <InrCurrencyToggle />
+          </div>
+
           {/* Minimal 3-Column Manual Trade Form */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-start">
             
@@ -722,7 +765,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                         />
                         <span>SL Auto-Close</span>
                       </span>
-                      <span className="font-mono text-rose-400 text-[9px]">${effectiveLiqDollarCap}</span>
+                      <span className="font-mono text-rose-400 text-[9px]">
+                        ${effectiveLiqDollarCap}
+                        {showInr ? ` (${formatInr(effectiveLiqDollarCap)})` : ''}
+                      </span>
                     </label>
                     <input
                       type="number"
@@ -740,25 +786,77 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             {/* COLUMN 3: Minimal Summary & Execute */}
             <div className="space-y-2.5">
               <div className="p-2.5 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-xs font-mono space-y-1.5">
-                <div className="flex justify-between">
-                  <span className="text-[var(--theme-text-muted)]">Trade Value:</span>
-                  <span className="font-bold text-[var(--theme-text-primary)]">${tradeValue.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-[var(--theme-text-muted)]">Margin ({effectiveLeverage}x):</span>
-                  <span className="font-bold text-amber-500">${numericMargin.toFixed(4)}</span>
-                </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-[var(--theme-text-muted)]">Fee:</span>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setFeeTier(feeTier === 'MAKER' ? 'TAKER' : 'MAKER')}
-                      className="text-[10px] underline text-emerald-500 cursor-pointer"
+                  <span className="text-[var(--theme-text-muted)]">Entry &rarr; Cur/Target:</span>
+                  <span className="font-bold text-[var(--theme-text-primary)]">
+                    ${execPrice.toFixed(2)} &rarr; ${effectiveExitPreviewPrice.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-[var(--theme-text-muted)]">Trade Val (Entry &rarr; Target):</span>
+                  <div className="text-right">
+                    <span className="font-bold text-[var(--theme-text-primary)] block">
+                      ${tradeValue.toFixed(2)} &rarr; ${exitTradeValue.toFixed(2)}
+                    </span>
+                    {showInr && (
+                      <span className="text-[10px] font-bold text-emerald-700 block">
+                        {formatInr(tradeValue)} &rarr; {formatInr(exitTradeValue)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-[var(--theme-text-muted)]">Return (&Delta; Price &times; Lot):</span>
+                  <div className="text-right">
+                    <span
+                      className={`font-extrabold block ${
+                        estimatedReturn >= 0 ? 'text-emerald-500' : 'text-rose-500'
+                      }`}
                     >
-                      {isMakerOrder ? 'Maker 0.016%' : 'Taker 0.064%'}
-                    </button>
-                    <span className="font-bold">${estimatedFee.toFixed(4)}</span>
+                      {estimatedReturn >= 0 ? '+' : ''}${estimatedReturn.toFixed(4)} (
+                      {estimatedReturnRoePct >= 0 ? '+' : ''}
+                      {estimatedReturnRoePct.toFixed(1)}%)
+                    </span>
+                    {showInr && (
+                      <span
+                        className={`text-[10px] font-bold block ${
+                          estimatedReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                        }`}
+                      >
+                        {formatInr(estimatedReturn, { signed: true })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-[var(--theme-text-muted)]">Margin ({effectiveLeverage}x):</span>
+                  <div className="text-right">
+                    <span className="font-bold text-amber-500 block">${numericMargin.toFixed(4)}</span>
+                    {showInr && (
+                      <span className="text-[10px] font-bold text-amber-600 block">
+                        {formatInr(numericMargin)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-[var(--theme-text-muted)]">Fee:</span>
+                  <div className="text-right">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setFeeTier(feeTier === 'MAKER' ? 'TAKER' : 'MAKER')}
+                        className="text-[10px] underline text-emerald-500 cursor-pointer"
+                      >
+                        {isMakerOrder ? 'Maker 0.016%' : 'Taker 0.064%'}
+                      </button>
+                      <span className="font-bold">${estimatedFee.toFixed(4)}</span>
+                    </div>
+                    {showInr && (
+                      <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
+                        {formatInr(estimatedFee)} &middot; Net Return: {formatInr(estimatedReturn - estimatedFee, { signed: true })}
+                      </span>
+                    )}
                   </div>
                 </div>
                 {mode === 'LEVERAGED' && (

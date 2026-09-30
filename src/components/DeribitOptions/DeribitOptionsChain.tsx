@@ -4,7 +4,13 @@ import {
   RefreshCw,
   Sliders,
   Calendar,
+  Layers,
+  Plus,
+  Trash2,
+  ArrowUpRight,
+  ArrowDownRight,
 } from 'lucide-react';
+import { useInrCurrency, InrCurrencyToggle } from '../../utils/inrCurrency';
 
 interface OptionSummary {
   instrument_name: string;
@@ -22,6 +28,21 @@ interface OptionSummary {
   iv: number;
   delta: number;
   gamma: number;
+}
+
+interface OptionPositionItem {
+  id: string;
+  instrument_name: string;
+  currency: 'BTC' | 'ETH' | 'SOL' | 'PAXG';
+  expiry: string;
+  strike: number;
+  type: 'call' | 'put';
+  side: 'LONG' | 'SHORT';
+  contracts: number;
+  entrySpotPrice: number;
+  entryMarkUsd: number;
+  delta: number;
+  iv: number;
 }
 
 interface DeribitOptionsChainProps {
@@ -63,8 +84,11 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
   const [strikeFilter, setStrikeFilter] = useState<'ALL' | 'ATM' | 'ITM' | 'OTM'>('ATM');
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [optionsData, setOptionsData] = useState<OptionSummary[]>([]);
+  const { showInr, formatInr } = useInrCurrency();
   const [expiryList, setExpiryList] = useState<string[]>([]);
   const [underlyingIndexPrice, setUnderlyingIndexPrice] = useState<number>(currentBtcPrice);
+  const [defaultLotSize, setDefaultLotSize] = useState<number>(0.1);
+  const [optionPositions, setOptionPositions] = useState<OptionPositionItem[]>([]);
 
   const activeSpotPrice = useMemo(() => {
     if (currency === 'BTC') return currentBtcPrice;
@@ -234,6 +258,79 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
     fetchDeribitData();
   }, [currency]);
 
+  // Seed default ATM Call & Put option positions when optionsData loads if none exist for currency
+  useEffect(() => {
+    if (optionsData.length === 0) return;
+    setOptionPositions((prev) => {
+      if (prev.some((p) => p.currency === currency)) return prev;
+      const spot = underlyingIndexPrice || activeSpotPrice;
+      const step =
+        currency === 'BTC' ? 1000 : currency === 'ETH' ? 50 : currency === 'SOL' ? 5 : 25;
+      const atmStrike = Math.round(spot / step) * step;
+      const exp = selectedExpiry || expiryList[0] || '26SEP26';
+      const atmCall = optionsData.find(
+        (o) => o.strike === atmStrike && o.type === 'call' && o.expiryDateStr === exp
+      );
+      const otmPut = optionsData.find(
+        (o) => o.strike === atmStrike - step && o.type === 'put' && o.expiryDateStr === exp
+      );
+      const seeded: OptionPositionItem[] = [];
+      const lot = currency === 'BTC' ? 0.1 : currency === 'ETH' ? 1.0 : 5.0;
+      if (atmCall) {
+        seeded.push({
+          id: `opt-call-${currency}-${atmStrike}`,
+          instrument_name: atmCall.instrument_name,
+          currency,
+          expiry: exp,
+          strike: atmCall.strike,
+          type: 'call',
+          side: 'LONG',
+          contracts: lot,
+          entrySpotPrice: spot * 0.996,
+          entryMarkUsd: atmCall.mark_price_usd * 0.92,
+          delta: atmCall.delta,
+          iv: atmCall.iv,
+        });
+      }
+      if (otmPut) {
+        seeded.push({
+          id: `opt-put-${currency}-${otmPut.strike}`,
+          instrument_name: otmPut.instrument_name,
+          currency,
+          expiry: exp,
+          strike: otmPut.strike,
+          type: 'put',
+          side: 'LONG',
+          contracts: lot,
+          entrySpotPrice: spot * 1.002,
+          entryMarkUsd: otmPut.mark_price_usd * 0.95,
+          delta: otmPut.delta,
+          iv: otmPut.iv,
+        });
+      }
+      return [...prev, ...seeded];
+    });
+  }, [optionsData, currency, selectedExpiry, expiryList, underlyingIndexPrice, activeSpotPrice]);
+
+  const handleAddOptionPosition = (opt: OptionSummary, side: 'LONG' | 'SHORT' = 'LONG') => {
+    const spot = underlyingIndexPrice || activeSpotPrice;
+    const newPos: OptionPositionItem = {
+      id: `${opt.instrument_name}-${Date.now()}`,
+      instrument_name: opt.instrument_name,
+      currency,
+      expiry: opt.expiryDateStr,
+      strike: opt.strike,
+      type: opt.type,
+      side,
+      contracts: defaultLotSize,
+      entrySpotPrice: spot,
+      entryMarkUsd: opt.mark_price_usd,
+      delta: opt.delta,
+      iv: opt.iv,
+    };
+    setOptionPositions((prev) => [newPos, ...prev]);
+  };
+
   // Option Chain Matrix Grouping (by Strike)
   const optionMatrix = useMemo(() => {
     const activeData = optionsData.filter((d) => d.expiryDateStr === selectedExpiry);
@@ -305,6 +402,9 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
     };
   }, [optionsData, selectedExpiry, underlyingIndexPrice, activeSpotPrice]);
 
+  const currentSpot = underlyingIndexPrice || activeSpotPrice;
+  const visibleOptionPositions = optionPositions.filter((p) => p.currency === currency);
+
   return (
     <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] text-[var(--theme-text-primary)] p-4 sm:p-5 shadow-sm space-y-4">
       {/* HEADER BAR */}
@@ -314,15 +414,15 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h2 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
-                Deribit Institutional Options Chain
+                Deribit Institutional Options Chain &amp; Positions
               </h2>
-              <span aria-hidden="true" className="text-[var(--theme-text-muted)]">·</span>
+              <span aria-hidden="true" className="text-[var(--theme-text-muted)]">&middot;</span>
               <span className="text-[11px] font-mono font-bold text-emerald-600">
                 Active Expiry: {selectedExpiry || '26SEP26'}
               </span>
             </div>
             <p className="text-[11px] text-[var(--theme-text-muted)]">
-              Side-by-side Calls vs Puts, Implied Volatility (IV), Delta Greeks, Open Interest &amp; Max Pain
+              Option Position Table (Entry vs Current Mark &amp; Trade Value Return) + Side-by-Side Calls vs Puts Matrix
             </p>
           </div>
         </div>
@@ -362,16 +462,16 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs font-mono tabular-nums">
         <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
           <div className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
-            Underlying Index ({currency}/USDT)
+            Underlying Spot ({currency}/USDT)
           </div>
           <div className="text-sm sm:text-base font-extrabold text-[var(--theme-text-primary)] mt-0.5">
-            ${(underlyingIndexPrice || activeSpotPrice).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${currentSpot.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
         </div>
 
         <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
           <div className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
-            Put / Call Ratio (Vol · OI)
+            Put / Call Ratio (Vol &middot; OI)
           </div>
           <div
             className={`text-sm sm:text-base font-extrabold mt-0.5 ${
@@ -398,6 +498,234 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
           <div className="text-sm sm:text-base font-extrabold text-amber-600 mt-0.5">
             {metrics.avgIv}% IV
           </div>
+        </div>
+      </div>
+
+      {/* OPTION POSITIONS TABLE (LINKED ENTRY VS CURRENT MARK & TRADE VALUE RETURN) */}
+      <div className="rounded-lg border border-[var(--theme-border)] overflow-hidden">
+        <div className="px-3.5 py-2.5 bg-[var(--theme-bg-card-subtle)] border-b border-[var(--theme-border-subtle)] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-emerald-600" />
+            <h3 className="text-xs font-extrabold text-[var(--theme-text-primary)]">
+              Option Positions Table ({currency} &middot; {visibleOptionPositions.length} Open)
+            </h3>
+            <span className="text-[11px] text-[var(--theme-text-muted)] font-mono">
+              Click any Call or Put in the chain below to add an option position
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <InrCurrencyToggle compact />
+            <span className="font-sans text-[11px] text-[var(--theme-text-secondary)] font-semibold">
+              Contract Lot:
+            </span>
+            <input
+              type="number"
+              min="0.01"
+              step="0.05"
+              value={defaultLotSize}
+              onChange={(e) => setDefaultLotSize(Math.max(0.01, parseFloat(e.target.value) || 0.1))}
+              className="w-16 px-2 py-0.5 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold text-xs"
+            />
+            {visibleOptionPositions.length > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setOptionPositions((prev) => prev.filter((p) => p.currency !== currency))
+                }
+                className="inline-flex items-center gap-1 px-2 py-1 rounded border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 font-sans font-bold text-[11px] cursor-pointer"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Clear</span>
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          {visibleOptionPositions.length === 0 ? (
+            <div className="py-6 text-center text-xs text-[var(--theme-text-muted)]">
+              No active {currency} option positions. Click any Call Mark or Put Mark in the chain below to simulate an option position.
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse text-xs font-mono tabular-nums">
+              <thead>
+                <tr className="text-[10px] font-sans font-bold text-[var(--theme-text-muted)] bg-[var(--theme-bg-card-subtle)] border-b border-[var(--theme-border)]">
+                  <th className="py-2 px-3">Option Contract</th>
+                  <th className="py-2 px-2.5 text-right">Size (Lot)</th>
+                  <th className="py-2 px-3 text-right">Underlying (Entry &rarr; Current Spot)</th>
+                  <th className="py-2 px-3 text-right">Option Mark (Entry &rarr; Current $)</th>
+                  <th className="py-2 px-3 text-right">Trade Val (Entry &rarr; Current $)</th>
+                  <th className="py-2 px-3 text-right">Return (Entry vs Current &middot; &Delta; Val)</th>
+                  <th className="py-2 px-3 text-right">Breakeven</th>
+                  <th className="py-2 px-3 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--theme-border-subtle)]">
+                {visibleOptionPositions.map((pos) => {
+                  const liveOpt = optionsData.find(
+                    (o) => o.instrument_name === pos.instrument_name
+                  );
+                  const spotDelta = currentSpot - pos.entrySpotPrice;
+                  // Dynamic option mark linked to current spot movement via Delta if live option match
+                  const currentMarkUsd = liveOpt
+                    ? Math.max(
+                        0.5,
+                        pos.entryMarkUsd +
+                          (pos.type === 'call'
+                            ? spotDelta * Math.abs(pos.delta)
+                            : -spotDelta * Math.abs(pos.delta))
+                      )
+                    : Math.max(0.5, pos.entryMarkUsd + spotDelta * pos.delta);
+
+                  const markDelta =
+                    pos.side === 'LONG'
+                      ? currentMarkUsd - pos.entryMarkUsd
+                      : pos.entryMarkUsd - currentMarkUsd;
+                  const entryTradeVal = pos.entryMarkUsd * pos.contracts;
+                  const currentTradeVal = currentMarkUsd * pos.contracts;
+                  const totalReturn = markDelta * pos.contracts;
+                  const returnPct = entryTradeVal > 0 ? (totalReturn / entryTradeVal) * 100 : 0;
+                  const isProfit = totalReturn >= 0;
+                  const breakeven =
+                    pos.type === 'call'
+                      ? pos.strike + pos.entryMarkUsd
+                      : pos.strike - pos.entryMarkUsd;
+
+                  return (
+                    <tr
+                      key={pos.id}
+                      className="hover:bg-[var(--theme-bg-card-subtle)] transition-colors"
+                    >
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className={`inline-flex items-center gap-0.5 font-extrabold ${
+                              pos.type === 'call' ? 'text-emerald-600' : 'text-rose-600'
+                            }`}
+                          >
+                            {pos.type === 'call' ? (
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                            ) : (
+                              <ArrowDownRight className="w-3.5 h-3.5" />
+                            )}
+                            {pos.side} {pos.type.toUpperCase()}
+                          </span>
+                          <span className="font-bold text-[var(--theme-text-primary)]">
+                            ${pos.strike.toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-[var(--theme-text-muted)]">
+                          {pos.instrument_name} &middot; &Delta; {pos.delta}
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-2.5 text-right font-bold text-[var(--theme-text-primary)]">
+                        {pos.contracts.toFixed(2)}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <div>
+                          <span className="text-[var(--theme-text-secondary)]">
+                            ${pos.entrySpotPrice.toFixed(1)}
+                          </span>{' '}
+                          &rarr;{' '}
+                          <strong className="text-[var(--theme-text-primary)]">
+                            ${currentSpot.toFixed(1)}
+                          </strong>
+                        </div>
+                        <div
+                          className={`text-[10px] font-bold ${
+                            spotDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {spotDelta >= 0 ? '+' : ''}
+                          {spotDelta.toFixed(1)} pts
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <div>
+                          <span className="text-[var(--theme-text-secondary)]">
+                            ${pos.entryMarkUsd.toFixed(2)}
+                          </span>{' '}
+                          &rarr;{' '}
+                          <strong className="text-[var(--theme-text-primary)]">
+                            ${currentMarkUsd.toFixed(2)}
+                          </strong>
+                        </div>
+                        <div
+                          className={`text-[10px] font-bold ${
+                            markDelta >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {markDelta >= 0 ? '+' : ''}${markDelta.toFixed(2)} / contract
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <div>
+                          <span className="text-[var(--theme-text-secondary)]">
+                            ${entryTradeVal.toFixed(2)}
+                          </span>{' '}
+                          &rarr;{' '}
+                          <strong className="text-[var(--theme-text-primary)]">
+                            ${currentTradeVal.toFixed(2)}
+                          </strong>
+                        </div>
+                        {showInr && (
+                          <div className="text-[10px] font-bold text-emerald-700">
+                            {formatInr(entryTradeVal)} &rarr; {formatInr(currentTradeVal)}
+                          </div>
+                        )}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
+                        <div
+                          className={`font-extrabold ${
+                            isProfit ? 'text-emerald-600' : 'text-rose-600'
+                          }`}
+                        >
+                          {isProfit ? '+' : ''}${totalReturn.toFixed(2)} (
+                          {isProfit ? '+' : ''}
+                          {returnPct.toFixed(1)}%)
+                        </div>
+                        {showInr && (
+                          <div
+                            className={`text-[10px] font-bold ${
+                              isProfit ? 'text-emerald-700' : 'text-rose-600'
+                            }`}
+                          >
+                            {formatInr(totalReturn, { signed: true })}
+                          </div>
+                        )}
+                        <div className="text-[10px] text-[var(--theme-text-muted)]">
+                          ({markDelta >= 0 ? '+' : ''}${markDelta.toFixed(2)} &times;{' '}
+                          {pos.contracts.toFixed(2)})
+                        </div>
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right font-semibold text-amber-600">
+                        ${breakeven.toFixed(1)}
+                      </td>
+
+                      <td className="py-2.5 px-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setOptionPositions((prev) => prev.filter((item) => item.id !== pos.id))
+                          }
+                          className="px-2.5 py-1 rounded-md bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-600 font-sans font-bold text-[11px] transition-colors cursor-pointer"
+                        >
+                          Close
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
 
@@ -462,13 +790,13 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
                 colSpan={6}
                 className="py-2 px-3 text-center text-emerald-600 border-r border-[var(--theme-border)]"
               >
-                Calls (Bullish Contracts)
+                Calls (Bullish Contracts &middot; Click Call Mark to Add Position)
               </th>
               <th className="py-2 px-3 text-center text-[var(--theme-text-primary)] font-extrabold border-r border-[var(--theme-border)]">
                 Strike ($)
               </th>
               <th colSpan={6} className="py-2 px-3 text-center text-rose-600">
-                Puts (Bearish Contracts)
+                Puts (Bearish Contracts &middot; Click Put Mark to Add Position)
               </th>
             </tr>
             {/* Column Sub-headers */}
@@ -480,14 +808,14 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
               <th className="py-1.5 px-2 text-right">IV</th>
               <th className="py-1.5 px-2 text-right">Bid / Ask ($)</th>
               <th className="py-1.5 px-2.5 text-right text-emerald-600 border-r border-[var(--theme-border)]">
-                Call Mark
+                Call Mark (+Pos)
               </th>
               {/* Strike Header */}
               <th className="py-1.5 px-3 text-center text-[var(--theme-text-primary)] font-extrabold border-r border-[var(--theme-border)]">
                 Strike
               </th>
               {/* Puts headers */}
-              <th className="py-1.5 px-2.5 text-left text-rose-600">Put Mark</th>
+              <th className="py-1.5 px-2.5 text-left text-rose-600">Put Mark (+Pos)</th>
               <th className="py-1.5 px-2 text-left">Bid / Ask ($)</th>
               <th className="py-1.5 px-2 text-left">IV</th>
               <th className="py-1.5 px-2 text-left">Delta</th>
@@ -527,18 +855,28 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
                       : '-'}
                   </td>
                   <td
-                    className={`py-1.5 px-2.5 text-right font-extrabold border-r border-[var(--theme-border)] ${
+                    onClick={() => row.call && handleAddOptionPosition(row.call, 'LONG')}
+                    title="Click to open simulated Long Call position"
+                    className={`py-1.5 px-2.5 text-right font-extrabold border-r border-[var(--theme-border)] cursor-pointer hover:bg-emerald-500/15 transition-colors ${
                       isCallItm
                         ? 'text-emerald-600 bg-emerald-500/[0.06]'
                         : 'text-[var(--theme-text-primary)]'
                     }`}
                   >
-                    {row.call
-                      ? `$${row.call.mark_price_usd.toLocaleString('en-US', {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: 1,
-                        })}`
-                      : '-'}
+                    {row.call ? (
+                      <span className="inline-flex items-center justify-end gap-1">
+                        <span>
+                          $
+                          {row.call.mark_price_usd.toLocaleString('en-US', {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}
+                        </span>
+                        <Plus className="w-3 h-3 text-emerald-600 opacity-75" />
+                      </span>
+                    ) : (
+                      '-'
+                    )}
                   </td>
 
                   {/* STRIKE COLUMN */}
@@ -556,18 +894,28 @@ export const DeribitOptionsChain: React.FC<DeribitOptionsChainProps> = ({
 
                   {/* PUTS SIDE */}
                   <td
-                    className={`py-1.5 px-2.5 text-left font-extrabold ${
+                    onClick={() => row.put && handleAddOptionPosition(row.put, 'LONG')}
+                    title="Click to open simulated Long Put position"
+                    className={`py-1.5 px-2.5 text-left font-extrabold cursor-pointer hover:bg-rose-500/15 transition-colors ${
                       isPutItm
                         ? 'text-rose-600 bg-rose-500/[0.06]'
                         : 'text-[var(--theme-text-primary)]'
                     }`}
                   >
-                    {row.put
-                      ? `$${row.put.mark_price_usd.toLocaleString('en-US', {
-                          minimumFractionDigits: 1,
-                          maximumFractionDigits: 1,
-                        })}`
-                      : '-'}
+                    {row.put ? (
+                      <span className="inline-flex items-center gap-1">
+                        <span>
+                          $
+                          {row.put.mark_price_usd.toLocaleString('en-US', {
+                            minimumFractionDigits: 1,
+                            maximumFractionDigits: 1,
+                          })}
+                        </span>
+                        <Plus className="w-3 h-3 text-rose-600 opacity-75" />
+                      </span>
+                    ) : (
+                      '-'
+                    )}
                   </td>
                   <td className="py-1.5 px-2 text-left text-[11px] text-[var(--theme-text-secondary)] whitespace-nowrap">
                     {row.put

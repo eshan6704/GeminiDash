@@ -329,26 +329,38 @@ export interface AutoGridConfig {
   timeframeFilter: AutoGridTimeframeFilter; // '15m' | '1h' | 'CONFLUENCE'
   // Grid Spacing Strategy Mode: EQUAL (0.5x up, 1.0x down) vs STEP (1x, 2x, 4x with editable multiplier)
   spacingMode: AutoGridSpacingMode; // 'EQUAL' | 'STEP'
-  upsideMultiplier: number; // multiplier for upside gap (default: 0.5 -> G * 0.5 = 25 pts)
-  downsideMultiplier: number; // multiplier for downside gap (default: 1.0 -> G * 1.0 = 50 pts)
+  // Digit-Reference & Factor-Based Scaling Parameters:
+  // Example: BTC @ 85,436 -> 6-digit min ref (100,000) -> 3-digit min Base G (100)
+  // G = baseG * gridScaleFactor
+  // Entry = +entryGapFactor * G (default 0.05 * G)
+  // SL in Start = -slStartFactor * G trailing from price (default 0.5 * G)
+  // Winning Condition = > winConditionFactor * G (default 0.5 * G)
+  // SL After Win = -slAfterFactor * G trailing from peak price (default 0.1 * G)
+  gridScaleFactor?: number; // default: 1.0 (scales Base G)
+  entryGapFactor?: number; // default: 0.05 (+0.05 * G entry trigger)
+  slStartFactor?: number; // default: 0.5 (-0.5 * G trailing SL at start)
+  winConditionFactor?: number; // default: 0.5 (> 0.5 * G winning condition)
+  slAfterFactor?: number; // default: 0.1 (-0.1 * G tight trailing SL after winning condition)
+  upsideMultiplier: number; // multiplier for upside gap (default: 0.5 -> G * 0.5)
+  downsideMultiplier: number; // multiplier for downside gap (default: 1.0 -> G * 1.0)
   stepMultiplier: number; // editable step multiplier for geometric scaling (default: 2 -> 1x, 2x, 4x...)
   downsideGapMultiplier?: number; // legacy alias for downsideMultiplier
   gridStructure?: 'BIDIRECTIONAL' | 'UP_ONLY' | 'DOWN_ONLY'; // default: BIDIRECTIONAL
-  // Point-based Grid & Entry parameters
-  gridSpacing: number; // e.g. 50 points
-  entryOffset: number; // e.g. +2.5 points from base anchor
-  initialSlOffset: number; // e.g. -50 points on start
+  // Computed Point-based Grid & Entry parameters (synced from factors * G)
+  gridSpacing: number; // G = baseG * gridScaleFactor (e.g. 100 points for BTC)
+  entryOffset: number; // entryGapFactor * G (e.g. +5 points for G=100)
+  initialSlOffset: number; // -slStartFactor * G (e.g. -50 points for G=100)
   // Chase high & Trailing Dynamic SL
-  trailingDistance: number; // e.g. 10 points (peak - 10)
-  pullbackTrigger: number; // e.g. 5 points (pullback from peak to lock SL)
-  // Step 1: Activation & Initial Profit Lock ("Once price > +25, SL will be entry +15, then start chasing")
-  profitActivationThreshold: number; // e.g. +25 points (once price > +25 from entry)
-  lockedProfitSlOffset: number; // e.g. +15 points (SL ratchets to entry + 15)
+  trailingDistance: number; // slAfterFactor * G (e.g. 10 points for G=100)
+  pullbackTrigger: number; // pullback trigger
+  // Winning Condition & Profit Lock
+  profitActivationThreshold: number; // winConditionFactor * G (e.g. +50 points for G=100)
+  lockedProfitSlOffset: number; // (winConditionFactor - slAfterFactor) * G (e.g. +40 points for G=100)
   // Guaranteed Minimum Profit Exit
-  minExitProfitOffset: number; // e.g. +15 or +25 points (minimum exit threshold)
+  minExitProfitOffset: number; // minimum exit threshold
   // Execution & Sizing
   lotSize: number; // e.g. 0.1 for XAUT, 0.002 for BTC
-  leverage: number; // e.g. 75x for Gold, 50x for BTC
+  leverage: number; // e.g. 75x for Gold, 150x for BTC
   autoLoop: boolean; // loop to next grid level upon completion
   maxGridCycles: number; // max execution cycles (e.g. 10)
   basePriceAnchor?: number; // base price level reference

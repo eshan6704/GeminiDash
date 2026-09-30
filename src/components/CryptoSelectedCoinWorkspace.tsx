@@ -10,6 +10,7 @@ import {
   SHARK_EXCHANGE,
 } from '../types/trading';
 import { TradingChart } from './Chart/TradingChart';
+import { useInrCurrency, InrCurrencyToggle } from '../utils/inrCurrency';
 import {
   TrendingUp,
   TrendingDown,
@@ -1948,6 +1949,7 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
   const [simSlDollarCap, setSimSlDollarCap] = useState<number>(3); // Default $3 on BTC (0.002 lot = 1500 pts)
   const [localForecastBalance, setLocalForecastBalance] = useState<number>(forecastBalance);
   const [forecastBalInput, setForecastBalInput] = useState<string>(forecastBalance.toFixed(0));
+  const { showInr, formatInr } = useInrCurrency();
 
   useEffect(() => {
     setLocalForecastBalance(forecastBalance);
@@ -2300,6 +2302,11 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
               }}
               className="w-16 px-1 py-0.2 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-card)] text-emerald-600 font-bold text-xs outline-none"
             />
+            {showInr && (
+              <span className="text-[10px] font-bold text-emerald-700">
+                ({formatInr(effectiveForecastBalance)})
+              </span>
+            )}
             <button
               type="button"
               onClick={() => {
@@ -2311,53 +2318,233 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
               Set
             </button>
           </div>
+
+          {/* INR Currency Toggle */}
+          <InrCurrencyToggle />
         </div>
       </div>
 
+      {/* Entry vs Current Live Link Summary Strip */}
+      {(() => {
+        const refPos = targetLivePositions[0];
+        const activeEntryPrice =
+          forecastMode === 'LIVE_RUNNING' && refPos ? refPos.entryPrice : curPrice;
+        const activeLot =
+          forecastMode === 'LIVE_RUNNING' && targetLivePositions.length > 0
+            ? targetLivePositions.reduce((acc, p) => acc + p.amount, 0)
+            : simLot;
+        const activeIsLong =
+          forecastMode === 'LIVE_RUNNING' && refPos
+            ? refPos.side === 'LONG'
+            : simSide === 'LONG';
+        const priceDeltaPts = activeIsLong
+          ? livePrice - activeEntryPrice
+          : activeEntryPrice - livePrice;
+        const entryVal =
+          forecastMode === 'LIVE_RUNNING' && targetLivePositions.length > 0
+            ? targetLivePositions.reduce((acc, p) => acc + p.entryPrice * p.amount, 0)
+            : activeEntryPrice * activeLot;
+        const currentVal =
+          forecastMode === 'LIVE_RUNNING' && targetLivePositions.length > 0
+            ? targetLivePositions.reduce((acc, p) => acc + livePrice * p.amount, 0)
+            : livePrice * activeLot;
+        const currentReturn = priceDeltaPts * activeLot;
+        const effMargin =
+          forecastMode === 'LIVE_RUNNING' && activeLiveMargin > 0 ? activeLiveMargin : simMargin;
+        const currentRoe = effMargin > 0 ? (currentReturn / effMargin) * 100 : 0;
+        const activeFeeRate =
+          simFeeTier === 'MAKER'
+            ? SHARK_EXCHANGE.makerBrokerageRateDecimal
+            : SHARK_EXCHANGE.takerBrokerageRateDecimal;
+        const activeFeeUsd =
+          forecastMode === 'LIVE_RUNNING' && targetLivePositions.length > 0
+            ? targetLivePositions.reduce((acc, p) => acc + (p.feePaid || p.entryPrice * p.amount * activeFeeRate), 0)
+            : currentVal * activeFeeRate;
+        const netReturnAfterFee = currentReturn - activeFeeUsd;
+
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] font-mono text-xs tabular-nums">
+            <div>
+              <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)] block">
+                Entry Price &rarr; Current Price (&Delta; Pts)
+              </span>
+              <span className="font-bold text-[var(--theme-text-primary)]">
+                ${activeEntryPrice.toFixed(2)} &rarr; ${livePrice.toFixed(2)}{' '}
+                <span className={priceDeltaPts >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                  ({priceDeltaPts >= 0 ? '+' : ''}
+                  {priceDeltaPts.toFixed(2)} pts)
+                </span>
+              </span>
+            </div>
+            <div>
+              <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)] block">
+                Trade Value (Entry &rarr; Current)
+              </span>
+              <span className="font-bold text-[var(--theme-text-primary)] block">
+                ${entryVal.toFixed(2)} &rarr; ${currentVal.toFixed(2)}{' '}
+                <span className="text-[10px] font-normal text-[var(--theme-text-muted)]">
+                  (Lot {activeLot})
+                </span>
+              </span>
+              {showInr && (
+                <span className="text-[10px] font-bold text-emerald-700 block">
+                  {formatInr(entryVal)} &rarr; {formatInr(currentVal)}
+                </span>
+              )}
+            </div>
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)]">
+                  Margin &amp; Fee
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setSimFeeTier(simFeeTier === 'MAKER' ? 'TAKER' : 'MAKER')}
+                  className="text-[10px] underline text-emerald-600 cursor-pointer"
+                >
+                  {simFeeTier === 'MAKER' ? 'Maker 0.016%' : 'Taker 0.064%'}
+                </button>
+              </div>
+              <span className="font-bold text-amber-600 block">
+                Mrg: ${effMargin.toFixed(4)} &middot; Fee: ${activeFeeUsd.toFixed(4)}
+              </span>
+              {showInr && (
+                <span className="text-[10px] font-bold text-amber-700 block">
+                  Mrg: {formatInr(effMargin)} &middot; Fee: {formatInr(activeFeeUsd)}
+                </span>
+              )}
+            </div>
+            <div>
+              <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)] block">
+                Live Return (Entry vs Current &middot; &Delta; Val)
+              </span>
+              <span
+                className={`font-extrabold block ${
+                  currentReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                {currentReturn >= 0 ? '+' : ''}${currentReturn.toFixed(4)} (
+                {currentRoe >= 0 ? '+' : ''}
+                {currentRoe.toFixed(1)}% ROE)
+              </span>
+              {showInr && (
+                <span
+                  className={`text-[10px] font-bold block ${
+                    currentReturn >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                  }`}
+                >
+                  {formatInr(currentReturn, { signed: true })} &middot; Net: {formatInr(netReturnAfterFee, { signed: true })}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Minimal Scenario Table (-20% to +2%) */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse text-xs font-mono">
+        <table className="w-full text-left border-collapse text-xs font-mono tabular-nums">
           <thead>
-            <tr className="text-[10px] uppercase tracking-wider text-[var(--theme-text-secondary)] border-b border-[var(--theme-border)]">
-              <th className="py-1.5 px-3">Move (%)</th>
-              <th className="py-1.5 px-3 text-right">Projected Price</th>
-              <th className="py-1.5 px-3 text-right">Trade Val (Entry → Proj)</th>
-              <th className="py-1.5 px-3 text-right">Return (Change in Trade Val)</th>
-              <th className="py-1.5 px-3 text-right">ROE %</th>
-              <th className="py-1.5 px-3 text-right">Projected Equity</th>
+            <tr className="text-[10px] font-sans font-bold text-[var(--theme-text-secondary)] border-b border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)]">
+              <th className="py-2 px-3">Move (%)</th>
+              <th className="py-2 px-3 text-right">Entry &rarr; Projected Price (&Delta; Pts)</th>
+              <th className="py-2 px-3 text-right">Trade Val (Entry &rarr; Proj)</th>
+              <th className="py-2 px-3 text-right">Fee ({simFeeTier === 'MAKER' ? '0.016%' : '0.064%'})</th>
+              <th className="py-2 px-3 text-right">Return (Entry vs Proj &middot; &Delta; Val)</th>
+              <th className="py-2 px-3 text-right">ROE %</th>
+              <th className="py-2 px-3 text-right">Projected Equity</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--theme-border-subtle)]">
             {SHOCK_STEPS.map((pct) => {
               const row = computeRow(pct);
               const isZero = pct === 0;
+              const refPos = targetLivePositions[0];
+              const baseEntryPrice =
+                forecastMode === 'LIVE_RUNNING' && refPos ? refPos.entryPrice : curPrice;
+              const activeIsLong =
+                forecastMode === 'LIVE_RUNNING' && refPos
+                  ? refPos.side === 'LONG'
+                  : simSide === 'LONG';
+              const deltaPtsFromEntry = activeIsLong
+                ? row.projectedPrice - baseEntryPrice
+                : baseEntryPrice - row.projectedPrice;
+              const feeRate =
+                simFeeTier === 'MAKER'
+                  ? SHARK_EXCHANGE.makerBrokerageRateDecimal
+                  : SHARK_EXCHANGE.takerBrokerageRateDecimal;
+              const rowFeeUsd = row.displayProjectedTradeVal * feeRate;
+              const rowNetAfterFeeUsd = row.primaryTradePnL - rowFeeUsd;
+
               return (
                 <tr
                   key={pct}
-                  className={isZero ? 'bg-emerald-500/10 font-bold' : ''}
+                  className={isZero ? 'bg-emerald-500/10 font-bold' : 'hover:bg-[var(--theme-bg-card-subtle)]'}
                 >
                   <td
                     className={`py-1.5 px-3 font-bold ${
                       pct > 0 ? 'text-emerald-600' : pct < 0 ? 'text-rose-600' : 'text-[var(--theme-text-primary)]'
                     }`}
                   >
-                    {pct > 0 ? `+${pct}%` : `${pct}%`}
+                    {pct > 0 ? `+${pct}%` : `${pct}%`} {isZero ? '· Cur' : ''}
                   </td>
-                  <td className="py-1.5 px-3 text-right font-bold text-[var(--theme-text-primary)]">
-                    ${row.projectedPrice.toLocaleString('en-US', {
-                      minimumFractionDigits: row.projectedPrice < 1 ? 4 : 2,
-                      maximumFractionDigits: row.projectedPrice < 1 ? 4 : 2,
-                    })}
+                  <td className="py-1.5 px-3 text-right whitespace-nowrap">
+                    <span className="text-[var(--theme-text-secondary)]">
+                      ${baseEntryPrice.toLocaleString('en-US', {
+                        minimumFractionDigits: baseEntryPrice < 1 ? 4 : 2,
+                        maximumFractionDigits: baseEntryPrice < 1 ? 4 : 2,
+                      })}
+                    </span>{' '}
+                    &rarr;{' '}
+                    <span className="font-bold text-[var(--theme-text-primary)]">
+                      ${row.projectedPrice.toLocaleString('en-US', {
+                        minimumFractionDigits: row.projectedPrice < 1 ? 4 : 2,
+                        maximumFractionDigits: row.projectedPrice < 1 ? 4 : 2,
+                      })}
+                    </span>{' '}
+                    <span
+                      className={`text-[10px] font-bold ${
+                        deltaPtsFromEntry >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                      }`}
+                    >
+                      ({deltaPtsFromEntry >= 0 ? '+' : ''}
+                      {deltaPtsFromEntry.toFixed(1)} pts)
+                    </span>
                   </td>
-                  <td className="py-1.5 px-3 text-right text-[var(--theme-text-secondary)]">
-                    ${row.displayEntryTradeVal.toFixed(2)} → ${row.displayProjectedTradeVal.toFixed(2)}
+                  <td className="py-1.5 px-3 text-right text-[var(--theme-text-secondary)] whitespace-nowrap">
+                    <div>
+                      ${row.displayEntryTradeVal.toFixed(2)} &rarr;{' '}
+                      <strong className="text-[var(--theme-text-primary)]">
+                        ${row.displayProjectedTradeVal.toFixed(2)}
+                      </strong>
+                    </div>
+                    {showInr && (
+                      <div className="text-[10px] font-bold text-emerald-700">
+                        {formatInr(row.displayEntryTradeVal)} &rarr; {formatInr(row.displayProjectedTradeVal)}
+                      </div>
+                    )}
+                  </td>
+                  <td className="py-1.5 px-3 text-right text-amber-600 whitespace-nowrap">
+                    <div>${rowFeeUsd.toFixed(4)}</div>
+                    {showInr && (
+                      <div className="text-[10px] font-bold text-amber-700">
+                        {formatInr(rowFeeUsd)}
+                      </div>
+                    )}
                   </td>
                   <td
-                    className={`py-1.5 px-3 text-right font-bold ${
+                    className={`py-1.5 px-3 text-right font-extrabold whitespace-nowrap ${
                       row.primaryTradePnL >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}
                   >
-                    {row.primaryTradePnL >= 0 ? '+' : ''}${row.primaryTradePnL.toFixed(4)}
+                    <div>
+                      {row.primaryTradePnL >= 0 ? '+' : ''}${row.primaryTradePnL.toFixed(4)}
+                    </div>
+                    {showInr && (
+                      <div className="text-[10px] font-bold">
+                        {formatInr(row.primaryTradePnL, { signed: true })} (Net: {formatInr(rowNetAfterFeeUsd, { signed: true })})
+                      </div>
+                    )}
                   </td>
                   <td
                     className={`py-1.5 px-3 text-right font-bold ${
@@ -2366,8 +2553,13 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                   >
                     {row.primaryRoePct >= 0 ? '+' : ''}{row.primaryRoePct.toFixed(1)}%
                   </td>
-                  <td className="py-1.5 px-3 text-right font-bold text-[var(--theme-text-primary)]">
-                    ${row.projectedEquity.toFixed(2)}
+                  <td className="py-1.5 px-3 text-right font-bold text-[var(--theme-text-primary)] whitespace-nowrap">
+                    <div>${row.projectedEquity.toFixed(2)}</div>
+                    {showInr && (
+                      <div className="text-[10px] font-bold text-[var(--theme-text-secondary)]">
+                        {formatInr(row.projectedEquity)}
+                      </div>
+                    )}
                   </td>
                 </tr>
               );

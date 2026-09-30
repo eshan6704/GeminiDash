@@ -5,10 +5,6 @@ import {
   SimulatorConfig,
   AutoGridConfig,
   AutoGridRuntimeState,
-  AutoGridLogItem,
-  AutoGridDirectionMode,
-  AutoGridTimeframeFilter,
-  AutoGridSpacingMode,
   GridLadderLevel,
 } from '../../types/trading';
 import {
@@ -16,25 +12,22 @@ import {
   Pause,
   Square,
   RotateCcw,
-  Sparkles,
-  Flame,
-  ShieldAlert,
   ArrowUpRight,
   ArrowDownRight,
   TrendingUp,
-  TrendingDown,
-  RefreshCw,
   ListFilter,
-  CheckCircle2,
   Sliders,
-  ChevronDown,
-  ChevronUp,
-  Compass,
   Layers,
   Lock,
-  AlertCircle,
+  ShieldCheck,
 } from 'lucide-react';
 import { MAX_RUNNING_TRADES, TRADE_TIER_CONFIGS } from '../../utils/tradeEntryConditions';
+import {
+  calculateDigitGridSpec,
+  snapToBaseMultiple,
+  getBasePriceStep,
+} from '../../utils/gridLadderCalculator';
+import { useInrCurrency, InrCurrencyToggle } from '../../utils/inrCurrency';
 
 interface AutoGridPanelProps {
   asset: MarketAsset;
@@ -71,7 +64,6 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   gridTotalEquity,
   onUpdateGridBalance,
   onResetGridSimulation,
-  config,
   gridConfig,
   runtime,
   gridLadder = [],
@@ -87,9 +79,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   onApplyGoldPreset,
   onApplyBtcPreset,
   onClearLogs,
-  onRefreshTrends,
 }) => {
-  const [showAdvanced, setShowAdvanced] = useState<boolean>(true);
   const [ladderTab, setLadderTab] = useState<'ALL' | 'UPSIDE' | 'DOWNSIDE'>('ALL');
   const [customAnchorInput, setCustomAnchorInput] = useState<string>(
     gridConfig.basePriceAnchor ? gridConfig.basePriceAnchor.toString() : asset.price.toString()
@@ -100,1000 +90,743 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
     setGridBalanceInput(cashBalance.toFixed(0));
   }, [cashBalance]);
 
-  const effectiveGridEquity = gridTotalEquity ?? (cashBalance + gridMarginLocked + gridUnrealizedPnL);
+  React.useEffect(() => {
+    setCustomAnchorInput(
+      gridConfig.basePriceAnchor ? gridConfig.basePriceAnchor.toString() : asset.price.toString()
+    );
+  }, [asset.symbol, gridConfig.basePriceAnchor]);
 
-  const isGold = asset.category === 'gold' || asset.symbol === 'XAUT';
-  const isRunning = gridConfig.enabled && (runtime.status === 'WAITING_FOR_ENTRY' || runtime.status === 'IN_POSITION');
+  const effectiveGridEquity =
+    gridTotalEquity ?? cashBalance + gridMarginLocked + gridUnrealizedPnL;
+
+  const isRunning =
+    gridConfig.enabled &&
+    (runtime.status === 'WAITING_FOR_ENTRY' || runtime.status === 'IN_POSITION');
   const inPosition = runtime.status === 'IN_POSITION' && runtime.entryPrice !== undefined;
+  const hasLivePosition = inPosition || positions.length > 0;
 
-  const activeSide = runtime.activeSide || gridConfig.side || 'BUY';
+  const activeSide = gridConfig.side || runtime.activeSide || 'BUY';
   const isLong = activeSide === 'BUY';
 
-  // Real-time calculations for HUD (symmetrical for Long & Short)
-  const curPrice = asset.price;
-  const entryPrice = runtime.entryPrice || (isLong ? runtime.basePrice + gridConfig.entryOffset : runtime.basePrice - gridConfig.entryOffset);
+  const curPrice = asset.price || 85435;
+
+  // Digit-Reference & Factor-Based Grid Spec (e.g. 85435 (5-digit int) -> 4-digit Base G = 1000)
+  const digitSpec = calculateDigitGridSpec(curPrice, {
+    gridScaleFactor: gridConfig.gridScaleFactor ?? 1.0,
+    entryGapFactor: gridConfig.entryGapFactor ?? 0.01,
+    slStartFactor: gridConfig.slStartFactor ?? 0.2,
+    winConditionFactor: gridConfig.winConditionFactor ?? 0.2,
+    slAfterFactor: gridConfig.slAfterFactor ?? 0.01,
+    symbol: asset.symbol,
+  });
+
+  const gValue = gridConfig.gridSpacing || digitSpec.effectiveG;
+  const baseStep = getBasePriceStep(gValue, asset.symbol);
+  const entryGapFactor = gridConfig.entryGapFactor ?? 0.01;
+  const slStartFactor = gridConfig.slStartFactor ?? 0.2;
+  const winConditionFactor = gridConfig.winConditionFactor ?? 0.2;
+  const slAfterFactor = gridConfig.slAfterFactor ?? 0.01;
+  const gridScaleFactor = gridConfig.gridScaleFactor ?? 1.0;
+
+  const entryOffsetPts = Number((gValue * entryGapFactor).toPrecision(6));
+  const slStartPts = Number((gValue * slStartFactor).toPrecision(6));
+  const winConditionPts = Number((gValue * winConditionFactor).toPrecision(6));
+  const slAfterPts = Number((gValue * slAfterFactor).toPrecision(6));
+  const lockedProfitPts = Number(Math.max(0, winConditionPts - slAfterPts).toPrecision(6));
+
+  const liveSnappedBase = snapToBaseMultiple(curPrice, gValue, asset.symbol);
+  const baseAnchorPrice = hasLivePosition
+    ? snapToBaseMultiple(
+        runtime.basePrice || gridConfig.basePriceAnchor || curPrice,
+        gValue,
+        asset.symbol
+      )
+    : snapToBaseMultiple(
+        gridConfig.basePriceAnchor || runtime.basePrice || curPrice,
+        gValue,
+        asset.symbol
+      );
+
+  React.useEffect(() => {
+    if (!hasLivePosition) {
+      setCustomAnchorInput(baseAnchorPrice.toString());
+    }
+  }, [hasLivePosition, baseAnchorPrice]);
+  const firstTriggerPrice = Number(
+    (baseAnchorPrice + (isLong ? entryOffsetPts : -entryOffsetPts)).toFixed(6)
+  );
+
+  const entryPrice = runtime.entryPrice || firstTriggerPrice;
+
   const pointsGain = inPosition
-    ? (isLong ? curPrice - runtime.entryPrice! : runtime.entryPrice! - curPrice)
+    ? isLong
+      ? curPrice - runtime.entryPrice!
+      : runtime.entryPrice! - curPrice
     : 0;
 
   const peakGain = inPosition
-    ? (isLong
-        ? (runtime.highestPriceReached || curPrice) - runtime.entryPrice!
-        : runtime.entryPrice! - (runtime.lowestPriceReached || curPrice))
+    ? isLong
+      ? (runtime.highestPriceReached || curPrice) - runtime.entryPrice!
+      : runtime.entryPrice! - (runtime.lowestPriceReached || curPrice)
     : 0;
 
-  const currentSL = runtime.currentTrailingSL || (isLong ? entryPrice + gridConfig.initialSlOffset : entryPrice - gridConfig.initialSlOffset);
+  const startSlPrice = isLong ? entryPrice - slStartPts : entryPrice + slStartPts;
+  const winTriggerPrice = isLong ? entryPrice + winConditionPts : entryPrice - winConditionPts;
+  const tightSlAtWinPrice = isLong
+    ? winTriggerPrice - slAfterPts
+    : winTriggerPrice + slAfterPts;
 
-  // Calculate estimated margin, fees, and live return for the configured lot size
-  // Trade value = symbolPrice * lot
-  // Margin required = tradeValue / leverage
-  // Fees = tradeValue * 0.016% (Maker) or 0.064% (Taker 4x)
-  // Return = Change in Trade Value (currentTradeValue - entryTradeValue for LONG, entry - current for SHORT)
+  const currentSL = runtime.currentTrailingSL || startSlPrice;
+
+  // Broker Math:
+  const { showInr, formatInr } = useInrCurrency();
   const tradeValue = curPrice * gridConfig.lotSize;
   const entryTradeValue = entryPrice * gridConfig.lotSize;
-  const requiredMargin = gridConfig.leverage > 0 ? tradeValue / gridConfig.leverage : tradeValue;
+  const requiredMargin =
+    gridConfig.leverage > 0 ? tradeValue / gridConfig.leverage : tradeValue;
   const makerFee = tradeValue * 0.00016;
   const takerFee = tradeValue * 0.00064;
-  const liveTradeValDiff = isLong
+  const liveNetReturn = isLong
     ? tradeValue - entryTradeValue
     : entryTradeValue - tradeValue;
-  const liveNetReturn = liveTradeValDiff;
+  const liveNetAfterMakerFee = liveNetReturn - makerFee;
+
+  const slStartRiskUsd = slStartPts * gridConfig.lotSize;
+  const winCondProfitUsd = winConditionPts * gridConfig.lotSize;
+  const lockedProfitUsd = lockedProfitPts * gridConfig.lotSize;
+
+  const formatPrice = (val: number) =>
+    val.toLocaleString('en-US', {
+      minimumFractionDigits: val < 10 ? 4 : 2,
+      maximumFractionDigits: val < 10 ? 4 : 2,
+    });
+
+  const upsideGapPts = Number((gValue * (gridConfig.upsideMultiplier ?? 0.5)).toPrecision(6));
+  const downsideGapPts = Number((gValue * (gridConfig.downsideMultiplier ?? 1.0)).toPrecision(6));
 
   return (
-    <div className="flex flex-col space-y-3 text-neutral-200">
-      {/* Separate Grid-Based Auto Simulation Balance Bar ($1,000 Default, Editable) */}
-      <div className="bg-neutral-950 p-3 rounded-xl border border-emerald-500/30 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
-        <div className="flex flex-wrap items-center gap-4">
-          <div>
-            <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block">
-              Auto Grid Free Cash
-            </span>
-            <span className="text-sm font-bold text-emerald-400">
-              ${cashBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block">
-              Grid Margin Locked
-            </span>
-            <span className="text-sm font-bold text-amber-400">
-              ${gridMarginLocked.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-          <div>
-            <span className="text-[10px] font-sans uppercase tracking-wider text-neutral-400 block">
-              Grid Net Equity
-            </span>
-            <span className="text-sm font-bold text-neutral-100">
-              ${effectiveGridEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          </div>
-        </div>
-
-        {/* Editable Grid Balance Input ($1,000 Default) */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[10px] font-sans font-semibold text-neutral-300">
-            Grid Simulation Balance ($):
-          </span>
-          <input
-            type="number"
-            min={0}
-            step="any"
-            value={gridBalanceInput}
-            onChange={(e) => setGridBalanceInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && onUpdateGridBalance) {
-                const val = parseFloat(gridBalanceInput);
-                if (!isNaN(val) && val >= 0) onUpdateGridBalance(val);
-              }
-            }}
-            className="w-24 px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-emerald-400 font-bold text-xs focus:outline-none focus:border-emerald-500"
-          />
-          {onUpdateGridBalance && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  const val = parseFloat(gridBalanceInput);
-                  if (!isNaN(val) && val >= 0) onUpdateGridBalance(val);
-                }}
-                className="px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] uppercase cursor-pointer transition-colors"
-              >
-                Set Balance
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setGridBalanceInput('1000');
-                  if (onResetGridSimulation) {
-                    onResetGridSimulation(1000);
-                  } else {
-                    onUpdateGridBalance(1000);
-                  }
-                }}
-                title="Reset Grid Auto Simulation Balance to $1,000 Default"
-                className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-300 font-bold text-[10px] cursor-pointer transition-colors"
-              >
-                $1,000 Default
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* 1. Header & Live Status HUD */}
-      <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-800 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-xs text-neutral-100 flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              Auto Grid Trader
-            </span>
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1.5 ${
-                runtime.status === 'IN_POSITION'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse'
-                  : runtime.status === 'WAITING_FOR_ENTRY'
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse'
-                  : runtime.status === 'PAUSED'
-                  ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-                  : runtime.status === 'COMPLETED'
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                  : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-              }`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-current" />
-              {runtime.status.replace('_', ' ')}
-            </span>
-
-            {/* Active Direction Badge (BUY LONG vs SELL SHORT) */}
-            <span
-              className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider flex items-center gap-1 ${
-                isLong
-                  ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-500/40'
-                  : 'bg-rose-950/60 text-rose-300 border border-rose-500/40'
-              }`}
-            >
-              {isLong ? (
-                <>
-                  <ArrowUpRight className="w-3 h-3 text-emerald-400" />
-                  <span>BUY (LONG)</span>
-                </>
-              ) : (
-                <>
-                  <ArrowDownRight className="w-3 h-3 text-rose-400" />
-                  <span>SELL (SHORT)</span>
-                </>
-              )}
-            </span>
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] font-mono">
-            <span className="text-neutral-400">
-              Cycle <strong className="text-neutral-200">{runtime.currentCycle}</strong>/{gridConfig.maxGridCycles}
-            </span>
-            <span className="text-neutral-600">•</span>
-            <span
-              className={`font-semibold ${
-                runtime.totalRealizedPoints >= 0 ? 'text-emerald-400' : 'text-rose-400'
-              }`}
-            >
-              {runtime.totalRealizedPoints >= 0 ? '+' : ''}
-              {runtime.totalRealizedPoints.toFixed(1)} pts
-            </span>
-          </div>
-        </div>
-
-        {/* Candle Trend Direction Monitor HUD */}
-        <div className="p-2 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-1.5 text-xs">
-          <div className="flex items-center justify-between text-[11px]">
-            <div className="flex items-center gap-1.5 text-neutral-300 font-semibold">
-              <Compass className="w-3.5 h-3.5 text-amber-400" />
-              <span>Trend Direction Signal (1h / 15m Candle):</span>
+    <div className="space-y-4 text-[var(--theme-text-primary)]">
+      {/* 1. TOP COMMAND HEADER & SIMULATION BALANCE BAR */}
+      <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3.5 border-b border-[var(--theme-border-subtle)]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600/10 border border-emerald-600/25 flex items-center justify-center font-mono font-black text-xs text-emerald-700 shrink-0">
+              G={gValue}
             </div>
-            {onRefreshTrends && (
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-sm sm:text-base font-extrabold text-[var(--theme-text-primary)]">
+                  Auto Grid Factor Engine ({asset.symbol}/USDT)
+                </h2>
+                <span aria-hidden="true" className="text-[var(--theme-text-muted)]">&middot;</span>
+                <span
+                  className={`text-xs font-mono font-bold ${
+                    runtime.status === 'IN_POSITION'
+                      ? 'text-emerald-600'
+                      : runtime.status === 'WAITING_FOR_ENTRY'
+                      ? 'text-amber-600'
+                      : 'text-[var(--theme-text-muted)]'
+                  }`}
+                >
+                  {runtime.status.replace(/_/g, ' ')}
+                </span>
+                <span aria-hidden="true" className="text-[var(--theme-text-muted)]">&middot;</span>
+                <span
+                  className={`inline-flex items-center gap-0.5 text-xs font-mono font-extrabold ${
+                    isLong ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  {isLong ? (
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  ) : (
+                    <ArrowDownRight className="w-3.5 h-3.5" />
+                  )}
+                  {isLong ? 'BUY (LONG)' : 'SELL (SHORT)'}
+                </span>
+              </div>
+              <div className="text-[11px] font-mono text-[var(--theme-text-muted)] mt-0.5 flex flex-wrap items-center gap-2">
+                <span>
+                  {digitSpec.intDigits}-Digit Int &rarr; {digitSpec.baseGDigits}-Digit G:{' '}
+                  <strong className="text-emerald-600">{digitSpec.baseG}</strong> &times;{' '}
+                  {gridScaleFactor} = <strong className="text-emerald-600">G={gValue}</strong>
+                </span>
+                <span aria-hidden="true">&middot;</span>
+                <span>
+                  Entry: <strong className="text-[var(--theme-text-primary)]">{isLong ? '+' : '-'}{entryGapFactor}*G ({isLong ? '+' : '-'}{entryOffsetPts})</strong>
+                </span>
+                <span aria-hidden="true">&middot;</span>
+                <span>
+                  SL: <strong className="text-rose-600">-{slStartFactor}*G (-{slStartPts})</strong> &rarr;{' '}
+                  <strong className="text-emerald-600">-{slAfterFactor}*G (-{slAfterPts}) when &gt;{winConditionFactor}*G (+{winConditionPts})</strong>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Primary Bot Controls & Strategy Presets */}
+          <div className="flex flex-wrap items-center gap-2">
+            <InrCurrencyToggle />
+
+            <div className="flex rounded-lg p-0.5 border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] text-[11px] font-sans font-semibold">
               <button
                 type="button"
-                onClick={onRefreshTrends}
-                className="text-[10px] text-neutral-400 hover:text-amber-400 flex items-center gap-1"
-                title="Refresh 1h & 15m candle trends"
+                onClick={onApplyBtcPreset}
+                className="px-2.5 py-1 rounded-md text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-card)] transition-colors cursor-pointer"
+                title="BTC 5-digit int (85,435) -> 4-digit G=1000, Entry 0.01*G (10), SL 0.2*G (200), Win 0.2*G (200) -> SL After Win 0.01*G (10)"
               >
-                <RefreshCw className="w-2.5 h-2.5" />
-                <span>Sync</span>
+                BTC Spec (G=1000)
+              </button>
+              <button
+                type="button"
+                onClick={onApplyGoldPreset}
+                className="px-2.5 py-1 rounded-md text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] hover:bg-[var(--theme-bg-card)] transition-colors cursor-pointer"
+                title="Apply Digit-Scaled Preset for current coin"
+              >
+                Auto Digit Spec
+              </button>
+              {onOpenWhatIf && (
+                <button
+                  type="button"
+                  onClick={onOpenWhatIf}
+                  className="px-2.5 py-1 rounded-md text-amber-600 font-bold hover:bg-[var(--theme-bg-card)] transition-colors cursor-pointer"
+                >
+                  What-If
+                </button>
+              )}
+            </div>
+
+            {!isRunning ? (
+              <button
+                type="button"
+                onClick={() =>
+                  onStartBot(
+                    hasLivePosition
+                      ? parseFloat(customAnchorInput) || baseAnchorPrice
+                      : liveSnappedBase
+                  )
+                }
+                className="py-1.5 px-3.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Start Auto Grid ({activeSide})</span>
+              </button>
+            ) : runtime.status === 'PAUSED' ? (
+              <button
+                type="button"
+                onClick={onResumeBot}
+                className="py-1.5 px-3.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Play className="w-3.5 h-3.5 fill-current" />
+                <span>Resume Grid</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onPauseBot}
+                className="py-1.5 px-3.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+              >
+                <Pause className="w-3.5 h-3.5 fill-current" />
+                <span>Pause Grid</span>
               </button>
             )}
-          </div>
 
-          <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
-            {/* 15m Candle status */}
-            <div className="p-1.5 rounded bg-neutral-950 border border-neutral-800 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-neutral-400 font-sans font-medium">15m Candle:</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded font-bold uppercase ${
-                    runtime.trend15m?.direction === 'BULLISH'
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : runtime.trend15m?.direction === 'BEARISH'
-                      ? 'bg-rose-500/20 text-rose-300'
-                      : 'bg-neutral-800 text-neutral-400'
-                  }`}
-                >
-                  {runtime.trend15m?.direction || 'ANALYZING...'}
-                </span>
-              </div>
-              <span className={runtime.trend15m && runtime.trend15m.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                {runtime.trend15m ? `${runtime.trend15m.changePercent >= 0 ? '+' : ''}${runtime.trend15m.changePercent.toFixed(2)}%` : '--'}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={() => onStopBot(inPosition)}
+              disabled={runtime.status === 'IDLE'}
+              className="py-1.5 px-3 rounded-lg border border-rose-500/30 bg-rose-500/10 hover:bg-rose-500/20 text-rose-600 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>Stop</span>
+            </button>
 
-            {/* 1h Candle status */}
-            <div className="p-1.5 rounded bg-neutral-950 border border-neutral-800 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-neutral-400 font-sans font-medium">1h Hourly:</span>
-                <span
-                  className={`px-1.5 py-0.2 rounded font-bold uppercase ${
-                    runtime.trend1h?.direction === 'BULLISH'
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : runtime.trend1h?.direction === 'BEARISH'
-                      ? 'bg-rose-500/20 text-rose-300'
-                      : 'bg-neutral-800 text-neutral-400'
-                  }`}
-                >
-                  {runtime.trend1h?.direction || 'ANALYZING...'}
-                </span>
-              </div>
-              <span className={runtime.trend1h && runtime.trend1h.changePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
-                {runtime.trend1h ? `${runtime.trend1h.changePercent >= 0 ? '+' : ''}${runtime.trend1h.changePercent.toFixed(2)}%` : '--'}
-              </span>
-            </div>
+            <button
+              type="button"
+              onClick={onResetBot}
+              className="py-1.5 px-3 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] hover:bg-[var(--theme-bg-elevated)] text-[var(--theme-text-secondary)] font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Reset</span>
+            </button>
           </div>
         </div>
 
-        {/* Live Running Trades & Progressive Entry Difficulty HUD */}
-        <div className="p-2 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-1.5 text-xs">
-          <div className="flex items-center justify-between text-[11px]">
-            <div className="flex items-center gap-1.5 text-neutral-300 font-semibold">
-              <Layers className="w-3.5 h-3.5 text-amber-400" />
-              <span>Live Trade Capacity & Entry Difficulty:</span>
+        {/* 4-Metric Capital, Digit Reference & Capacity Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 font-mono text-xs tabular-nums">
+          {/* Metric 1: Grid Cash & Editable Balance */}
+          <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-col justify-between gap-2">
+            <div className="flex items-center justify-between">
+              <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+                Auto Grid Free Cash
+              </span>
+              <div className="text-right">
+                <span className="text-sm font-black text-emerald-600 block">
+                  ${cashBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                {showInr && (
+                  <span className="text-[10px] font-bold text-emerald-700 block">
+                    {formatInr(cashBalance)}
+                  </span>
+                )}
+              </div>
             </div>
-            <span
-              className={`px-1.5 py-0.2 rounded font-mono text-[10px] font-bold border ${
-                positions.length >= MAX_RUNNING_TRADES
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  : 'bg-neutral-800 text-neutral-300 border-neutral-700'
-              }`}
-            >
-              {positions.length} / {MAX_RUNNING_TRADES} Active
+            <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--theme-border-subtle)]">
+              <input
+                type="number"
+                min={0}
+                step="any"
+                value={gridBalanceInput}
+                onChange={(e) => setGridBalanceInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && onUpdateGridBalance) {
+                    const val = parseFloat(gridBalanceInput);
+                    if (!isNaN(val) && val >= 0) onUpdateGridBalance(val);
+                  }
+                }}
+                className="w-20 px-2 py-0.5 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold text-[11px] focus:outline-none focus:border-emerald-600"
+              />
+              {onUpdateGridBalance && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const val = parseFloat(gridBalanceInput);
+                      if (!isNaN(val) && val >= 0) onUpdateGridBalance(val);
+                    }}
+                    className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold text-[10px] cursor-pointer transition-colors"
+                  >
+                    Set
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setGridBalanceInput('1000');
+                      if (onResetGridSimulation) {
+                        onResetGridSimulation(1000);
+                      } else {
+                        onUpdateGridBalance(1000);
+                      }
+                    }}
+                    className="px-2 py-0.5 rounded border border-[var(--theme-border)] bg-[var(--theme-bg-card)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)] font-sans font-semibold text-[10px] cursor-pointer transition-colors"
+                  >
+                    $1K Default
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Metric 2: Margin Locked & Net Equity */}
+          <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-col justify-between gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+                Grid Net Equity
+              </span>
+              <div className="text-right">
+                <span className="text-sm font-black text-[var(--theme-text-primary)] block">
+                  ${effectiveGridEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+                {showInr && (
+                  <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
+                    {formatInr(effectiveGridEquity)}
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--theme-border-subtle)]">
+              <span className="font-sans text-[var(--theme-text-muted)]">
+                Margin: <strong className="font-mono text-amber-600">${gridMarginLocked.toFixed(2)}</strong>
+                {showInr && <span className="text-[10px] text-amber-700 ml-1">({formatInr(gridMarginLocked)})</span>}
+              </span>
+              <span
+                className={`font-bold ${
+                  gridUnrealizedPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                }`}
+              >
+                PnL: {gridUnrealizedPnL >= 0 ? '+' : ''}${gridUnrealizedPnL.toFixed(2)}
+                {showInr && <span className="text-[10px] ml-1">({formatInr(gridUnrealizedPnL, { signed: true })})</span>}
+              </span>
+            </div>
+          </div>
+
+          {/* Metric 3: N-Digit Int -> (N-1)-Digit Base G */}
+          <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-col justify-between gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
+                {digitSpec.intDigits}-Digit Int &rarr; {digitSpec.baseGDigits}-Digit G
+              </span>
+              <span className="text-xs font-extrabold text-[var(--theme-text-primary)]">
+                G = {gValue}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--theme-border-subtle)]">
+              <span className="text-[var(--theme-text-muted)]">
+                Entry: <strong className="text-emerald-600">{isLong ? '+' : '-'}{entryGapFactor}*G ({isLong ? '+' : '-'}{entryOffsetPts})</strong>
+              </span>
+              <span className="text-[var(--theme-text-muted)]">
+                SL: <strong className="text-rose-600">-{slStartFactor}*G</strong> &rarr; <strong className="text-emerald-600">-{slAfterFactor}*G</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Metric 4: Live Trade Slot Capacity (10 Slots) */}
+          <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-col justify-between gap-1.5">
+            <div className="flex items-center justify-between">
+              <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)] flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Live Slot Capacity</span>
+              </span>
+              <span
+                className={`text-xs font-extrabold ${
+                  positions.length >= MAX_RUNNING_TRADES
+                    ? 'text-rose-600'
+                    : 'text-[var(--theme-text-primary)]'
+                }`}
+              >
+                {positions.length} / {MAX_RUNNING_TRADES} Active
+              </span>
+            </div>
+            <div className="grid grid-cols-10 gap-1 pt-1">
+              {Array.from({ length: 10 }, (_, i) => {
+                const slotIdx = i + 1;
+                const isOccupied = slotIdx <= positions.length;
+                const isTargetSlot =
+                  slotIdx === Math.min(10, positions.length + 1) &&
+                  positions.length < MAX_RUNNING_TRADES;
+                return (
+                  <div
+                    key={slotIdx}
+                    className={`h-3.5 rounded-xs flex items-center justify-center text-[9px] font-bold ${
+                      isOccupied
+                        ? 'bg-emerald-600 text-white'
+                        : isTargetSlot
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-[var(--theme-bg-elevated)] text-[var(--theme-text-muted)]'
+                    }`}
+                    title={`Slot #${slotIdx}: ${TRADE_TIER_CONFIGS[slotIdx]?.name}`}
+                  >
+                    {slotIdx}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 2. MAIN 12-COLUMN WORKSPACE: FACTOR PARAMETERS (LEFT 5) & LADDER / LOGS (RIGHT 7) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
+        {/* LEFT COLUMN (5 COLS): FACTOR-SCALED GRID, ENTRY, SL & EXIT ENGINE */}
+        <div className="xl:col-span-5 rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 shadow-sm space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-[var(--theme-border-subtle)]">
+            <div className="flex items-center gap-2">
+              <Sliders className="w-4 h-4 text-emerald-600" />
+              <h3 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
+                Factor-Scaled Grid, Entry &amp; SL Rules
+              </h3>
+            </div>
+            <span className="text-[11px] font-mono text-[var(--theme-text-muted)]">
+              G = <strong className="text-emerald-600">{gValue} pts</strong> &middot;{' '}
+              <strong className={isLong ? 'text-emerald-600' : 'text-rose-600'}>{activeSide}</strong>
             </span>
           </div>
 
-          {/* 10-slot visual indicators */}
-          <div className="grid grid-cols-10 gap-0.5 pt-0.5">
-            {Array.from({ length: 10 }, (_, i) => {
-              const slotIdx = i + 1;
-              const isOccupied = slotIdx <= positions.length;
-              const isTargetSlot = slotIdx === Math.min(10, positions.length + 1) && positions.length < MAX_RUNNING_TRADES;
-              return (
-                <div
-                  key={slotIdx}
-                  className={`h-3 rounded-sm flex items-center justify-center text-[8px] font-mono font-bold transition-all ${
-                    isOccupied
-                      ? 'bg-emerald-500 text-neutral-950 shadow-sm'
-                      : isTargetSlot
-                      ? 'bg-amber-400 text-neutral-950 animate-pulse ring-1 ring-amber-300'
-                      : 'bg-neutral-800 text-neutral-500'
-                  }`}
-                  title={`Slot #${slotIdx}: ${TRADE_TIER_CONFIGS[slotIdx]?.name} (${TRADE_TIER_CONFIGS[slotIdx]?.difficultyBadge})`}
-                >
-                  {slotIdx}
+          {/* Section 01: User Trade Direction Selection */}
+          <div className="space-y-2.5 pb-3.5 border-b border-[var(--theme-border-subtle)]">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-[var(--theme-text-primary)]">
+                01. Trade Direction (User Selected)
+              </span>
+              <span className="text-[11px] font-mono text-[var(--theme-text-muted)]">
+                Executes {isLong ? 'Buy (Long)' : 'Sell (Short)'} orders only
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => onUpdateConfig({ directionMode: 'BUY_ONLY', side: 'BUY' })}
+                className={`py-2.5 px-3 rounded-lg border text-center transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                  isLong
+                    ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-xs'
+                    : 'bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+                }`}
+              >
+                <ArrowUpRight className="w-4 h-4 shrink-0" />
+                <div className="text-left">
+                  <span className="text-xs block font-bold">Buy Only (Long)</span>
+                  <span className="block text-[10px] opacity-85 font-normal">
+                    Entry +{entryGapFactor}*G &middot; Pyramid Up
+                  </span>
                 </div>
-              );
-            })}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => onUpdateConfig({ directionMode: 'SELL_ONLY', side: 'SELL' })}
+                className={`py-2.5 px-3 rounded-lg border text-center transition-colors cursor-pointer flex items-center justify-center gap-2 ${
+                  !isLong
+                    ? 'bg-rose-600 text-white border-rose-600 font-bold shadow-xs'
+                    : 'bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border)] text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+                }`}
+              >
+                <ArrowDownRight className="w-4 h-4 shrink-0" />
+                <div className="text-left">
+                  <span className="text-xs block font-bold">Sell Only (Short)</span>
+                  <span className="block text-[10px] opacity-85 font-normal">
+                    Entry -{entryGapFactor}*G &middot; Pyramid Down
+                  </span>
+                </div>
+              </button>
+            </div>
           </div>
 
-          {/* Entry gating status banner */}
-          {positions.length >= MAX_RUNNING_TRADES ? (
-            <div className="p-1.5 rounded bg-rose-950/40 border border-rose-500/30 text-[10px] text-rose-300 flex items-center gap-1.5">
-              <Lock className="w-3 h-3 text-rose-400 shrink-0" />
-              <span>Max 10 live trades reached. Auto Grid entry paused until a position closes.</span>
-            </div>
-          ) : runtime.status === 'WAITING_FOR_ENTRY' ? (
-            <div className="p-1.5 rounded bg-neutral-950 border border-neutral-800/80 text-[10px] flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="text-neutral-400">Next Entry:</span>
-                <strong className="text-amber-300 font-semibold">
-                  Slot #{runtime.slotNumber || positions.length + 1} ({runtime.slotTierName || TRADE_TIER_CONFIGS[positions.length + 1]?.name || 'Pioneer'})
-                </strong>
-                <span className="text-neutral-500 font-mono text-[9px]">
-                  ({runtime.slotDifficulty || TRADE_TIER_CONFIGS[positions.length + 1]?.difficultyBadge})
-                </span>
-              </div>
-              {runtime.slotUnmetReason ? (
-                <span className="text-amber-400 font-mono text-[9px] max-w-[160px] truncate" title={runtime.slotUnmetReason}>
-                  Gating: {runtime.slotUnmetReason}
-                </span>
-              ) : (
-                <span className="text-emerald-400 font-mono text-[9px]">Conditions Ready</span>
-              )}
-            </div>
-          ) : null}
-        </div>
-
-        {/* Live In-Position HUD */}
-        {inPosition ? (
-          <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-2 text-xs">
-            <div className="flex items-center justify-between text-[11px]">
-              <div className="flex items-center gap-1 text-cyan-400 font-semibold">
-                <Flame className="w-3.5 h-3.5 text-orange-400" />
-                <span>Chasing {isLong ? 'High Peak' : 'Low Trough'}:</span>
-                <span className="font-mono text-neutral-100">
-                  ${(isLong ? runtime.highestPriceReached : runtime.lowestPriceReached)?.toFixed(2)} (+{peakGain.toFixed(1)} pts gain)
-                </span>
-              </div>
-              <div className="font-mono font-bold text-emerald-400">
-                Live: {pointsGain >= 0 ? '+' : ''}
-                {pointsGain.toFixed(2)} pts | Return (Change in Trade Val): {liveNetReturn >= 0 ? '+' : ''}${liveNetReturn.toFixed(4)} USDT
-              </div>
+          {/* Section 02: Digit Reference, Grid Scale Factor (G), Entry Gap Factor (+0.01*G) & Ladder Multipliers */}
+          <div className="space-y-3 pb-3.5 border-b border-[var(--theme-border-subtle)]">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <span className="text-xs font-bold text-[var(--theme-text-primary)]">
+                02. Grid Scale Factor (G) &amp; Entry Gap Factor
+              </span>
+              <span className="text-[11px] font-mono text-[var(--theme-text-muted)]">
+                Spot ${formatPrice(curPrice)} ({digitSpec.intDigits}-digit int) &rarr; {digitSpec.baseGDigits}-digit G={digitSpec.baseG}
+              </span>
             </div>
 
-            {/* Dynamic Step Visualization */}
-            <div className="grid grid-cols-5 gap-1 text-center text-[10px] font-mono">
-              <div className="p-1 rounded bg-neutral-950 border border-neutral-800">
-                <span className="text-neutral-500 block text-[9px]">Entry ({activeSide})</span>
-                <span className="text-neutral-200 font-semibold">${runtime.entryPrice?.toFixed(1)}</span>
-              </div>
-              <div className="p-1 rounded bg-rose-950/30 border border-rose-500/20">
-                <span className="text-rose-400 block text-[9px]">Initial SL</span>
-                <span className="text-rose-300 font-semibold">{isLong ? gridConfig.initialSlOffset : `+${Math.abs(gridConfig.initialSlOffset)}`} pts</span>
-              </div>
-              <div className={`p-1 rounded border transition-colors ${
-                runtime.isChasingActivated
-                  ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-300'
-                  : 'bg-amber-950/20 border-amber-500/20 text-amber-400'
-              }`}>
-                <span className="block text-[9px] font-sans">
-                  {runtime.isChasingActivated ? 'Triggered' : 'Activate at'}
-                </span>
-                <span className="font-semibold">&gt;+{gridConfig.profitActivationThreshold ?? 25} pts</span>
-              </div>
-              <div className={`p-1 rounded border transition-colors ${
-                runtime.isChasingActivated
-                  ? 'bg-emerald-950/50 border-emerald-500/50 text-emerald-200'
-                  : 'bg-neutral-950 border-neutral-800 text-neutral-400'
-              }`}>
-                <span className="block text-[9px] font-sans">Locked SL</span>
-                <span className="font-semibold">{isLong ? '+' : '-'}{gridConfig.lockedProfitSlOffset ?? 15} pts</span>
-              </div>
-              <div className="p-1 rounded bg-cyan-950/40 border border-cyan-500/30">
-                <span className="text-cyan-400 block text-[9px] font-sans">Current SL</span>
-                <span className="text-cyan-300 font-semibold">
-                  ${currentSL.toFixed(1)} ({isLong ? (currentSL - runtime.entryPrice! >= 0 ? '+' : '') : (runtime.entryPrice! - currentSL >= 0 ? '+' : '')}
-                  {(isLong ? currentSL - runtime.entryPrice! : runtime.entryPrice! - currentSL).toFixed(1)} pts)
-                </span>
-              </div>
-            </div>
-
-            {/* Visual Progress Bar */}
-            <div className="space-y-1 pt-1">
-              <div className="flex justify-between text-[10px] text-neutral-400">
-                <span>Entry (${runtime.entryPrice?.toFixed(1)})</span>
-                <span className="text-amber-300 font-semibold">
-                  Locked ({isLong ? '+' : '-'}{gridConfig.lockedProfitSlOffset ?? 15} pts)
-                </span>
-                <span className="text-cyan-300 font-semibold">Extreme (+{peakGain.toFixed(1)} pts)</span>
-              </div>
-              <div className="w-full bg-neutral-950 h-2 rounded-full overflow-hidden border border-neutral-800 relative">
-                <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-amber-400 z-10"
-                  style={{ left: '30%' }}
-                  title={`Activation Threshold: >+${gridConfig.profitActivationThreshold ?? 25} pts`}
+            <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+              {/* Factor 1: Grid Size Scale Factor */}
+              <div>
+                <div className="flex items-center justify-between font-sans text-[11px] font-semibold text-[var(--theme-text-secondary)] mb-1">
+                  <span>Grid Scale Factor (&times; Base G={digitSpec.baseG})</span>
+                  <span className="font-mono text-emerald-600 font-bold">G = {gValue}</span>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="100"
+                  value={gridScaleFactor}
+                  onChange={(e) =>
+                    onUpdateConfig({ gridScaleFactor: Math.max(0.05, parseFloat(e.target.value) || 1.0) })
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold focus:outline-none focus:border-emerald-600"
                 />
-                <div
-                  className="h-full bg-cyan-500 transition-all duration-300"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, ((peakGain > 0 ? (isLong ? currentSL - runtime.entryPrice! : runtime.entryPrice! - currentSL) : 0) / (Math.max(peakGain, 80) || 1)) * 100))}%`,
+                <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
+                  Base {digitSpec.baseG} &times; {gridScaleFactor} = <strong>{gValue} pts</strong>
+                </div>
+              </div>
+
+              {/* Factor 2: Entry Gap Factor (+0.01 * G) */}
+              <div>
+                <div className="flex items-center justify-between font-sans text-[11px] font-semibold text-[var(--theme-text-secondary)] mb-1">
+                  <span>Entry Gap Factor (&times; G)</span>
+                  <span className="font-mono text-emerald-600 font-bold">
+                    {isLong ? '+' : '-'}{entryOffsetPts} pts
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="5"
+                  value={entryGapFactor}
+                  onChange={(e) =>
+                    onUpdateConfig({ entryGapFactor: Math.max(0, parseFloat(e.target.value) || 0.01) })
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-emerald-600 font-bold focus:outline-none focus:border-emerald-600"
+                />
+                <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
+                  {isLong ? '+' : '-'}{entryGapFactor} &times; {gValue} = <strong>{isLong ? '+' : '-'}{entryOffsetPts} pts</strong>
+                </div>
+              </div>
+
+              {/* Pyramiding Multiplier (0.5 * G) */}
+              <div>
+                <div className="flex items-center justify-between font-sans text-[11px] font-semibold text-emerald-700 mb-1">
+                  <span>Pyramiding Factor (&times; G)</span>
+                  <span className="font-mono font-bold">
+                    {isLong ? '+' : '-'}{upsideGapPts} pts
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="10"
+                  value={gridConfig.upsideMultiplier ?? 0.5}
+                  onChange={(e) =>
+                    onUpdateConfig({ upsideMultiplier: parseFloat(e.target.value) || 0.5 })
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-emerald-600 font-bold focus:outline-none focus:border-emerald-600"
+                />
+              </div>
+
+              {/* Averaging DCA Multiplier (1.0 * G) */}
+              <div>
+                <div className="flex items-center justify-between font-sans text-[11px] font-semibold text-rose-600 mb-1">
+                  <span>Averaging DCA Factor (&times; G)</span>
+                  <span className="font-mono font-bold">
+                    {isLong ? '-' : '+'}{downsideGapPts} pts
+                  </span>
+                </div>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="10"
+                  value={gridConfig.downsideMultiplier ?? 1.0}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value) || 1.0;
+                    onUpdateConfig({
+                      downsideMultiplier: val,
+                      downsideGapMultiplier: val * 2,
+                    });
                   }}
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-rose-600 font-bold focus:outline-none focus:border-rose-600"
                 />
               </div>
             </div>
           </div>
-        ) : runtime.status === 'WAITING_FOR_ENTRY' ? (
-          <div className="p-2.5 rounded-lg bg-amber-950/20 border border-amber-500/30 text-xs flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-amber-400 font-semibold flex items-center gap-1.5">
-                {isLong ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                Waiting for {activeSide} Entry Trigger
-              </span>
-              <p className="text-[11px] text-neutral-400">
-                Target Price: <strong className="text-neutral-100 font-mono">${runtime.targetEntryPrice.toFixed(2)}</strong> ({isLong ? '+' : '-'}{gridConfig.entryOffset} pts from base ${runtime.basePrice.toFixed(2)})
-              </p>
-            </div>
-            <div className="text-right font-mono text-[11px]">
-              <span className="text-neutral-500 block">Distance to Entry</span>
-              <span className="text-amber-300 font-bold">
-                {Math.abs(runtime.targetEntryPrice - curPrice).toFixed(2)} pts
+
+          {/* Section 03: Factor-Scaled Trailing SL & Winning Condition (> 0.2 * G -> -0.01 * G) */}
+          <div className="space-y-3 pb-3.5 border-b border-[var(--theme-border-subtle)]">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <span className="text-xs font-bold text-[var(--theme-text-primary)] flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                <span>03. SL Start (-{slStartFactor}*G), Win Condition (&gt;{winConditionFactor}*G) &amp; SL After Win (-{slAfterFactor}*G)</span>
               </span>
             </div>
-          </div>
-        ) : null}
 
-        {/* Strategy Presets */}
-        <div className="flex items-center justify-between pt-1 border-t border-neutral-900">
-          <span className="text-[10px] text-neutral-400 font-semibold uppercase tracking-wider">
-            Strategy Presets:
-          </span>
-          <div className="flex gap-1.5">
-            <button
-              type="button"
-              onClick={onApplyGoldPreset}
-              className="px-2 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-[10px] font-semibold transition-colors flex items-center gap-1"
-              title="Gold XAUT Spec: 1h/15m Auto Direction (Buy/Sell), Spacing 50 pts, Entry ±2.5, SL ±50, Profit Lock @ +25 -> +15, Trail 10, Pullback 5, 0.1 size, 75x"
-            >
-              <span>Gold (XAUT) Spec</span>
-            </button>
-            <button
-              type="button"
-              onClick={onApplyBtcPreset}
-              className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10px] font-semibold transition-colors"
-              title="BTC Scalp Spec: 1h/15m Auto Direction, Spacing 500 pts, Entry ±25, SL ±500, Profit Lock @ +250 -> +150, Trail 100, Pullback 50, 0.002 BTC, 100x"
-            >
-              <span>BTC Scalp</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. Primary Control Action Buttons */}
-      <div className="grid grid-cols-4 gap-2">
-        {!isRunning ? (
-          <button
-            type="button"
-            onClick={() => onStartBot(parseFloat(customAnchorInput) || asset.price)}
-            className="col-span-2 py-2 px-3 rounded-xl bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-500 hover:to-green-500 text-white font-bold text-xs shadow-lg shadow-emerald-950/50 flex items-center justify-center gap-1.5 transition-all"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Start Auto Grid ({activeSide})</span>
-          </button>
-        ) : runtime.status === 'PAUSED' ? (
-          <button
-            type="button"
-            onClick={onResumeBot}
-            className="col-span-2 py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-neutral-950 font-bold text-xs shadow-lg flex items-center justify-center gap-1.5 transition-all"
-          >
-            <Play className="w-3.5 h-3.5 fill-current" />
-            <span>Resume Bot</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={onPauseBot}
-            className="col-span-2 py-2 px-3 rounded-xl bg-yellow-600 hover:bg-yellow-500 text-neutral-950 font-bold text-xs shadow-lg flex items-center justify-center gap-1.5 transition-all"
-          >
-            <Pause className="w-3.5 h-3.5 fill-current" />
-            <span>Pause Bot</span>
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => onStopBot(inPosition)}
-          disabled={runtime.status === 'IDLE'}
-          className="py-2 px-2.5 rounded-xl bg-rose-950/60 hover:bg-rose-900/80 border border-rose-600/40 text-rose-300 font-semibold text-xs flex items-center justify-center gap-1 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Stop Bot & Close Open Positions"
-        >
-          <Square className="w-3.5 h-3.5 fill-current" />
-          <span>Stop</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={onResetBot}
-          className="py-2 px-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-xs flex items-center justify-center gap-1 transition-all"
-          title="Reset statistics & cycles"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset</span>
-        </button>
-      </div>
-
-      {/* 3. Configurable Parameters Form (All editable) */}
-      <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-800 space-y-3">
-        <div
-          className="flex items-center justify-between cursor-pointer select-none"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-neutral-300">
-            <Sliders className="w-3.5 h-3.5 text-amber-400" />
-            <span>Strategy Parameters & Direction Filters</span>
-          </div>
-          <button type="button" className="text-neutral-400 hover:text-neutral-200">
-            {showAdvanced ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-        </div>
-
-        {showAdvanced && (
-          <div className="space-y-3 pt-1 text-xs">
-            {/* Direction & Candle Timeframe Filter Control */}
-            <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
-                  <Compass className="w-3.5 h-3.5" />
-                  <span>Trade Direction Strategy (BUY / SELL / AUTO)</span>
-                </span>
-                <span className="text-[10px] text-neutral-400 font-mono">
-                  Active Execution: <strong className={isLong ? 'text-emerald-400' : 'text-rose-400'}>{activeSide}</strong>
-                </span>
-              </div>
-
-              {/* Quick Direction Selector Buttons */}
-              <div className="grid grid-cols-3 gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onUpdateConfig({ directionMode: 'AUTO_TREND' })}
-                  className={`py-1.5 px-2 rounded-lg border text-center transition-all ${
-                    (gridConfig.directionMode || 'AUTO_TREND') === 'AUTO_TREND'
-                      ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold'
-                      : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  <span className="text-xs">Auto Trend</span>
-                  <span className="block text-[9px] text-neutral-500 font-normal">1h / 15m Signal</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onUpdateConfig({ directionMode: 'BUY_ONLY', side: 'BUY' })}
-                  className={`py-1.5 px-2 rounded-lg border text-center transition-all ${
-                    gridConfig.directionMode === 'BUY_ONLY'
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold'
-                      : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  <span className="text-xs">BUY (Long)</span>
-                  <span className="block text-[9px] text-emerald-500/70 font-normal">Pyramid Up / Avg Down</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => onUpdateConfig({ directionMode: 'SELL_ONLY', side: 'SELL' })}
-                  className={`py-1.5 px-2 rounded-lg border text-center transition-all ${
-                    gridConfig.directionMode === 'SELL_ONLY'
-                      ? 'bg-rose-500/20 border-rose-500 text-rose-300 font-bold'
-                      : 'bg-neutral-950 border-neutral-800 text-neutral-400 hover:text-white'
-                  }`}
-                >
-                  <span className="text-xs">SELL (Short)</span>
-                  <span className="block text-[9px] text-rose-500/70 font-normal">Pyramid Down / Avg Up</span>
-                </button>
-              </div>
-
-              {gridConfig.directionMode === 'AUTO_TREND' && (
-                <div className="pt-1 flex items-center justify-between">
-                  <label className="text-[10px] text-neutral-400">
-                    Candle Confluence Filter:
-                  </label>
-                  <select
-                    value={gridConfig.timeframeFilter || 'CONFLUENCE'}
-                    onChange={(e) => onUpdateConfig({ timeframeFilter: e.target.value as AutoGridTimeframeFilter })}
-                    className="bg-neutral-950 border border-neutral-800 rounded px-2 py-1 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
-                  >
-                    <option value="CONFLUENCE">Confluence (1h + 15m)</option>
-                    <option value="1h">1-Hour (1h Candle)</option>
-                    <option value="15m">15-Minute (15m Candle)</option>
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* Row 1: Grid Multipliers, Spacing & Entry Offset */}
-            <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-amber-400 flex items-center gap-1.5">
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span>Pyramiding (Trend) & Averaging (DCA) Multipliers</span>
-                </span>
-                <span className="text-[10px] text-neutral-400 font-mono">
-                  Pyramid: <strong className="text-emerald-300">{((gridConfig.gridSpacing || 50) * (gridConfig.upsideMultiplier ?? 0.5)).toFixed(1)} pts</strong> | Avg: <strong className="text-rose-300">{((gridConfig.gridSpacing || 50) * (gridConfig.downsideMultiplier ?? 1.0)).toFixed(1)} pts</strong>
-                </span>
-              </div>
-
-              {/* Multipliers row: Pyramiding (Upside) and Averaging (Downside) Multipliers */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <div>
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1">
-                    <span className="text-emerald-400 font-semibold">Pyramiding Multiplier</span>
-                    <span className="text-[9px] text-emerald-400/80 font-mono">Def: 0.5x</span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      max="10"
-                      value={gridConfig.upsideMultiplier ?? 0.5}
-                      onChange={(e) => onUpdateConfig({ upsideMultiplier: parseFloat(e.target.value) || 0.5 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
-                    />
-                    <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">x</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">Trend gap = G * {(gridConfig.upsideMultiplier ?? 0.5)} = {((gridConfig.gridSpacing || 50) * (gridConfig.upsideMultiplier ?? 0.5)).toFixed(1)} pts</span>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1">
-                    <span className="text-rose-400 font-semibold">Averaging Multiplier</span>
-                    <span className="text-[9px] text-rose-400/80 font-mono">Def: 1.0x</span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.1"
-                      min="0.1"
-                      max="10"
-                      value={gridConfig.downsideMultiplier ?? 1.0}
-                      onChange={(e) => {
-                        const val = parseFloat(e.target.value) || 1.0;
-                        onUpdateConfig({ downsideMultiplier: val, downsideGapMultiplier: val * 2 });
-                      }}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-rose-300 text-xs focus:outline-none focus:border-rose-500"
-                    />
-                    <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">x</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">Pullback gap = G * {(gridConfig.downsideMultiplier ?? 1.0)} = {((gridConfig.gridSpacing || 50) * (gridConfig.downsideMultiplier ?? 1.0)).toFixed(1)} pts</span>
-                </div>
-              </div>
-
-              {/* Standard Spacing & Offset */}
-              <div className="grid grid-cols-2 gap-2.5 pt-1">
-                <div>
-                  <label className="block text-[11px] text-neutral-400 mb-1">
-                    Grid Spacing ({isGold ? 'points / $' : 'USDT'})
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={gridConfig.gridSpacing}
-                      onChange={(e) => onUpdateConfig({ gridSpacing: parseFloat(e.target.value) || 50 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">pts</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">Base grid spacing (e.g. 50)</span>
-                </div>
-
-                <div>
-                  <label className="block text-[11px] text-neutral-400 mb-1">
-                    Entry Trigger Offset (±pts)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={gridConfig.entryOffset}
-                      onChange={(e) => onUpdateConfig({ entryOffset: parseFloat(e.target.value) || 2.5 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
-                    />
-                    <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">pts</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">Buy: Base+2.5 | Sell: Base-2.5</span>
-                </div>
-              </div>
-            </div>
-
-            {/* 10-Level Progressive Dual Grid Price Ladder Preview */}
-            <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2">
-              <div className="flex flex-wrap items-center justify-between gap-1.5">
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-neutral-200">
-                  <Layers className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Dual-Ladder Price Preview ({activeSide} Strategy)</span>
-                </div>
-                
-                <div className="flex items-center gap-1.5">
-                  {onOpenWhatIf && (
-                    <button
-                      type="button"
-                      onClick={onOpenWhatIf}
-                      className="px-2 py-0.5 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-[9px] font-mono font-bold flex items-center gap-1 transition-colors"
-                    >
-                      <Sparkles className="w-3 h-3 text-amber-400" />
-                      <span>'What If' Preview Chart</span>
-                    </button>
-                  )}
-
-                  {/* Tab selector */}
-                  <div className="flex items-center gap-1 bg-neutral-950 p-0.5 rounded border border-neutral-800 text-[9px] font-mono">
-                    <button
-                      type="button"
-                      onClick={() => setLadderTab('ALL')}
-                      className={`px-1.5 py-0.5 rounded ${ladderTab === 'ALL' ? 'bg-amber-500 text-neutral-950 font-bold' : 'text-neutral-400 hover:text-neutral-200'}`}
-                    >
-                      Dual
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLadderTab('UPSIDE')}
-                      className={`px-1.5 py-0.5 rounded ${ladderTab === 'UPSIDE' ? 'bg-emerald-500 text-neutral-950 font-bold' : 'text-neutral-400 hover:text-neutral-200'}`}
-                    >
-                      Up (+25)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLadderTab('DOWNSIDE')}
-                      className={`px-1.5 py-0.5 rounded ${ladderTab === 'DOWNSIDE' ? 'bg-rose-500 text-neutral-950 font-bold' : 'text-neutral-400 hover:text-neutral-200'}`}
-                    >
-                      Down (-50)
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dynamic Formula & Rule Callout */}
-              <div className="p-2 rounded bg-neutral-950/80 border border-neutral-800/80 text-[10px] text-neutral-300 leading-relaxed font-mono space-y-1">
-                <div>
-                  <span className="text-amber-400 font-bold">1st Trade Trigger:</span>{' '}
-                  ${((gridConfig.basePriceAnchor || runtime.basePrice || curPrice) + (isLong ? gridConfig.entryOffset : -gridConfig.entryOffset)).toFixed(2)} ({activeSide})
-                  <span className="text-[9px] text-neutral-400 ml-2">(Multiple of G: {(gridConfig.gridSpacing || 50)})</span>
-                </div>
-                <div className="text-emerald-400">
-                  <strong>▲ Pyramiding ({isLong ? 'Trend Up' : 'Trend Down'}):</strong> Gap = G * {(gridConfig.upsideMultiplier ?? 0.5)} = {((gridConfig.gridSpacing || 50) * (gridConfig.upsideMultiplier ?? 0.5)).toFixed(1)} pts ({isLong ? '+' : '-'}{((gridConfig.gridSpacing || 50) * (gridConfig.upsideMultiplier ?? 0.5)).toFixed(1)} each level)
-                </div>
-                <div className="text-rose-400">
-                  <strong>▼ Averaging DCA ({isLong ? 'Dip Down' : 'Rally Up'}):</strong> Gap = G * {(gridConfig.downsideMultiplier ?? 1.0)} = {((gridConfig.gridSpacing || 50) * (gridConfig.downsideMultiplier ?? 1.0)).toFixed(1)} pts ({isLong ? '-' : '+'}{((gridConfig.gridSpacing || 50) * (gridConfig.downsideMultiplier ?? 1.0)).toFixed(1)} each level)
-                </div>
-                <div className="text-neutral-400 text-[9px] pt-0.5 border-t border-neutral-800/60 flex items-center justify-between">
-                  <span>⚡ <strong>Auto-Update:</strong> Dynamic on price movement when idle (no open trade)</span>
-                  <span>🕒 <strong>In-Trade:</strong> Updates on 1-hour candle close</span>
-                </div>
-              </div>
-
-              {/* Upside Ladder Rows */}
-              {(ladderTab === 'ALL' || ladderTab === 'UPSIDE') && (
-                <div className="space-y-1">
-                  <div className="text-[10px] font-bold text-emerald-400 flex items-center justify-between px-1">
-                    <span>▲ Upside Pyramiding Ladder (Trend Momentum)</span>
-                    <span className="text-[9px] text-neutral-500 font-mono">10 Levels</span>
-                  </div>
-                  <div className="max-h-40 overflow-y-auto divide-y divide-neutral-800/60 border border-neutral-800 rounded-lg bg-neutral-950 font-mono text-[10px]">
-                    <div className="grid grid-cols-12 gap-1 p-1.5 bg-neutral-900/90 text-neutral-400 font-semibold text-[9px] uppercase tracking-wider sticky top-0 z-10">
-                      <span className="col-span-2">Level</span>
-                      <span className="col-span-4">Gap & Multiplier</span>
-                      <span className="col-span-3">Milestone</span>
-                      <span className="col-span-3 text-right">Entry ({activeSide})</span>
-                    </div>
-                    {gridLadder.map((lvl) => {
-                      const isTarget = lvl.level === (runtime.currentCycle || 1);
-                      return (
-                        <div
-                          key={`up-${lvl.level}`}
-                          className={`grid grid-cols-12 gap-1 p-1.5 items-center transition-colors ${
-                            isTarget
-                              ? 'bg-amber-500/15 text-amber-200 font-semibold'
-                              : lvl.isPassed
-                              ? 'bg-emerald-950/25 text-emerald-300'
-                              : 'text-neutral-400 hover:bg-neutral-900/40'
-                          }`}
-                        >
-                          <div className="col-span-2 flex items-center gap-1">
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              isTarget ? 'bg-amber-400 animate-ping' : lvl.isPassed ? 'bg-emerald-400' : 'bg-neutral-700'
-                            }`} />
-                            <span>#{lvl.level}</span>
-                          </div>
-                          <span className="col-span-4 text-neutral-300 truncate" title={lvl.multiplierLabel}>
-                            {lvl.multiplierLabel}
-                          </span>
-                          <span className="col-span-3 text-neutral-300">
-                            ${lvl.milestoneTriggerPrice.toFixed(2)}
-                          </span>
-                          <div className="col-span-3 text-right font-bold flex items-center justify-end gap-1">
-                            <span className={isTarget ? 'text-amber-300' : lvl.isPassed ? 'text-emerald-400' : 'text-neutral-200'}>
-                              ${lvl.targetEntryPrice.toFixed(2)}
-                            </span>
-                            {isTarget && (
-                              <span className="px-1 py-0.2 rounded text-[8px] bg-amber-400 text-neutral-950 uppercase font-sans">
-                                Next
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Downside Ladder Rows */}
-              {(ladderTab === 'ALL' || ladderTab === 'DOWNSIDE') && (
-                <div className="space-y-1 pt-1">
-                  <div className="text-[10px] font-bold text-rose-400 flex items-center justify-between px-1">
-                    <span>▼ Downside DCA Pullback Ladder (Adverse Scaling)</span>
-                    <span className="text-[9px] text-neutral-500 font-mono">Double Gap (50 pts)</span>
-                  </div>
-                  <div className="max-h-40 overflow-y-auto divide-y divide-neutral-800/60 border border-neutral-800 rounded-lg bg-neutral-950 font-mono text-[10px]">
-                    <div className="grid grid-cols-12 gap-1 p-1.5 bg-neutral-900/90 text-neutral-400 font-semibold text-[9px] uppercase tracking-wider sticky top-0 z-10">
-                      <span className="col-span-2">Level</span>
-                      <span className="col-span-4">Gap & Multiplier</span>
-                      <span className="col-span-3">Milestone</span>
-                      <span className="col-span-3 text-right">DCA Entry</span>
-                    </div>
-                    {downsideLadder.map((lvl) => {
-                      return (
-                        <div
-                          key={`down-${lvl.level}`}
-                          className={`grid grid-cols-12 gap-1 p-1.5 items-center transition-colors ${
-                            lvl.isPassed
-                              ? 'bg-rose-950/25 text-rose-300'
-                              : 'text-neutral-400 hover:bg-neutral-900/40'
-                          }`}
-                        >
-                          <div className="col-span-2 flex items-center gap-1">
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                              lvl.isPassed ? 'bg-rose-400' : 'bg-neutral-700'
-                            }`} />
-                            <span>#{lvl.level}</span>
-                          </div>
-                          <span className="col-span-4 text-neutral-300 truncate" title={lvl.multiplierLabel}>
-                            {lvl.multiplierLabel}
-                          </span>
-                          <span className="col-span-3 text-neutral-300">
-                            ${lvl.milestoneTriggerPrice.toFixed(2)}
-                          </span>
-                          <div className="col-span-3 text-right font-bold text-rose-300">
-                            ${lvl.targetEntryPrice.toFixed(2)}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Row 2: Initial SL & Min Exit Floor */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-3 gap-2.5 font-mono text-xs">
+              {/* Factor 3: SL Start Factor (-0.2 * G) */}
               <div>
-                <label className="block text-[11px] text-neutral-400 mb-1">
-                  Initial Stop Loss on Start
+                <label className="block font-sans text-[11px] font-semibold text-rose-600 mb-1">
+                  SL Start (-X &times; G)
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="1"
-                    value={gridConfig.initialSlOffset}
-                    onChange={(e) => onUpdateConfig({ initialSlOffset: parseFloat(e.target.value) || -50 })}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-rose-300 text-xs focus:outline-none focus:border-rose-500"
-                  />
-                  <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">pts</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="5"
+                  value={slStartFactor}
+                  onChange={(e) =>
+                    onUpdateConfig({ slStartFactor: Math.max(0.01, parseFloat(e.target.value) || 0.2) })
+                  }
+                  className="w-full px-2 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-rose-600 font-bold focus:outline-none focus:border-rose-600"
+                />
+                <div className="text-[10px] text-rose-600 font-bold mt-1">
+                  -{slStartFactor}*G = -{slStartPts} pts
                 </div>
-                <span className="text-[9px] text-neutral-500">Protection stop loss (e.g. -50 pts)</span>
               </div>
 
+              {/* Factor 4: Winning Condition Factor (> +0.2 * G) */}
               <div>
-                <label className="block text-[11px] text-neutral-400 mb-1">
-                  Min Exit Floor (+pts)
+                <label className="block font-sans text-[11px] font-semibold text-amber-600 mb-1">
+                  Win Cond (&gt; +X &times; G)
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    value={gridConfig.minExitProfitOffset}
-                    onChange={(e) => onUpdateConfig({ minExitProfitOffset: parseFloat(e.target.value) || 15 })}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-amber-300 text-xs focus:outline-none focus:border-amber-500"
-                  />
-                  <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">+pts</span>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="5"
+                  value={winConditionFactor}
+                  onChange={(e) =>
+                    onUpdateConfig({
+                      winConditionFactor: Math.max(0.01, parseFloat(e.target.value) || 0.2),
+                    })
+                  }
+                  className="w-full px-2 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-amber-600 font-bold focus:outline-none focus:border-amber-600"
+                />
+                <div className="text-[10px] text-amber-600 font-bold mt-1">
+                  &gt;+{winConditionFactor}*G = +{winConditionPts} pts
                 </div>
-                <span className="text-[9px] text-neutral-500">Minimum exit floor (e.g. +15 pts)</span>
               </div>
-            </div>
 
-            {/* Row 3: User Rule - "Once price > +25, SL will be entry +15, then start chasing" */}
-            <div className="p-2.5 rounded-lg bg-emerald-950/20 border border-emerald-500/30 space-y-2">
-              <div className="text-[11px] text-emerald-400 font-semibold flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Profit Lock Trigger (Rule: Once &gt;+25, SL = entry ±15)</span>
-                </div>
-                <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 text-[9px] font-mono font-bold">
-                  Guaranteed Profit
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] text-neutral-400 mb-1">
-                    Trigger Activation (+pts)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={gridConfig.profitActivationThreshold ?? 25}
-                      onChange={(e) => onUpdateConfig({ profitActivationThreshold: parseFloat(e.target.value) || 25 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 font-mono text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
-                    />
-                    <span className="absolute right-2 top-1 text-[9px] text-neutral-500">&gt;+pts</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">Once price gain &gt; +25 pts</span>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] text-neutral-400 mb-1">
-                    Locked Stop Loss (±pts)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={gridConfig.lockedProfitSlOffset ?? 15}
-                      onChange={(e) => onUpdateConfig({ lockedProfitSlOffset: parseFloat(e.target.value) || 15 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 font-mono text-emerald-300 text-xs focus:outline-none focus:border-emerald-500"
-                    />
-                    <span className="absolute right-2 top-1 text-[9px] text-neutral-500">pts</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">SL moves to entry ±15</span>
-                </div>
-              </div>
-              <div className="text-[10px] text-neutral-300 bg-neutral-950/70 p-1.5 rounded border border-emerald-500/20 leading-relaxed font-mono">
-                <span className="text-emerald-400 font-bold">Step:</span> Once price gain &gt; +{gridConfig.profitActivationThreshold ?? 25} pts, SL moves to entry {isLong ? '+' : '-'}{gridConfig.lockedProfitSlOffset ?? 15} pts, guaranteeing win. Then chasing begins!
-              </div>
-            </div>
-
-            {/* Row 4: Chase Extreme & Trailing Pullback Engine ("then start chasing") */}
-            <div className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 space-y-2">
-              <div className="text-[11px] text-cyan-400 font-semibold flex items-center gap-1.5">
-                <TrendingUp className="w-3.5 h-3.5" />
-                <span>Then Start Chasing: Trailing Pullback Engine</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] text-neutral-400 mb-1">
-                    Trailing Distance (Extreme - X)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={gridConfig.trailingDistance}
-                      onChange={(e) => onUpdateConfig({ trailingDistance: parseFloat(e.target.value) || 10 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 font-mono text-neutral-100 text-xs focus:outline-none focus:border-cyan-500"
-                    />
-                    <span className="absolute right-2 top-1 text-[9px] text-neutral-500">pts</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">Peak 80 → SL set to 70 (-10 pts)</span>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] text-neutral-400 mb-1">
-                    Pullback Trigger (pts)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="number"
-                      step="1"
-                      min="1"
-                      value={gridConfig.pullbackTrigger}
-                      onChange={(e) => onUpdateConfig({ pullbackTrigger: parseFloat(e.target.value) || 5 })}
-                      className="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 font-mono text-neutral-100 text-xs focus:outline-none focus:border-cyan-500"
-                    />
-                    <span className="absolute right-2 top-1 text-[9px] text-neutral-500">pts</span>
-                  </div>
-                  <span className="text-[9px] text-neutral-500">e.g. Retraces 5 pts from peak</span>
-                </div>
-              </div>
-              <div className="text-[10px] text-neutral-400 bg-neutral-950/70 p-1.5 rounded border border-neutral-800/80 leading-relaxed font-mono">
-                <span className="text-cyan-400 font-bold">Chase Engine:</span> Works for both Long (chasing high) and Short (chasing low trough). SL never retreats below entry {isLong ? '+' : '-'}{gridConfig.lockedProfitSlOffset ?? 15} pts.
-              </div>
-            </div>
-
-            {/* Row 5: Sizing & Leverage */}
-            <div className="grid grid-cols-2 gap-2.5">
+              {/* Factor 5: SL After Winning Condition (-0.01 * G) */}
               <div>
-                <label className="block text-[11px] text-neutral-400 mb-1">
+                <label className="block font-sans text-[11px] font-semibold text-emerald-700 mb-1">
+                  SL After Win (-X &times; G)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.005"
+                  max="5"
+                  value={slAfterFactor}
+                  onChange={(e) =>
+                    onUpdateConfig({ slAfterFactor: Math.max(0.005, parseFloat(e.target.value) || 0.01) })
+                  }
+                  className="w-full px-2 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-emerald-600 font-bold focus:outline-none focus:border-emerald-600"
+                />
+                <div className="text-[10px] text-emerald-600 font-bold mt-1">
+                  -{slAfterFactor}*G = -{slAfterPts} pts
+                </div>
+              </div>
+            </div>
+
+            {/* Live Rule Price Walkthrough Box (e.g. BTC @ 85436 -> Base 85400, Entry 85405, Start SL 85355, Win > 85455 -> Tight SL 85445+) */}
+            <div className="p-2.5 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] font-mono text-[11px] tabular-nums space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  Base Anchor (
+                  {asset.symbol.toUpperCase().includes('BTC')
+                    ? 'Multiple of 100'
+                    : `0.1% of G = ${baseStep}`}{' '}
+                  &middot; {hasLivePosition ? 'Locked in Trade' : 'Auto-Updates w/ Price'}):
+                </span>
+                <strong className="text-[var(--theme-text-primary)]">${formatPrice(baseAnchorPrice)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  1. Entry ({isLong ? '+' : '-'}{entryGapFactor}*G = {isLong ? '+' : '-'}{entryOffsetPts} pts):
+                </span>
+                <strong className="text-emerald-600">${formatPrice(entryPrice)}</strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  2. Trailing SL in Start (-{slStartFactor}*G = -{slStartPts} pts):
+                </span>
+                <strong className="text-rose-600">
+                  ${formatPrice(startSlPrice)} (-${slStartRiskUsd.toFixed(2)}
+                  {showInr ? ` / ${formatInr(-slStartRiskUsd, { signed: true })}` : ''})
+                </strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  3. Winning Condition (&gt;+{winConditionFactor}*G = +{winConditionPts} pts):
+                </span>
+                <strong className="text-amber-600">
+                  &gt; ${formatPrice(winTriggerPrice)} (+${winCondProfitUsd.toFixed(2)}
+                  {showInr ? ` / ${formatInr(winCondProfitUsd, { signed: true })}` : ''})
+                </strong>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  4. Tight Trailing SL After Win (-{slAfterFactor}*G = -{slAfterPts} pts):
+                </span>
+                <strong className="text-emerald-600">
+                  ${formatPrice(tightSlAtWinPrice)}+ (Locks +${lockedProfitUsd.toFixed(2)}
+                  {showInr ? ` / ${formatInr(lockedProfitUsd, { signed: true })}` : ''})
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 04: Sizing, Leverage & Anchor */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <span className="text-xs font-bold text-[var(--theme-text-primary)]">
+                04. Order Sizing, Leverage &amp; Anchor
+              </span>
+              <span className="text-[11px] font-mono text-[var(--theme-text-muted)]">
+                Trade Val: <strong className="text-[var(--theme-text-primary)]">${tradeValue.toFixed(2)}</strong>
+                {showInr && <span className="text-emerald-700 font-bold"> ({formatInr(tradeValue)})</span>} &middot; Margin: <strong className="text-amber-600">${requiredMargin.toFixed(4)}</strong>
+                {showInr && <span className="text-amber-700 font-bold"> ({formatInr(requiredMargin)})</span>}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 font-mono text-xs">
+              <div>
+                <label className="block font-sans text-[11px] font-semibold text-[var(--theme-text-secondary)] mb-1">
                   Lot / Order Size ({asset.symbol})
                 </label>
                 <input
@@ -1101,138 +834,530 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   step="0.001"
                   min="0.001"
                   value={gridConfig.lotSize}
-                  onChange={(e) => onUpdateConfig({ lotSize: parseFloat(e.target.value) || 0.002 })}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
+                  onChange={(e) =>
+                    onUpdateConfig({ lotSize: parseFloat(e.target.value) || 0.002 })
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold focus:outline-none focus:border-emerald-600"
                 />
-                <div className="text-[9px] text-neutral-400 mt-1 font-mono space-y-0.5">
-                  <div>Trade Val: <strong className="text-neutral-200">${tradeValue.toFixed(2)}</strong> (${curPrice.toFixed(0)} × {gridConfig.lotSize})</div>
-                  <div>Margin Req: <strong className="text-amber-400">${requiredMargin.toFixed(4)}</strong> (Val / {gridConfig.leverage})</div>
+                <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
+                  Maker (0.016%): <strong className="text-emerald-600">${makerFee.toFixed(4)}</strong>
+                  {showInr && <span className="text-emerald-700 font-bold"> ({formatInr(makerFee)})</span>}
                 </div>
               </div>
 
               <div>
-                <label className="block text-[11px] text-neutral-400 mb-1">
-                  Margin (Leverage Multiplier)
+                <label className="block font-sans text-[11px] font-semibold text-[var(--theme-text-secondary)] mb-1">
+                  Leverage Multiplier (x)
                 </label>
-                <div className="relative">
-                  <input
-                    type="number"
-                    step="1"
-                    min="1"
-                    max={150}
-                    value={gridConfig.leverage}
-                    onChange={(e) => onUpdateConfig({ leverage: parseInt(e.target.value, 10) || 150 })}
-                    className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
-                  />
-                  <span className="absolute right-2.5 top-1.5 text-[10px] text-neutral-500">x</span>
-                </div>
-                <div className="text-[9px] text-neutral-400 mt-1 font-mono space-y-0.5">
-                  <div>Maker Fee (0.016%): <strong className="text-emerald-400">${makerFee.toFixed(4)}</strong></div>
-                  <div>Taker Fee (4x = 0.064%): <strong className="text-amber-400">${takerFee.toFixed(4)}</strong></div>
+                <input
+                  type="number"
+                  step="1"
+                  min="1"
+                  max={150}
+                  value={gridConfig.leverage}
+                  onChange={(e) =>
+                    onUpdateConfig({ leverage: parseInt(e.target.value, 10) || 150 })
+                  }
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold focus:outline-none focus:border-emerald-600"
+                />
+                <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
+                  Taker (0.064%): <strong className="text-amber-600">${takerFee.toFixed(4)}</strong>
+                  {showInr && <span className="text-amber-700 font-bold"> ({formatInr(takerFee)})</span>}
                 </div>
               </div>
-            </div>
 
-            {/* Row 6: Base Anchor & Auto-Loop */}
-            <div className="grid grid-cols-2 gap-2.5 items-end">
               <div>
-                <div className="flex items-center justify-between text-[11px] text-neutral-400 mb-1">
-                  <span>Base Price Anchor</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCustomAnchorInput(curPrice.toString());
-                      onUpdateConfig({ basePriceAnchor: curPrice });
-                    }}
-                    className="text-[9px] text-amber-400 hover:underline"
-                  >
-                    Current Price
-                  </button>
+                <div className="flex items-center justify-between font-sans text-[11px] font-semibold text-[var(--theme-text-secondary)] mb-1">
+                  <span>
+                    Base Price Anchor ({asset.symbol.toUpperCase().includes('BTC') ? '100x' : `0.1% G=${baseStep}`})
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span
+                      className={`text-[10px] font-mono font-bold ${
+                        hasLivePosition ? 'text-amber-600' : 'text-emerald-600'
+                      }`}
+                      title={
+                        hasLivePosition
+                          ? 'Base price & grid ladder are locked while a live position is running'
+                          : 'Base price & grid ladder auto-update from latest spot price when no position is running'
+                      }
+                    >
+                      {hasLivePosition ? 'Locked (In Pos)' : 'Auto-Sync'}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const snapped = snapToBaseMultiple(curPrice, gValue, asset.symbol);
+                        setCustomAnchorInput(snapped.toString());
+                        onUpdateConfig({ basePriceAnchor: snapped });
+                      }}
+                      className="text-[10px] text-emerald-600 hover:underline cursor-pointer"
+                    >
+                      Snap Spot
+                    </button>
+                  </div>
                 </div>
                 <input
                   type="number"
-                  step="any"
+                  step={baseStep}
                   value={customAnchorInput}
+                  disabled={hasLivePosition}
                   onChange={(e) => {
                     setCustomAnchorInput(e.target.value);
-                    onUpdateConfig({ basePriceAnchor: parseFloat(e.target.value) || curPrice });
+                    onUpdateConfig({
+                      basePriceAnchor: parseFloat(e.target.value) || liveSnappedBase,
+                    });
                   }}
-                  className="w-full bg-neutral-900 border border-neutral-800 rounded-lg px-2.5 py-1.5 font-mono text-neutral-100 text-xs focus:outline-none focus:border-amber-500"
+                  className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold focus:outline-none focus:border-emerald-600 disabled:opacity-60"
                 />
+                <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
+                  {hasLivePosition
+                    ? `Locked at $${formatPrice(baseAnchorPrice)} while live position is running`
+                    : `Spot $${formatPrice(curPrice)} \u2192 Base $${formatPrice(baseAnchorPrice)} (Step ${baseStep})`}
+                </div>
               </div>
 
-              <div className="flex items-center gap-2 p-2 bg-neutral-900 rounded-lg border border-neutral-800">
+              <div className="flex items-center gap-2 p-2.5 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] self-end">
                 <input
                   type="checkbox"
                   id="autoLoopCheck"
                   checked={gridConfig.autoLoop}
                   onChange={(e) => onUpdateConfig({ autoLoop: e.target.checked })}
-                  className="rounded border-neutral-700 bg-neutral-950 text-amber-500 focus:ring-amber-500/20"
+                  className="rounded border-[var(--theme-border)] text-emerald-600 focus:ring-emerald-500/20"
                 />
-                <label htmlFor="autoLoopCheck" className="text-[11px] text-neutral-300 select-none cursor-pointer">
-                  Auto-Advance & re-evaluate 1h/15m trend for next cycle
+                <label
+                  htmlFor="autoLoopCheck"
+                  className="font-sans text-[11px] font-semibold text-[var(--theme-text-secondary)] select-none cursor-pointer leading-tight"
+                >
+                  Auto-Advance to next grid level on cycle close ({activeSide} only)
                 </label>
               </div>
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* 4. Live Bot Activity & Trigger Log */}
-      <div className="bg-neutral-950 p-3 rounded-xl border border-neutral-800 space-y-2">
-        <div className="flex items-center justify-between text-xs">
-          <span className="font-semibold text-neutral-300 flex items-center gap-1.5">
-            <ListFilter className="w-3.5 h-3.5 text-neutral-400" />
-            Live Bot Execution Logs
-          </span>
-          <button
-            type="button"
-            onClick={onClearLogs}
-            className="text-[10px] text-neutral-500 hover:text-neutral-300 transition-colors"
-          >
-            Clear Log
-          </button>
-        </div>
-
-        <div className="h-44 overflow-y-auto space-y-1 font-mono text-[11px] bg-neutral-900/60 p-2 rounded-lg border border-neutral-800/80">
-          {runtime.logs.map((log) => {
-            const timeStr = new Date(log.timestamp).toLocaleTimeString([], {
-              hour12: false,
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-            });
-
-            const badgeColor =
-              log.type === 'TRIGGER'
-                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                : log.type === 'CHASE_HIGH'
-                ? 'bg-orange-500/20 text-orange-300 border-orange-500/40'
-                : log.type === 'SL_UPDATE'
-                ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40'
-                : log.type === 'EXIT'
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
-                : log.type === 'CYCLE_COMPLETE'
-                ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
-                : log.type === 'ERROR'
-                ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                : 'bg-neutral-800 text-neutral-400 border-neutral-700';
-
-            return (
-              <div
-                key={log.id}
-                className="flex items-start gap-1.5 p-1 rounded hover:bg-neutral-800/40 transition-colors"
-              >
-                <span className="text-neutral-500 shrink-0 text-[10px]">{timeStr}</span>
-                <span className={`px-1 py-0.2 rounded border text-[9px] font-bold uppercase shrink-0 ${badgeColor}`}>
-                  {log.type}
+            {/* Entry vs Current Price & Trade Value Return Link Box */}
+            <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] font-mono text-[11px] tabular-nums space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
+                  Entry &rarr; Current Price (&Delta; Pts)
                 </span>
-                <span className="text-neutral-300 text-[10px] leading-tight break-words flex-1">
-                  {log.message}
+                <span className="font-bold text-[var(--theme-text-primary)]">
+                  ${formatPrice(entryPrice)} &rarr; ${formatPrice(curPrice)}{' '}
+                  <span
+                    className={
+                      (isLong ? curPrice - entryPrice : entryPrice - curPrice) >= 0
+                        ? 'text-emerald-600'
+                        : 'text-rose-600'
+                    }
+                  >
+                    ({(isLong ? curPrice - entryPrice : entryPrice - curPrice) >= 0 ? '+' : ''}
+                    {(isLong ? curPrice - entryPrice : entryPrice - curPrice).toFixed(2)} pts)
+                  </span>
                 </span>
               </div>
-            );
-          })}
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  Trade Value (Entry &rarr; Current)
+                </span>
+                <div className="text-right">
+                  <span className="text-[var(--theme-text-primary)] block">
+                    ${entryTradeValue.toFixed(2)} &rarr; <strong>${tradeValue.toFixed(2)}</strong>
+                  </span>
+                  {showInr && (
+                    <span className="text-[10px] font-bold text-emerald-700 block">
+                      {formatInr(entryTradeValue)} &rarr; {formatInr(tradeValue)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="font-sans text-[var(--theme-text-muted)]">
+                  Fees (Maker 0.016% / Taker 0.064%)
+                </span>
+                <div className="text-right">
+                  <span className="text-[var(--theme-text-primary)] block">
+                    M: <strong className="text-emerald-600">${makerFee.toFixed(4)}</strong> &middot; T: <strong className="text-amber-600">${takerFee.toFixed(4)}</strong>
+                  </span>
+                  {showInr && (
+                    <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
+                      M: {formatInr(makerFee)} &middot; T: {formatInr(takerFee)}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1 border-t border-[var(--theme-border-subtle)]">
+                <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
+                  Return (&Delta; Price &times; Lot)
+                </span>
+                <div className="text-right">
+                  <span
+                    className={`font-extrabold block ${
+                      liveNetReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    }`}
+                  >
+                    {liveNetReturn >= 0 ? '+' : ''}${liveNetReturn.toFixed(4)} USDT (
+                    {requiredMargin > 0
+                      ? `${liveNetReturn >= 0 ? '+' : ''}${((liveNetReturn / requiredMargin) * 100).toFixed(1)}% ROE`
+                      : '0.0%'}
+                    )
+                  </span>
+                  {showInr && (
+                    <span
+                      className={`text-[10px] font-bold block ${
+                        liveNetReturn >= 0 ? 'text-emerald-700' : 'text-rose-600'
+                      }`}
+                    >
+                      {formatInr(liveNetReturn, { signed: true })} &middot; Net After Fee: {formatInr(liveNetAfterMakerFee, { signed: true })}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT COLUMN (7 COLS): LIVE POSITION CHASE HUD, DUAL-LADDER MATRIX & EXECUTION LOGS */}
+        <div className="xl:col-span-7 space-y-4">
+          {/* Active Trigger / In-Position Telemetry Card */}
+          {inPosition ? (
+            <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 shadow-sm space-y-3 font-mono tabular-nums">
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[var(--theme-border-subtle)]">
+                <div className="flex items-center gap-2 font-sans text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
+                  <TrendingUp className="w-4 h-4 text-emerald-600" />
+                  <span>
+                    Active Position Trailing Chase ({activeSide}: Entry ${formatPrice(runtime.entryPrice!)} &rarr; Current ${formatPrice(curPrice)})
+                  </span>
+                </div>
+                <div
+                  className={`text-xs font-extrabold text-right ${
+                    liveNetReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  }`}
+                >
+                  <div>
+                    {pointsGain >= 0 ? '+' : ''}
+                    {pointsGain.toFixed(2)} pts &times; {gridConfig.lotSize} ={' '}
+                    {liveNetReturn >= 0 ? '+' : ''}${liveNetReturn.toFixed(4)} USDT (
+                    {entryTradeValue > 0 ? `$${entryTradeValue.toFixed(2)} \u2192 $${tradeValue.toFixed(2)}` : ''})
+                  </div>
+                  {showInr && (
+                    <div className="text-[11px] font-bold">
+                      Return: {formatInr(liveNetReturn, { signed: true })} &middot; Val: {formatInr(entryTradeValue)} &rarr; {formatInr(tradeValue)} &middot; Fee: {formatInr(makerFee)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs">
+                <div className="p-2.5 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)]">
+                  <span className="font-sans text-[10px] text-[var(--theme-text-muted)] block">
+                    Entry (+{entryGapFactor}*G)
+                  </span>
+                  <span className="font-bold text-[var(--theme-text-primary)]">
+                    ${runtime.entryPrice?.toFixed(1)}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-rose-500/5 border border-rose-500/25">
+                  <span className="font-sans text-[10px] text-rose-600 block">
+                    SL Start (-{slStartFactor}*G)
+                  </span>
+                  <span className="font-bold text-rose-600">
+                    -{slStartPts} pts
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-amber-500/5 border border-amber-500/25">
+                  <span className="font-sans text-[10px] text-amber-600 block">
+                    {runtime.isChasingActivated ? 'Win Active!' : `Win (>+${winConditionFactor}*G)`}
+                  </span>
+                  <span className="font-bold text-amber-600">
+                    &gt;+{winConditionPts} pts
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-emerald-500/5 border border-emerald-500/25">
+                  <span className="font-sans text-[10px] text-emerald-600 block">
+                    SL After (-{slAfterFactor}*G)
+                  </span>
+                  <span className="font-bold text-emerald-600">
+                    -{slAfterPts} pts trail
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border)]">
+                  <span className="font-sans text-[10px] text-[var(--theme-text-muted)] block">
+                    Active Trailing SL
+                  </span>
+                  <span className="font-extrabold text-[var(--theme-text-primary)]">
+                    ${currentSL.toFixed(1)} (+{peakGain.toFixed(1)} pk)
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : runtime.status === 'WAITING_FOR_ENTRY' ? (
+            <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 shadow-sm flex flex-wrap items-center justify-between gap-3 font-mono text-xs tabular-nums">
+              <div className="space-y-0.5">
+                <div className="font-sans font-extrabold text-[var(--theme-text-primary)] flex items-center gap-1.5">
+                  {isLong ? (
+                    <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+                  ) : (
+                    <ArrowDownRight className="w-4 h-4 text-rose-600" />
+                  )}
+                  <span>
+                    Armed &amp; Waiting for {activeSide} Entry Trigger (Slot #
+                    {runtime.slotNumber || positions.length + 1})
+                  </span>
+                </div>
+                <p className="font-sans text-[11px] text-[var(--theme-text-muted)]">
+                  Target Trigger Price ({isLong ? '+' : '-'}{entryGapFactor}*G):{' '}
+                  <strong className="font-mono text-[var(--theme-text-primary)]">
+                    ${formatPrice(runtime.targetEntryPrice)}
+                  </strong>{' '}
+                  ({isLong ? '+' : '-'}{entryOffsetPts} pts from base ${formatPrice(runtime.basePrice)} &middot; Start SL: -{slStartFactor}*G = -{slStartPts} pts)
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="font-sans text-[10px] text-[var(--theme-text-muted)] block">
+                  Distance to Trigger
+                </span>
+                <span className="text-sm font-black text-amber-600">
+                  {Math.abs(runtime.targetEntryPrice - curPrice).toFixed(2)} pts
+                </span>
+              </div>
+            </div>
+          ) : positions.length >= MAX_RUNNING_TRADES ? (
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3.5 text-xs text-rose-600 flex items-center gap-2 font-semibold">
+              <Lock className="w-4 h-4 shrink-0" />
+              <span>
+                Maximum 10 live positions reached. Auto Grid entry is paused until an active slot closes.
+              </span>
+            </div>
+          ) : null}
+
+          {/* 10-Level Dual-Ladder Price Preview Card */}
+          <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 shadow-sm space-y-3.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-[var(--theme-border-subtle)]">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-emerald-600" />
+                <div>
+                  <h3 className="text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
+                    10-Level Progressive Dual-Grid Ladder ({activeSide} &middot; G={gValue})
+                  </h3>
+                  <p className="text-[11px] text-[var(--theme-text-muted)] font-mono">
+                    Base ({asset.symbol.toUpperCase().includes('BTC') ? '100x' : `0.1% G`}):{' '}
+                    <strong className="text-[var(--theme-text-primary)]">${formatPrice(baseAnchorPrice)}</strong>{' '}
+                    <span className={hasLivePosition ? 'text-amber-600' : 'text-emerald-600'}>
+                      ({hasLivePosition ? 'Locked in Pos' : 'Live Sync'})
+                    </span>{' '}
+                    &middot; 1st Trigger ({isLong ? '+' : '-'}{entryGapFactor}*G):{' '}
+                    <strong className="text-[var(--theme-text-primary)]">${formatPrice(firstTriggerPrice)}</strong> &middot; Pyramid ({gridConfig.upsideMultiplier ?? 0.5}*G):{' '}
+                    <strong className="text-emerald-600">{upsideGapPts} pts</strong> &middot; DCA ({gridConfig.downsideMultiplier ?? 1.0}*G):{' '}
+                    <strong className="text-rose-600">{downsideGapPts} pts</strong>
+                  </p>
+                </div>
+              </div>
+
+              {/* Segmented View Filter */}
+              <div className="flex rounded-lg p-0.5 border border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)] text-[11px] font-sans font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setLadderTab('ALL')}
+                  className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    ladderTab === 'ALL'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+                  }`}
+                >
+                  Side-by-Side
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLadderTab('UPSIDE')}
+                  className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    ladderTab === 'UPSIDE'
+                      ? 'bg-emerald-600 text-white shadow-xs'
+                      : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+                  }`}
+                >
+                  Pyramiding ({isLong ? '+' : '-'}{upsideGapPts})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLadderTab('DOWNSIDE')}
+                  className={`px-2.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    ladderTab === 'DOWNSIDE'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'text-[var(--theme-text-secondary)] hover:text-[var(--theme-text-primary)]'
+                  }`}
+                >
+                  DCA Pullback ({isLong ? '-' : '+'}{downsideGapPts})
+                </button>
+              </div>
+            </div>
+
+            <div
+              className={`grid grid-cols-1 ${
+                ladderTab === 'ALL' ? 'lg:grid-cols-2' : ''
+              } gap-3.5 font-mono text-xs tabular-nums`}
+            >
+              {/* Upside Pyramiding Table */}
+              {(ladderTab === 'ALL' || ladderTab === 'UPSIDE') && (
+                <div className="rounded-lg border border-[var(--theme-border)] overflow-hidden">
+                  <div className="px-3 py-2 bg-[var(--theme-bg-card-subtle)] border-b border-[var(--theme-border-subtle)] flex items-center justify-between font-sans text-[11px] font-bold text-emerald-700">
+                    <span>Upside Pyramiding ({isLong ? '+' : '-'}{upsideGapPts} pts/lvl)</span>
+                    <span className="font-mono text-[10px] text-[var(--theme-text-muted)]">
+                      Entry {isLong ? '+' : '-'}{entryGapFactor}*G
+                    </span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="sticky top-0 z-10 bg-[var(--theme-bg-card-subtle)] text-[10px] font-sans font-bold text-[var(--theme-text-muted)] border-b border-[var(--theme-border)]">
+                          <th className="py-1.5 px-3">Lvl</th>
+                          <th className="py-1.5 px-3 text-right">Milestone (G)</th>
+                          <th className="py-1.5 px-3 text-right">
+                            Entry ({isLong ? '+' : '-'}{entryOffsetPts})
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--theme-border-subtle)]">
+                        {gridLadder.map((lvl) => {
+                          const isTarget = lvl.level === (runtime.currentCycle || 1);
+                          return (
+                            <tr
+                              key={`up-${lvl.level}`}
+                              className={`transition-colors ${
+                                isTarget
+                                  ? 'bg-amber-500/10 font-bold'
+                                  : lvl.isPassed
+                                  ? 'bg-emerald-500/[0.06]'
+                                  : 'hover:bg-[var(--theme-bg-card-subtle)]'
+                              }`}
+                            >
+                              <td className="py-1.5 px-3 font-bold text-[var(--theme-text-primary)]">
+                                #{lvl.level}
+                              </td>
+                              <td className="py-1.5 px-3 text-right text-[var(--theme-text-secondary)]">
+                                ${formatPrice(lvl.milestoneTriggerPrice)}
+                              </td>
+                              <td className="py-1.5 px-3 text-right font-bold text-emerald-600 whitespace-nowrap">
+                                ${formatPrice(lvl.targetEntryPrice)}
+                                {isTarget ? ' · Next' : ''}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Downside DCA Table */}
+              {(ladderTab === 'ALL' || ladderTab === 'DOWNSIDE') && (
+                <div className="rounded-lg border border-[var(--theme-border)] overflow-hidden">
+                  <div className="px-3 py-2 bg-[var(--theme-bg-card-subtle)] border-b border-[var(--theme-border-subtle)] flex items-center justify-between font-sans text-[11px] font-bold text-rose-600">
+                    <span>Downside DCA Pullback ({isLong ? '-' : '+'}{downsideGapPts} pts/lvl)</span>
+                    <span className="font-mono text-[10px] text-[var(--theme-text-muted)]">
+                      Entry {isLong ? '+' : '-'}{entryGapFactor}*G
+                    </span>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-left border-collapse text-[11px]">
+                      <thead>
+                        <tr className="sticky top-0 z-10 bg-[var(--theme-bg-card-subtle)] text-[10px] font-sans font-bold text-[var(--theme-text-muted)] border-b border-[var(--theme-border)]">
+                          <th className="py-1.5 px-3">Lvl</th>
+                          <th className="py-1.5 px-3 text-right">Milestone (G)</th>
+                          <th className="py-1.5 px-3 text-right">
+                            DCA Entry ({isLong ? '+' : '-'}{entryOffsetPts})
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--theme-border-subtle)]">
+                        {downsideLadder.map((lvl) => (
+                          <tr
+                            key={`down-${lvl.level}`}
+                            className={`transition-colors ${
+                              lvl.isPassed
+                                ? 'bg-rose-500/[0.06] font-bold'
+                                : 'hover:bg-[var(--theme-bg-card-subtle)]'
+                            }`}
+                          >
+                            <td className="py-1.5 px-3 font-bold text-[var(--theme-text-primary)]">
+                              #{lvl.level}
+                            </td>
+                            <td className="py-1.5 px-3 text-right text-[var(--theme-text-secondary)]">
+                              ${formatPrice(lvl.milestoneTriggerPrice)}
+                            </td>
+                            <td className="py-1.5 px-3 text-right font-bold text-rose-600 whitespace-nowrap">
+                              ${formatPrice(lvl.targetEntryPrice)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Live Bot Execution Logs Card */}
+          <div className="rounded-xl border bg-[var(--theme-bg-card)] border-[var(--theme-border)] p-4 sm:p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between pb-2.5 border-b border-[var(--theme-border-subtle)]">
+              <div className="flex items-center gap-2 text-xs sm:text-sm font-extrabold text-[var(--theme-text-primary)]">
+                <ListFilter className="w-4 h-4 text-emerald-600" />
+                <span>Live Auto Grid Execution Log ({runtime.logs.length} Events)</span>
+              </div>
+              <button
+                type="button"
+                onClick={onClearLogs}
+                className="text-[11px] font-semibold text-[var(--theme-text-secondary)] hover:text-rose-600 transition-colors cursor-pointer"
+              >
+                Clear Log
+              </button>
+            </div>
+
+            <div className="max-h-48 overflow-y-auto divide-y divide-[var(--theme-border-subtle)] font-mono text-[11px] tabular-nums">
+              {runtime.logs.length === 0 ? (
+                <div className="py-6 text-center font-sans text-xs text-[var(--theme-text-muted)]">
+                  No bot execution events recorded yet. Click &ldquo;Start Auto Grid&rdquo; to arm the ladder.
+                </div>
+              ) : (
+                runtime.logs.map((log) => {
+                  const timeStr = new Date(log.timestamp).toLocaleTimeString('en-US', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                  });
+
+                  const typeColor =
+                    log.type === 'TRIGGER'
+                      ? 'text-emerald-600'
+                      : log.type === 'CHASE_HIGH'
+                      ? 'text-amber-600'
+                      : log.type === 'SL_UPDATE'
+                      ? 'text-emerald-700'
+                      : log.type === 'EXIT'
+                      ? 'text-rose-600'
+                      : log.type === 'ERROR'
+                      ? 'text-rose-600'
+                      : 'text-[var(--theme-text-secondary)]';
+
+                  return (
+                    <div
+                      key={log.id}
+                      className="flex items-start gap-2.5 py-1.5 px-2 hover:bg-[var(--theme-bg-card-subtle)] transition-colors"
+                    >
+                      <span className="text-[var(--theme-text-muted)] shrink-0">{timeStr}</span>
+                      <span className={`font-bold shrink-0 w-24 ${typeColor}`}>
+                        [{log.type}]
+                      </span>
+                      <span className="text-[var(--theme-text-primary)] break-words flex-1">
+                        {log.message}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
