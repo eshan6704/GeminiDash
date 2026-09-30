@@ -55,7 +55,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
   const [activeTab, setActiveTab] = useState<'positions' | 'orders' | 'spot' | 'history'>('positions');
   const [sourceFilter, setSourceFilter] = useState<'ALL' | 'MANUAL' | 'AUTO_GRID'>('ALL');
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
-  const { showInr, formatInr } = useInrCurrency();
+  const { formatCurrency, currencySymbol, currencyLabel } = useInrCurrency();
   const [modalTP, setModalTP] = useState<string>('');
   const [modalSL, setModalSL] = useState<string>('');
   const [modalTrailing, setModalTrailing] = useState<string>('');
@@ -189,7 +189,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <InrCurrencyToggle compact />
+          <InrCurrencyToggle />
 
           {activeTab === 'positions' && positions.length > 0 && (
             <>
@@ -254,39 +254,30 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 px-4 py-3 bg-[var(--theme-bg-card-subtle)] border-b border-[var(--theme-border-subtle)] font-mono text-xs tabular-nums">
           <div className="flex items-center justify-between sm:block">
             <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)] block">
-              Entry Trade Val &rarr; Current Val
+              Entry Trade Val &rarr; Current Val ({currencyLabel})
             </span>
             <div>
               <span className="font-bold text-[var(--theme-text-primary)] block">
-                ${summaryStats.totalEntryVal.toFixed(2)} &rarr; ${summaryStats.totalCurrentVal.toFixed(2)}
+                {formatCurrency(summaryStats.totalEntryVal, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
+                {formatCurrency(summaryStats.totalCurrentVal, { usdDecimals: 2, inrDecimals: 2 })}
               </span>
-              {showInr && (
-                <span className="text-[10px] font-bold text-emerald-700 block">
-                  {formatInr(summaryStats.totalEntryVal)} &rarr; {formatInr(summaryStats.totalCurrentVal)}
-                </span>
-              )}
             </div>
           </div>
 
           <div className="flex items-center justify-between sm:block">
             <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)] block">
-              Total Margin Locked
+              Total Margin Locked ({currencyLabel})
             </span>
             <div>
               <span className="font-bold text-amber-600 block">
-                ${summaryStats.totalMargin.toFixed(4)} USDT
+                {formatCurrency(summaryStats.totalMargin, { usdDecimals: 4, inrDecimals: 2 })}
               </span>
-              {showInr && (
-                <span className="text-[10px] font-bold text-amber-700 block">
-                  {formatInr(summaryStats.totalMargin)}
-                </span>
-              )}
             </div>
           </div>
 
           <div className="flex items-center justify-between sm:block">
             <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)] block">
-              Unrealized Return (Entry vs Current)
+              Unrealized Return ({currencyLabel})
             </span>
             <div>
               <span
@@ -294,25 +285,16 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   summaryStats.totalReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
-                {summaryStats.totalReturn >= 0 ? '+' : ''}${summaryStats.totalReturn.toFixed(4)} (
+                {formatCurrency(summaryStats.totalReturn, { signed: true, usdDecimals: 4, inrDecimals: 2 })} (
                 {summaryStats.totalRoePct >= 0 ? '+' : ''}
                 {summaryStats.totalRoePct.toFixed(1)}% ROE)
               </span>
-              {showInr && (
-                <span
-                  className={`text-[10px] font-bold block ${
-                    summaryStats.totalReturn >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                  }`}
-                >
-                  {formatInr(summaryStats.totalReturn, { signed: true })}
-                </span>
-              )}
             </div>
           </div>
 
           <div className="flex items-center justify-between sm:block">
             <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)] block">
-              Net Return (After Est. Fees)
+              Net Return After Fees ({currencyLabel})
             </span>
             <div>
               <span
@@ -320,23 +302,11 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   summaryStats.netAfterFee >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
-                {summaryStats.netAfterFee >= 0 ? '+' : ''}${summaryStats.netAfterFee.toFixed(4)}{' '}
+                {formatCurrency(summaryStats.netAfterFee, { signed: true, usdDecimals: 4, inrDecimals: 2 })}{' '}
                 <span className="text-[10px] font-normal text-[var(--theme-text-muted)]">
-                  (Fee ${summaryStats.totalFees.toFixed(4)})
+                  (Fee {formatCurrency(summaryStats.totalFees, { usdDecimals: 4, inrDecimals: 2 })})
                 </span>
               </span>
-              {showInr && (
-                <span
-                  className={`text-[10px] font-bold block ${
-                    summaryStats.netAfterFee >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                  }`}
-                >
-                  {formatInr(summaryStats.netAfterFee, { signed: true })}{' '}
-                  <span className="text-[var(--theme-text-muted)] font-normal">
-                    (Fee {formatInr(summaryStats.totalFees)})
-                  </span>
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -360,8 +330,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   <th className="px-3.5 py-2.5">Slot &amp; Contract</th>
                   <th className="px-3 py-2.5 text-right">Size (Lot)</th>
                   <th className="px-3.5 py-2.5 text-right">Entry &rarr; Current Price (&Delta; Pts)</th>
-                  <th className="px-3.5 py-2.5 text-right">Trade Val (Entry &rarr; Current)</th>
-                  <th className="px-3.5 py-2.5 text-right">Return (Entry vs Current &middot; &Delta; Val)</th>
+                  <th className="px-3.5 py-2.5 text-right">Trade Val &amp; Margin ({currencySymbol})</th>
+                  <th className="px-3.5 py-2.5 text-right">Return &amp; Fee ({currencySymbol})</th>
                   <th className="px-3.5 py-2.5 text-right">Liquidation &amp; Risk</th>
                   <th className="px-3.5 py-2.5 text-right">TP / SL Protection</th>
                   <th className="px-3.5 py-2.5 text-right">Quick Close</th>
@@ -470,18 +440,21 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                       <td className="px-3.5 py-3 text-right">
                         <div className="font-semibold text-[var(--theme-text-primary)] whitespace-nowrap">
                           <span className="text-[var(--theme-text-secondary)]">
-                            ${entryVal.toFixed(2)}
+                            {formatCurrency(entryVal, { usdDecimals: 2, inrDecimals: 2 })}
                           </span>{' '}
-                          &rarr; <span className="font-bold">${curVal.toFixed(2)}</span>
+                          &rarr;{' '}
+                          <span className="font-bold">
+                            {formatCurrency(curVal, { usdDecimals: 2, inrDecimals: 2 })}
+                          </span>
                         </div>
-                        {showInr && (
-                          <div className="text-[10px] font-bold text-emerald-700 whitespace-nowrap">
-                            {formatInr(entryVal)} &rarr; {formatInr(curVal)}
-                          </div>
-                        )}
                         <div className="text-[10px] text-[var(--theme-text-muted)] whitespace-nowrap">
-                          Margin: <strong className="text-amber-600">${pos.margin < 10 ? pos.margin.toFixed(4) : pos.margin.toFixed(2)}</strong>
-                          {showInr && <span className="text-amber-700 font-bold"> ({formatInr(pos.margin)})</span>}
+                          Margin:{' '}
+                          <strong className="text-amber-600">
+                            {formatCurrency(pos.margin, {
+                              usdDecimals: pos.margin < 10 ? 4 : 2,
+                              inrDecimals: 2,
+                            })}
+                          </strong>
                         </div>
                       </td>
 
@@ -492,27 +465,16 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                             isValProfit ? 'text-emerald-600' : 'text-rose-600'
                           }`}
                         >
-                          {isValProfit ? '+' : ''}${valDiff.toFixed(4)}{' '}
+                          {formatCurrency(valDiff, { signed: true, usdDecimals: 4, inrDecimals: 2 })}{' '}
                           <span className="text-[11px]">
                             ({isValProfit ? '+' : ''}
                             {roePct.toFixed(1)}% ROE)
                           </span>
                         </div>
-                        {showInr && (
-                          <div
-                            className={`text-[10px] font-bold whitespace-nowrap ${
-                              isValProfit ? 'text-emerald-700' : 'text-rose-600'
-                            }`}
-                          >
-                            {formatInr(valDiff, { signed: true })} &middot; Fee: {formatInr(fee)}
-                          </div>
-                        )}
                         <div className="text-[10px] text-[var(--theme-text-muted)] whitespace-nowrap">
-                          ({signedPriceDiff >= 0 ? '+' : ''}
-                          {signedPriceDiff.toFixed(1)} pts &times; {pos.amount}) &middot; Net:{' '}
+                          Fee: {formatCurrency(fee, { usdDecimals: 4, inrDecimals: 2 })} &middot; Net:{' '}
                           <span className={netAfterFee >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                            {netAfterFee >= 0 ? '+' : ''}${netAfterFee.toFixed(4)}
-                            {showInr ? ` (${formatInr(netAfterFee, { signed: true })})` : ''}
+                            {formatCurrency(netAfterFee, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
                           </span>
                         </div>
                       </td>
@@ -623,8 +585,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   <th className="px-4 py-2.5">Order Mode &amp; Side</th>
                   <th className="px-4 py-2.5 text-right">Target Entry vs Current</th>
                   <th className="px-4 py-2.5 text-right">Size (Lot)</th>
-                  <th className="px-4 py-2.5 text-right">Target Trade Val</th>
-                  <th className="px-4 py-2.5 text-right">Margin Locked</th>
+                  <th className="px-4 py-2.5 text-right">Target Trade Val ({currencySymbol})</th>
+                  <th className="px-4 py-2.5 text-right">Margin Locked ({currencySymbol})</th>
                   <th className="px-4 py-2.5 text-right">Action</th>
                 </tr>
               </thead>
@@ -664,20 +626,17 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                         {order.amount.toFixed(4)}
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--theme-text-secondary)]">
-                        <div>${(order.targetPrice * order.amount).toFixed(2)}</div>
-                        {showInr && (
-                          <div className="text-[10px] font-bold text-emerald-700">
-                            {formatInr(order.targetPrice * order.amount)}
-                          </div>
-                        )}
+                        <div>
+                          {formatCurrency(order.targetPrice * order.amount, {
+                            usdDecimals: 2,
+                            inrDecimals: 2,
+                          })}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-right font-bold text-[var(--theme-text-primary)]">
-                        <div>${order.margin.toFixed(4)}</div>
-                        {showInr && (
-                          <div className="text-[10px] font-bold text-amber-700">
-                            {formatInr(order.margin)}
-                          </div>
-                        )}
+                        <div>
+                          {formatCurrency(order.margin, { usdDecimals: 4, inrDecimals: 2 })}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <button
@@ -712,8 +671,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   <th className="px-4 py-2.5">Asset</th>
                   <th className="px-4 py-2.5 text-right">Quantity</th>
                   <th className="px-4 py-2.5 text-right">Entry Cost &rarr; Current Price</th>
-                  <th className="px-4 py-2.5 text-right">Trade Val (Entry &rarr; Current)</th>
-                  <th className="px-4 py-2.5 text-right">Return (Entry vs Current)</th>
+                  <th className="px-4 py-2.5 text-right">Trade Val ({currencySymbol})</th>
+                  <th className="px-4 py-2.5 text-right">Return ({currencySymbol})</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--theme-border-subtle)]">
@@ -745,23 +704,18 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--theme-text-secondary)]">
                         <div>
-                          ${totalCost.toFixed(2)} &rarr; <strong className="text-[var(--theme-text-primary)]">${totalVal.toFixed(2)}</strong>
+                          {formatCurrency(totalCost, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
+                          <strong className="text-[var(--theme-text-primary)]">
+                            {formatCurrency(totalVal, { usdDecimals: 2, inrDecimals: 2 })}
+                          </strong>
                         </div>
-                        {showInr && (
-                          <div className="text-[10px] font-bold text-emerald-700">
-                            {formatInr(totalCost)} &rarr; {formatInr(totalVal)}
-                          </div>
-                        )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
                         <span className={`font-extrabold block ${isProfit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {isProfit ? '+' : ''}${pnl.toFixed(4)} ({isProfit ? '+' : ''}{pnlPct.toFixed(2)}%)
+                          {formatCurrency(pnl, { signed: true, usdDecimals: 4, inrDecimals: 2 })} (
+                          {isProfit ? '+' : ''}
+                          {pnlPct.toFixed(2)}%)
                         </span>
-                        {showInr && (
-                          <span className={`text-[10px] font-bold block ${isProfit ? 'text-emerald-700' : 'text-rose-600'}`}>
-                            {formatInr(pnl, { signed: true })}
-                          </span>
-                        )}
                       </td>
                     </tr>
                   );
@@ -788,9 +742,9 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                   <th className="px-4 py-2.5">Contract &amp; Lot</th>
                   <th className="px-4 py-2.5">Side &amp; Leverage</th>
                   <th className="px-4 py-2.5 text-right">Entry &rarr; Exit Price (&Delta; Pts)</th>
-                  <th className="px-4 py-2.5 text-right">Trade Val (Entry &rarr; Exit)</th>
-                  <th className="px-4 py-2.5 text-right">Fees</th>
-                  <th className="px-4 py-2.5 text-right">Realized Return (Entry vs Exit)</th>
+                  <th className="px-4 py-2.5 text-right">Trade Val ({currencySymbol})</th>
+                  <th className="px-4 py-2.5 text-right">Fees ({currencySymbol})</th>
+                  <th className="px-4 py-2.5 text-right">Realized Return ({currencySymbol})</th>
                   <th className="px-4 py-2.5 text-right">Trigger</th>
                 </tr>
               </thead>
@@ -845,20 +799,13 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                         </div>
                       </td>
                       <td className="px-4 py-2.5 text-right text-[var(--theme-text-secondary)] whitespace-nowrap">
-                        <div>${entryVal.toFixed(2)} &rarr; ${exitVal.toFixed(2)}</div>
-                        {showInr && (
-                          <div className="text-[10px] font-bold text-emerald-700">
-                            {formatInr(entryVal)} &rarr; {formatInr(exitVal)}
-                          </div>
-                        )}
+                        <div>
+                          {formatCurrency(entryVal, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
+                          {formatCurrency(exitVal, { usdDecimals: 2, inrDecimals: 2 })}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-right text-amber-600 whitespace-nowrap">
-                        <div>${(rec.fees || 0).toFixed(4)}</div>
-                        {showInr && (
-                          <div className="text-[10px] font-bold text-amber-700">
-                            {formatInr(rec.fees || 0)}
-                          </div>
-                        )}
+                        <div>{formatCurrency(rec.fees || 0, { usdDecimals: 4, inrDecimals: 2 })}</div>
                       </td>
                       <td className="px-4 py-2.5 text-right whitespace-nowrap">
                         <div
@@ -866,17 +813,8 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
                             isProfit ? 'text-emerald-600' : 'text-rose-600'
                           }`}
                         >
-                          {isProfit ? '+' : ''}${valDiff.toFixed(4)}
+                          {formatCurrency(valDiff, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
                         </div>
-                        {showInr && (
-                          <div
-                            className={`text-[10px] font-bold ${
-                              isProfit ? 'text-emerald-700' : 'text-rose-600'
-                            }`}
-                          >
-                            {formatInr(valDiff, { signed: true })}
-                          </div>
-                        )}
                         <div className="text-[10px] text-[var(--theme-text-muted)]">
                           ({priceDiff >= 0 ? '+' : ''}
                           {priceDiff.toFixed(1)} pts &times; {rec.amount})

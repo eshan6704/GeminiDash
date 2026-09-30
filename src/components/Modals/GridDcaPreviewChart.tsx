@@ -8,6 +8,7 @@ import {
   calculateGridLadderLevels,
   calculateDownsideLadderLevels,
 } from '../../utils/gridLadderCalculator';
+import { useInrCurrency, InrCurrencyToggle } from '../../utils/inrCurrency';
 import {
   Sliders,
   TrendingUp,
@@ -73,6 +74,7 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
 
   // "What-If Price Slider" state
   const [simulatedPrice, setSimulatedPrice] = useState<number>(livePrice);
+  const { formatCurrency, currencySymbol, currencyLabel } = useInrCurrency();
 
   const isLong = side === 'BUY';
   const isGold = currentAsset?.category === 'gold' || currentAsset?.symbol === 'XAUT';
@@ -552,32 +554,35 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
             </div>
           </div>
 
-          {/* Strategy Branch Selector */}
-          <div className="flex items-center gap-1 bg-neutral-900 p-0.5 rounded-lg border border-neutral-800 text-[10px] font-mono">
-            <button
-              type="button"
-              onClick={() => setSummaryTab('DOWNSIDE_DCA')}
-              className={`px-2.5 py-1 rounded font-bold transition-all flex items-center gap-1 ${
-                summaryTab === 'DOWNSIDE_DCA'
-                  ? 'bg-rose-500 text-neutral-950 shadow'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <TrendingDown className="w-3 h-3" />
-              <span>Averaging DCA ({isLong ? 'Buy Dips -50pts' : 'Sell Rallies +50pts'})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setSummaryTab('UPSIDE_PYRAMID')}
-              className={`px-2.5 py-1 rounded font-bold transition-all flex items-center gap-1 ${
-                summaryTab === 'UPSIDE_PYRAMID'
-                  ? 'bg-emerald-500 text-neutral-950 shadow'
-                  : 'text-neutral-400 hover:text-white'
-              }`}
-            >
-              <TrendingUp className="w-3 h-3" />
-              <span>Pyramiding Trend ({isLong ? 'Pyramid Up +25pts' : 'Pyramid Down -25pts'})</span>
-            </button>
+          {/* Strategy Branch Selector & Currency Toggle */}
+          <div className="flex flex-wrap items-center gap-2">
+            <InrCurrencyToggle />
+            <div className="flex items-center gap-1 bg-neutral-900 p-0.5 rounded-lg border border-neutral-800 text-[10px] font-mono">
+              <button
+                type="button"
+                onClick={() => setSummaryTab('DOWNSIDE_DCA')}
+                className={`px-2.5 py-1 rounded font-bold transition-all flex items-center gap-1 ${
+                  summaryTab === 'DOWNSIDE_DCA'
+                    ? 'bg-rose-500 text-neutral-950 shadow'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <TrendingDown className="w-3 h-3" />
+                <span>Averaging DCA ({isLong ? 'Buy Dips -50pts' : 'Sell Rallies +50pts'})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSummaryTab('UPSIDE_PYRAMID')}
+                className={`px-2.5 py-1 rounded font-bold transition-all flex items-center gap-1 ${
+                  summaryTab === 'UPSIDE_PYRAMID'
+                    ? 'bg-emerald-500 text-neutral-950 shadow'
+                    : 'text-neutral-400 hover:text-white'
+                }`}
+              >
+                <TrendingUp className="w-3 h-3" />
+                <span>Pyramiding Trend ({isLong ? 'Pyramid Up +25pts' : 'Pyramid Down -25pts'})</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -591,14 +596,17 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
                 <th className="py-2.5 px-3 text-amber-300 font-bold">Predicted Trigger Price</th>
                 <th className="py-2.5 px-3">Gap (pts)</th>
                 <th className="py-2.5 px-3 text-white">Estimated Volume</th>
-                <th className="py-2.5 px-3">Order Notional</th>
-                <th className="py-2.5 px-3">Req. Margin ({leverage}x)</th>
+                <th className="py-2.5 px-3">Trade Val ({currencySymbol})</th>
+                <th className="py-2.5 px-3">Req. Margin ({leverage}x &middot; {currencySymbol})</th>
+                <th className="py-2.5 px-3">Fee &amp; Return ({currencySymbol})</th>
                 <th className="py-2.5 px-3 text-cyan-300 font-bold text-right">Projected Avg Price (P_avg)</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-800/50">
               {next5LevelsSummary.rows.map((row, idx) => {
                 const isBase = row.isBase;
+                const rowFee = row.notionalValue * 0.00016;
+                const rowWinReturn = gridSpacing * 0.2 * row.orderVolume;
                 return (
                   <tr
                     key={idx}
@@ -666,19 +674,29 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
                       </span>
                     </td>
 
-                    {/* Order Notional */}
+                    {/* Order Notional / Trade Value */}
                     <td className="py-2 px-3 text-neutral-300 whitespace-nowrap">
-                      ${row.notionalValue.toFixed(2)}
+                      {formatCurrency(row.notionalValue, { usdDecimals: 2, inrDecimals: 2 })}
                       <span className="text-[9px] text-neutral-500 block">
-                        Cum: ${row.cumCost.toFixed(0)}
+                        Cum: {formatCurrency(row.cumCost, { usdDecimals: 0, inrDecimals: 0 })}
                       </span>
                     </td>
 
                     {/* Margin Required */}
                     <td className="py-2 px-3 text-emerald-400 whitespace-nowrap font-medium">
-                      ${row.marginRequired.toFixed(2)} USDT
+                      {formatCurrency(row.marginRequired, { usdDecimals: 2, inrDecimals: 2 })}
                       <span className="text-[9px] text-neutral-500 block">
-                        Cum: ${row.cumMargin.toFixed(2)}
+                        Cum: {formatCurrency(row.cumMargin, { usdDecimals: 2, inrDecimals: 2 })}
+                      </span>
+                    </td>
+
+                    {/* Fee & Return */}
+                    <td className="py-2 px-3 whitespace-nowrap">
+                      <span className="text-emerald-400 font-bold block">
+                        {formatCurrency(rowWinReturn, { signed: true, usdDecimals: 2, inrDecimals: 2 })}
+                      </span>
+                      <span className="text-[9px] text-amber-400 block">
+                        Fee: {formatCurrency(rowFee, { usdDecimals: 4, inrDecimals: 2 })}
                       </span>
                     </td>
 
@@ -713,10 +731,17 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
                   {next5LevelsSummary.totalVolume.toFixed(3)} {selectedSymbol}
                 </td>
                 <td className="py-2.5 px-3 text-white">
-                  ${next5LevelsSummary.totalNotional.toFixed(2)}
+                  {formatCurrency(next5LevelsSummary.totalNotional, { usdDecimals: 2, inrDecimals: 2 })}
                 </td>
                 <td className="py-2.5 px-3 text-emerald-400">
-                  ${next5LevelsSummary.totalMargin.toFixed(2)} USDT
+                  {formatCurrency(next5LevelsSummary.totalMargin, { usdDecimals: 2, inrDecimals: 2 })}
+                </td>
+                <td className="py-2.5 px-3 text-emerald-400">
+                  {formatCurrency(gridSpacing * 0.2 * next5LevelsSummary.totalVolume, {
+                    signed: true,
+                    usdDecimals: 2,
+                    inrDecimals: 2,
+                  })}
                 </td>
                 <td className="py-2.5 px-3 text-right text-cyan-300 font-bold">
                   ${next5LevelsSummary.finalAvgPrice.toFixed(2)}
@@ -730,13 +755,13 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
           <div className="p-2.5 rounded-lg bg-neutral-900/80 border border-neutral-800 text-xs font-mono">
             <span className="text-[10px] text-neutral-500 uppercase block font-sans">
-              Total 5-Level Capital Commitment
+              Total 5-Level Capital Commitment ({currencyLabel})
             </span>
             <span className="text-sm font-bold text-emerald-400">
-              ${next5LevelsSummary.totalMargin.toFixed(2)} USDT
+              {formatCurrency(next5LevelsSummary.totalMargin, { usdDecimals: 2, inrDecimals: 2 })}
             </span>
             <span className="text-[10px] text-neutral-400 block mt-0.5">
-              ${next5LevelsSummary.totalNotional.toFixed(0)} Notional @ {leverage}x
+              {formatCurrency(next5LevelsSummary.totalNotional, { usdDecimals: 0, inrDecimals: 0 })} Trade Val @ {leverage}x
             </span>
           </div>
 
@@ -1064,7 +1089,12 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
                 </div>
                 <div className="flex justify-between pt-1 border-t border-neutral-900 text-emerald-400">
                   <span>Margin Needed ({leverage}x):</span>
-                  <span>${((hoveredLevel.targetEntryPrice * lotSize) / leverage).toFixed(2)} USDT</span>
+                  <span>
+                    {formatCurrency((hoveredLevel.targetEntryPrice * lotSize) / leverage, {
+                      usdDecimals: 2,
+                      inrDecimals: 2,
+                    })}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1158,13 +1188,13 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
           {/* Capital & Margin Locked */}
           <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 font-mono">
             <span className="text-[10px] text-neutral-400 uppercase block font-sans">
-              Margin Locked
+              Margin Locked ({currencyLabel})
             </span>
             <span className="text-base font-bold text-neutral-200">
-              ${simulationResults.totalMargin.toFixed(2)} USDT
+              {formatCurrency(simulationResults.totalMargin, { usdDecimals: 2, inrDecimals: 2 })}
             </span>
             <span className="text-[10px] text-neutral-500 block">
-              ${simulationResults.totalCost.toFixed(0)} Notional ({leverage}x)
+              {formatCurrency(simulationResults.totalCost, { usdDecimals: 0, inrDecimals: 0 })} Trade Val ({leverage}x)
             </span>
           </div>
 
@@ -1175,10 +1205,10 @@ export const GridDcaPreviewChart: React.FC<GridDcaPreviewChartProps> = ({
               : 'bg-rose-950/20 border-rose-500/40 text-rose-400'
           }`}>
             <span className="text-[10px] text-neutral-400 uppercase block font-sans">
-              Simulated Unrealized PnL
+              Simulated Return ({currencyLabel})
             </span>
             <span className="text-base font-bold">
-              {simulationResults.unrealizedPnL >= 0 ? '+' : ''}${simulationResults.unrealizedPnL.toFixed(2)}
+              {formatCurrency(simulationResults.unrealizedPnL, { signed: true, usdDecimals: 2, inrDecimals: 2 })}
             </span>
             <span className="text-[10px] block">
               ROI: {simulationResults.unrealizedPnL >= 0 ? '+' : ''}{simulationResults.pnlPercent.toFixed(2)}%

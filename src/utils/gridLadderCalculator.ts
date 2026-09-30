@@ -27,8 +27,23 @@ export interface DigitGridSpec {
  * - For BTC: multiple of 100 (e.g. 83010 -> 83000, 83610 -> 83600)
  * - Else: 0.1% of G (0.001 * G)
  */
-export function getBasePriceStep(symbol: string = 'BTC', effectiveG: number = 1000): number {
-  const cleanSym = (symbol || 'BTC').toUpperCase();
+export function getBasePriceStep(
+  symbolOrG: string | number = 'BTC',
+  effectiveGOrSymbol: number | string = 1000
+): number {
+  const symbol =
+    typeof symbolOrG === 'string'
+      ? symbolOrG
+      : typeof effectiveGOrSymbol === 'string'
+      ? effectiveGOrSymbol
+      : 'BTC';
+  const effectiveG =
+    typeof symbolOrG === 'number'
+      ? symbolOrG
+      : typeof effectiveGOrSymbol === 'number'
+      ? effectiveGOrSymbol
+      : 1000;
+  const cleanSym = String(symbol || 'BTC').toUpperCase();
   if (cleanSym === 'BTC' || cleanSym.startsWith('BTC')) {
     return 100;
   }
@@ -43,10 +58,10 @@ export function getBasePriceStep(symbol: string = 'BTC', effectiveG: number = 10
  */
 export function snapToBaseMultiple(
   price: number,
-  symbol: string = 'BTC',
-  effectiveG: number = 1000
+  symbolOrG: string | number = 'BTC',
+  effectiveGOrSymbol: number | string = 1000
 ): number {
-  const step = getBasePriceStep(symbol, effectiveG);
+  const step = getBasePriceStep(symbolOrG, effectiveGOrSymbol);
   if (!step || step <= 0) return Number(price.toFixed(6));
   const snapped = Math.floor((price + 1e-9) / step) * step;
   return Number(snapped.toFixed(6));
@@ -71,9 +86,11 @@ export function calculateDigitGridSpec(
     slStartFactor?: number;
     winConditionFactor?: number;
     slAfterFactor?: number;
+    symbol?: string;
   },
   symbol: string = 'BTC'
 ): DigitGridSpec {
+  const resolvedSymbol = factors?.symbol || symbol || 'BTC';
   const safePrice = Math.max(0.0001, price || 85435);
   const log10 = Math.floor(Math.log10(safePrice));
   const intDigits = safePrice >= 1 ? log10 + 1 : 0; // 85435 -> log10=4, intDigits=5
@@ -85,8 +102,8 @@ export function calculateDigitGridSpec(
   const gridScaleFactor = Math.max(0.01, factors?.gridScaleFactor ?? 1.0);
   const effectiveG = Number((baseG * gridScaleFactor).toPrecision(6));
 
-  const basePriceStep = getBasePriceStep(symbol, effectiveG);
-  const snappedBasePrice = snapToBaseMultiple(safePrice, symbol, effectiveG);
+  const basePriceStep = getBasePriceStep(resolvedSymbol, effectiveG);
+  const snappedBasePrice = snapToBaseMultiple(safePrice, resolvedSymbol, effectiveG);
 
   const entryGapFactor = Math.max(0, factors?.entryGapFactor ?? 0.01);
   const entryOffsetPts = Number((effectiveG * entryGapFactor).toPrecision(6));

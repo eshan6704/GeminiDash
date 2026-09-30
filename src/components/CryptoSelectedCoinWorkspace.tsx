@@ -1949,7 +1949,7 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
   const [simSlDollarCap, setSimSlDollarCap] = useState<number>(3); // Default $3 on BTC (0.002 lot = 1500 pts)
   const [localForecastBalance, setLocalForecastBalance] = useState<number>(forecastBalance);
   const [forecastBalInput, setForecastBalInput] = useState<string>(forecastBalance.toFixed(0));
-  const { showInr, formatInr } = useInrCurrency();
+  const { showInr, formatInr, formatCurrency, currencySymbol, currencyLabel } = useInrCurrency();
 
   useEffect(() => {
     setLocalForecastBalance(forecastBalance);
@@ -2378,24 +2378,20 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
             </div>
             <div>
               <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)] block">
-                Trade Value (Entry &rarr; Current)
+                Trade Value (Entry &rarr; Current &middot; {currencyLabel})
               </span>
               <span className="font-bold text-[var(--theme-text-primary)] block">
-                ${entryVal.toFixed(2)} &rarr; ${currentVal.toFixed(2)}{' '}
+                {formatCurrency(entryVal, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
+                {formatCurrency(currentVal, { usdDecimals: 2, inrDecimals: 2 })}{' '}
                 <span className="text-[10px] font-normal text-[var(--theme-text-muted)]">
                   (Lot {activeLot})
                 </span>
               </span>
-              {showInr && (
-                <span className="text-[10px] font-bold text-emerald-700 block">
-                  {formatInr(entryVal)} &rarr; {formatInr(currentVal)}
-                </span>
-              )}
             </div>
             <div>
               <div className="flex items-center justify-between">
                 <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)]">
-                  Margin &amp; Fee
+                  Margin &amp; Fee ({currencyLabel})
                 </span>
                 <button
                   type="button"
@@ -2406,36 +2402,26 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                 </button>
               </div>
               <span className="font-bold text-amber-600 block">
-                Mrg: ${effMargin.toFixed(4)} &middot; Fee: ${activeFeeUsd.toFixed(4)}
+                Mrg: {formatCurrency(effMargin, { usdDecimals: 4, inrDecimals: 2 })} &middot; Fee:{' '}
+                {formatCurrency(activeFeeUsd, { usdDecimals: 4, inrDecimals: 2 })}
               </span>
-              {showInr && (
-                <span className="text-[10px] font-bold text-amber-700 block">
-                  Mrg: {formatInr(effMargin)} &middot; Fee: {formatInr(activeFeeUsd)}
-                </span>
-              )}
             </div>
             <div>
               <span className="font-sans text-[10px] font-semibold text-[var(--theme-text-muted)] block">
-                Live Return (Entry vs Current &middot; &Delta; Val)
+                Live Return ({currencyLabel})
               </span>
               <span
                 className={`font-extrabold block ${
                   currentReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
-                {currentReturn >= 0 ? '+' : ''}${currentReturn.toFixed(4)} (
+                {formatCurrency(currentReturn, { signed: true, usdDecimals: 4, inrDecimals: 2 })} (
                 {currentRoe >= 0 ? '+' : ''}
                 {currentRoe.toFixed(1)}% ROE)
               </span>
-              {showInr && (
-                <span
-                  className={`text-[10px] font-bold block ${
-                    currentReturn >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                  }`}
-                >
-                  {formatInr(currentReturn, { signed: true })} &middot; Net: {formatInr(netReturnAfterFee, { signed: true })}
-                </span>
-              )}
+              <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
+                Net After Fee: {formatCurrency(netReturnAfterFee, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
+              </span>
             </div>
           </div>
         );
@@ -2448,11 +2434,11 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
             <tr className="text-[10px] font-sans font-bold text-[var(--theme-text-secondary)] border-b border-[var(--theme-border)] bg-[var(--theme-bg-card-subtle)]">
               <th className="py-2 px-3">Move (%)</th>
               <th className="py-2 px-3 text-right">Entry &rarr; Projected Price (&Delta; Pts)</th>
-              <th className="py-2 px-3 text-right">Trade Val (Entry &rarr; Proj)</th>
-              <th className="py-2 px-3 text-right">Fee ({simFeeTier === 'MAKER' ? '0.016%' : '0.064%'})</th>
-              <th className="py-2 px-3 text-right">Return (Entry vs Proj &middot; &Delta; Val)</th>
+              <th className="py-2 px-3 text-right">Trade Val ({currencySymbol})</th>
+              <th className="py-2 px-3 text-right">Margin &amp; Fee ({simFeeTier === 'MAKER' ? '0.016%' : '0.064%'} &middot; {currencySymbol})</th>
+              <th className="py-2 px-3 text-right">Return ({currencySymbol})</th>
               <th className="py-2 px-3 text-right">ROE %</th>
-              <th className="py-2 px-3 text-right">Projected Equity</th>
+              <th className="py-2 px-3 text-right">Projected Equity ({currencySymbol})</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[var(--theme-border-subtle)]">
@@ -2475,6 +2461,10 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                   : SHARK_EXCHANGE.takerBrokerageRateDecimal;
               const rowFeeUsd = row.displayProjectedTradeVal * feeRate;
               const rowNetAfterFeeUsd = row.primaryTradePnL - rowFeeUsd;
+              const rowMarginUsd =
+                forecastMode === 'LIVE_RUNNING' && activeLiveMargin > 0
+                  ? activeLiveMargin
+                  : simMargin;
 
               return (
                 <tr
@@ -2513,24 +2503,17 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                   </td>
                   <td className="py-1.5 px-3 text-right text-[var(--theme-text-secondary)] whitespace-nowrap">
                     <div>
-                      ${row.displayEntryTradeVal.toFixed(2)} &rarr;{' '}
+                      {formatCurrency(row.displayEntryTradeVal, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
                       <strong className="text-[var(--theme-text-primary)]">
-                        ${row.displayProjectedTradeVal.toFixed(2)}
+                        {formatCurrency(row.displayProjectedTradeVal, { usdDecimals: 2, inrDecimals: 2 })}
                       </strong>
                     </div>
-                    {showInr && (
-                      <div className="text-[10px] font-bold text-emerald-700">
-                        {formatInr(row.displayEntryTradeVal)} &rarr; {formatInr(row.displayProjectedTradeVal)}
-                      </div>
-                    )}
                   </td>
                   <td className="py-1.5 px-3 text-right text-amber-600 whitespace-nowrap">
-                    <div>${rowFeeUsd.toFixed(4)}</div>
-                    {showInr && (
-                      <div className="text-[10px] font-bold text-amber-700">
-                        {formatInr(rowFeeUsd)}
-                      </div>
-                    )}
+                    <div>
+                      Mrg: {formatCurrency(rowMarginUsd, { usdDecimals: 4, inrDecimals: 2 })} &middot; Fee:{' '}
+                      {formatCurrency(rowFeeUsd, { usdDecimals: 4, inrDecimals: 2 })}
+                    </div>
                   </td>
                   <td
                     className={`py-1.5 px-3 text-right font-extrabold whitespace-nowrap ${
@@ -2538,13 +2521,11 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                     }`}
                   >
                     <div>
-                      {row.primaryTradePnL >= 0 ? '+' : ''}${row.primaryTradePnL.toFixed(4)}
+                      {formatCurrency(row.primaryTradePnL, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
                     </div>
-                    {showInr && (
-                      <div className="text-[10px] font-bold">
-                        {formatInr(row.primaryTradePnL, { signed: true })} (Net: {formatInr(rowNetAfterFeeUsd, { signed: true })})
-                      </div>
-                    )}
+                    <div className="text-[10px] font-normal text-[var(--theme-text-muted)]">
+                      Net: {formatCurrency(rowNetAfterFeeUsd, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
+                    </div>
                   </td>
                   <td
                     className={`py-1.5 px-3 text-right font-bold ${
@@ -2554,12 +2535,7 @@ export const PnlForecastingMatrixPanel: React.FC<PnlForecastingMatrixProps> = ({
                     {row.primaryRoePct >= 0 ? '+' : ''}{row.primaryRoePct.toFixed(1)}%
                   </td>
                   <td className="py-1.5 px-3 text-right font-bold text-[var(--theme-text-primary)] whitespace-nowrap">
-                    <div>${row.projectedEquity.toFixed(2)}</div>
-                    {showInr && (
-                      <div className="text-[10px] font-bold text-[var(--theme-text-secondary)]">
-                        {formatInr(row.projectedEquity)}
-                      </div>
-                    )}
+                    <div>{formatCurrency(row.projectedEquity, { usdDecimals: 2, inrDecimals: 2 })}</div>
                   </td>
                 </tr>
               );

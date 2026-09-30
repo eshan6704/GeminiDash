@@ -98,7 +98,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 }) => {
   const [terminalTab, setTerminalTab] = useState<'TRADE' | 'AUTOGRID' | 'ALERTS'>(initialTab);
   const [manualBalEditInput, setManualBalEditInput] = useState<string>(cashBalance.toFixed(0));
-  const { showInr, formatInr } = useInrCurrency();
+  const { formatCurrency, currencyLabel } = useInrCurrency();
 
   useEffect(() => {
     setManualBalEditInput(cashBalance.toFixed(0));
@@ -766,8 +766,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                         <span>SL Auto-Close</span>
                       </span>
                       <span className="font-mono text-rose-400 text-[9px]">
-                        ${effectiveLiqDollarCap}
-                        {showInr ? ` (${formatInr(effectiveLiqDollarCap)})` : ''}
+                        {formatCurrency(effectiveLiqDollarCap, { usdDecimals: 2, inrDecimals: 2 })}
                       </span>
                     </label>
                     <input
@@ -793,54 +792,38 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                   </span>
                 </div>
                 <div className="flex justify-between items-start">
-                  <span className="text-[var(--theme-text-muted)]">Trade Val (Entry &rarr; Target):</span>
+                  <span className="text-[var(--theme-text-muted)]">Trade Val ({currencyLabel}):</span>
                   <div className="text-right">
                     <span className="font-bold text-[var(--theme-text-primary)] block">
-                      ${tradeValue.toFixed(2)} &rarr; ${exitTradeValue.toFixed(2)}
+                      {formatCurrency(tradeValue, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
+                      {formatCurrency(exitTradeValue, { usdDecimals: 2, inrDecimals: 2 })}
                     </span>
-                    {showInr && (
-                      <span className="text-[10px] font-bold text-emerald-700 block">
-                        {formatInr(tradeValue)} &rarr; {formatInr(exitTradeValue)}
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div className="flex justify-between items-start">
-                  <span className="text-[var(--theme-text-muted)]">Return (&Delta; Price &times; Lot):</span>
+                  <span className="text-[var(--theme-text-muted)]">Return ({currencyLabel}):</span>
                   <div className="text-right">
                     <span
                       className={`font-extrabold block ${
                         estimatedReturn >= 0 ? 'text-emerald-500' : 'text-rose-500'
                       }`}
                     >
-                      {estimatedReturn >= 0 ? '+' : ''}${estimatedReturn.toFixed(4)} (
+                      {formatCurrency(estimatedReturn, { signed: true, usdDecimals: 4, inrDecimals: 2 })} (
                       {estimatedReturnRoePct >= 0 ? '+' : ''}
                       {estimatedReturnRoePct.toFixed(1)}%)
                     </span>
-                    {showInr && (
-                      <span
-                        className={`text-[10px] font-bold block ${
-                          estimatedReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                        }`}
-                      >
-                        {formatInr(estimatedReturn, { signed: true })}
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div className="flex justify-between items-start">
-                  <span className="text-[var(--theme-text-muted)]">Margin ({effectiveLeverage}x):</span>
+                  <span className="text-[var(--theme-text-muted)]">Margin ({effectiveLeverage}x &middot; {currencyLabel}):</span>
                   <div className="text-right">
-                    <span className="font-bold text-amber-500 block">${numericMargin.toFixed(4)}</span>
-                    {showInr && (
-                      <span className="text-[10px] font-bold text-amber-600 block">
-                        {formatInr(numericMargin)}
-                      </span>
-                    )}
+                    <span className="font-bold text-amber-500 block">
+                      {formatCurrency(numericMargin, { usdDecimals: 4, inrDecimals: 2 })}
+                    </span>
                   </div>
                 </div>
                 <div className="flex justify-between items-start">
-                  <span className="text-[var(--theme-text-muted)]">Fee:</span>
+                  <span className="text-[var(--theme-text-muted)]">Fee ({currencyLabel}):</span>
                   <div className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
                       <button
@@ -850,13 +833,13 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                       >
                         {isMakerOrder ? 'Maker 0.016%' : 'Taker 0.064%'}
                       </button>
-                      <span className="font-bold">${estimatedFee.toFixed(4)}</span>
-                    </div>
-                    {showInr && (
-                      <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
-                        {formatInr(estimatedFee)} &middot; Net Return: {formatInr(estimatedReturn - estimatedFee, { signed: true })}
+                      <span className="font-bold">
+                        {formatCurrency(estimatedFee, { usdDecimals: 4, inrDecimals: 2 })}
                       </span>
-                    )}
+                    </div>
+                    <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
+                      Net Return: {formatCurrency(estimatedReturn - estimatedFee, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
+                    </span>
                   </div>
                 </div>
                 {mode === 'LEVERAGED' && (

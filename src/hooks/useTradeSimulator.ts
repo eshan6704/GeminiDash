@@ -237,7 +237,7 @@ export function useTradeSimulator(isActiveCryptoOrCoinPage: boolean = true) {
     }
   }, [cashBalance, forecastBalance, gridCashBalance, gridInitialBalance, positions, limitOrders, tradeHistory, spotHoldings, priceAlerts]);
 
-  // Push notification helper
+  // Push notification helper (max 1 toast allowed at a time)
   const addNotification = useCallback((type: AlertNotification['type'], title: string, message: string) => {
     const newNotif: AlertNotification = {
       id: Math.random().toString(36).substring(2, 9),
@@ -246,7 +246,7 @@ export function useTradeSimulator(isActiveCryptoOrCoinPage: boolean = true) {
       message,
       timestamp: Date.now(),
     };
-    setNotifications((prev) => [newNotif, ...prev.slice(0, 7)]);
+    setNotifications([newNotif]);
   }, []);
 
   const dismissNotification = useCallback((id: string) => {

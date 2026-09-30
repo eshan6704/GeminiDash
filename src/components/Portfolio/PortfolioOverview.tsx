@@ -64,7 +64,7 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
 }) => {
   const [isExporting, setIsExporting] = useState<boolean>(false);
   const [manualBalInput, setManualBalInput] = useState<string>(cashBalance.toFixed(0));
-  const { showInr, formatInr } = useInrCurrency();
+  const { formatCurrency, currencyLabel } = useInrCurrency();
 
   React.useEffect(() => {
     setManualBalInput(cashBalance.toFixed(0));
@@ -129,7 +129,7 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          <InrCurrencyToggle compact />
+          <InrCurrencyToggle />
 
           {onUpdateManualBalance && (
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)] text-[10px] font-mono">
@@ -199,62 +199,32 @@ export const PortfolioOverview: React.FC<PortfolioOverviewProps> = ({
       {/* Minimal 6-Metric Row (Equity, Free Cash, Margin, Unrealized Return, Realized Return, Total Fees) */}
       <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 font-mono tabular-nums text-xs">
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
-          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Equity</span>
-          <span className="font-bold block">${totalEquity.toFixed(2)}</span>
-          {showInr && (
-            <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
-              {formatInr(totalEquity)}
-            </span>
-          )}
+          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Equity ({currencyLabel})</span>
+          <span className="font-bold block">{formatCurrency(totalEquity, { usdDecimals: 2, inrDecimals: 2 })}</span>
         </div>
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
-          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Free Cash</span>
-          <span className="font-bold text-emerald-500 block">${cashBalance.toFixed(2)}</span>
-          {showInr && (
-            <span className="text-[10px] font-bold text-emerald-700 block">
-              {formatInr(cashBalance)}
-            </span>
-          )}
+          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Free Cash ({currencyLabel})</span>
+          <span className="font-bold text-emerald-500 block">{formatCurrency(cashBalance, { usdDecimals: 2, inrDecimals: 2 })}</span>
         </div>
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
-          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Margin Used</span>
-          <span className="font-bold text-amber-500 block">${marginLocked.toFixed(2)}</span>
-          {showInr && (
-            <span className="text-[10px] font-bold text-amber-700 block">
-              {formatInr(marginLocked)}
-            </span>
-          )}
+          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Margin Used ({currencyLabel})</span>
+          <span className="font-bold text-amber-500 block">{formatCurrency(marginLocked, { usdDecimals: 2, inrDecimals: 2 })}</span>
         </div>
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
-          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Unrealized Return</span>
+          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Unrealized Return ({currencyLabel})</span>
           <span className={`font-bold block ${isUnrealizedProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {isUnrealizedProfit ? '+' : ''}${unrealizedPnL.toFixed(4)}
+            {formatCurrency(unrealizedPnL, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
           </span>
-          {showInr && (
-            <span className={`text-[10px] font-bold block ${isUnrealizedProfit ? 'text-emerald-700' : 'text-rose-600'}`}>
-              {formatInr(unrealizedPnL, { signed: true })}
-            </span>
-          )}
         </div>
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
-          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Realized ({totalTrades})</span>
+          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Realized ({totalTrades} &middot; {currencyLabel})</span>
           <span className={`font-bold block ${isRealizedProfit ? 'text-emerald-500' : 'text-rose-500'}`}>
-            {isRealizedProfit ? '+' : ''}${realizedPnL.toFixed(2)}
+            {formatCurrency(realizedPnL, { signed: true, usdDecimals: 2, inrDecimals: 2 })}
           </span>
-          {showInr && (
-            <span className={`text-[10px] font-bold block ${isRealizedProfit ? 'text-emerald-700' : 'text-rose-600'}`}>
-              {formatInr(realizedPnL, { signed: true })}
-            </span>
-          )}
         </div>
         <div className="p-2 rounded border bg-[var(--theme-bg-card-subtle)] border-[var(--theme-border-subtle)]">
-          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Total Fees</span>
-          <span className="font-bold text-amber-600 block">${totalFeesPaid.toFixed(4)}</span>
-          {showInr && (
-            <span className="text-[10px] font-bold text-amber-700 block">
-              {formatInr(totalFeesPaid)}
-            </span>
-          )}
+          <span className="text-[10px] font-sans text-[var(--theme-text-muted)] block">Total Fees ({currencyLabel})</span>
+          <span className="font-bold text-amber-600 block">{formatCurrency(totalFeesPaid, { usdDecimals: 4, inrDecimals: 2 })}</span>
         </div>
       </div>
     </div>

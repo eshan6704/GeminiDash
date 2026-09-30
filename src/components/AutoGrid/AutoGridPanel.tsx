@@ -111,17 +111,20 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   const curPrice = asset.price || 85435;
 
   // Digit-Reference & Factor-Based Grid Spec (e.g. 85435 (5-digit int) -> 4-digit Base G = 1000)
-  const digitSpec = calculateDigitGridSpec(curPrice, {
-    gridScaleFactor: gridConfig.gridScaleFactor ?? 1.0,
-    entryGapFactor: gridConfig.entryGapFactor ?? 0.01,
-    slStartFactor: gridConfig.slStartFactor ?? 0.2,
-    winConditionFactor: gridConfig.winConditionFactor ?? 0.2,
-    slAfterFactor: gridConfig.slAfterFactor ?? 0.01,
-    symbol: asset.symbol,
-  });
+  const digitSpec = calculateDigitGridSpec(
+    curPrice,
+    {
+      gridScaleFactor: gridConfig.gridScaleFactor ?? 1.0,
+      entryGapFactor: gridConfig.entryGapFactor ?? 0.01,
+      slStartFactor: gridConfig.slStartFactor ?? 0.2,
+      winConditionFactor: gridConfig.winConditionFactor ?? 0.2,
+      slAfterFactor: gridConfig.slAfterFactor ?? 0.01,
+    },
+    asset.symbol
+  );
 
   const gValue = gridConfig.gridSpacing || digitSpec.effectiveG;
-  const baseStep = getBasePriceStep(gValue, asset.symbol);
+  const baseStep = getBasePriceStep(asset.symbol, gValue);
   const entryGapFactor = gridConfig.entryGapFactor ?? 0.01;
   const slStartFactor = gridConfig.slStartFactor ?? 0.2;
   const winConditionFactor = gridConfig.winConditionFactor ?? 0.2;
@@ -134,17 +137,17 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   const slAfterPts = Number((gValue * slAfterFactor).toPrecision(6));
   const lockedProfitPts = Number(Math.max(0, winConditionPts - slAfterPts).toPrecision(6));
 
-  const liveSnappedBase = snapToBaseMultiple(curPrice, gValue, asset.symbol);
+  const liveSnappedBase = snapToBaseMultiple(curPrice, asset.symbol, gValue);
   const baseAnchorPrice = hasLivePosition
     ? snapToBaseMultiple(
         runtime.basePrice || gridConfig.basePriceAnchor || curPrice,
-        gValue,
-        asset.symbol
+        asset.symbol,
+        gValue
       )
     : snapToBaseMultiple(
         gridConfig.basePriceAnchor || runtime.basePrice || curPrice,
-        gValue,
-        asset.symbol
+        asset.symbol,
+        gValue
       );
 
   React.useEffect(() => {
@@ -179,7 +182,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
   const currentSL = runtime.currentTrailingSL || startSlPrice;
 
   // Broker Math:
-  const { showInr, formatInr } = useInrCurrency();
+  const { showInr, usdInrRate, formatCurrency, currencySymbol, currencyLabel } = useInrCurrency();
   const tradeValue = curPrice * gridConfig.lotSize;
   const entryTradeValue = entryPrice * gridConfig.lotSize;
   const requiredMargin =
@@ -357,17 +360,12 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
           <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-col justify-between gap-2">
             <div className="flex items-center justify-between">
               <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
-                Auto Grid Free Cash
+                Auto Grid Free Cash ({currencyLabel})
               </span>
               <div className="text-right">
                 <span className="text-sm font-black text-emerald-600 block">
-                  ${cashBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatCurrency(cashBalance, { usdDecimals: 2, inrDecimals: 2 })}
                 </span>
-                {showInr && (
-                  <span className="text-[10px] font-bold text-emerald-700 block">
-                    {formatInr(cashBalance)}
-                  </span>
-                )}
               </div>
             </div>
             <div className="flex items-center gap-1.5 pt-1 border-t border-[var(--theme-border-subtle)]">
@@ -395,7 +393,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                     }}
                     className="px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-sans font-bold text-[10px] cursor-pointer transition-colors"
                   >
-                    Set
+                    Set ($)
                   </button>
                   <button
                     type="button"
@@ -420,31 +418,27 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
           <div className="p-3 rounded-lg bg-[var(--theme-bg-card-subtle)] border border-[var(--theme-border-subtle)] flex flex-col justify-between gap-1.5">
             <div className="flex items-center justify-between">
               <span className="font-sans text-[11px] font-semibold text-[var(--theme-text-muted)]">
-                Grid Net Equity
+                Grid Net Equity ({currencyLabel})
               </span>
               <div className="text-right">
                 <span className="text-sm font-black text-[var(--theme-text-primary)] block">
-                  ${effectiveGridEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {formatCurrency(effectiveGridEquity, { usdDecimals: 2, inrDecimals: 2 })}
                 </span>
-                {showInr && (
-                  <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
-                    {formatInr(effectiveGridEquity)}
-                  </span>
-                )}
               </div>
             </div>
             <div className="flex items-center justify-between text-[11px] pt-1 border-t border-[var(--theme-border-subtle)]">
               <span className="font-sans text-[var(--theme-text-muted)]">
-                Margin: <strong className="font-mono text-amber-600">${gridMarginLocked.toFixed(2)}</strong>
-                {showInr && <span className="text-[10px] text-amber-700 ml-1">({formatInr(gridMarginLocked)})</span>}
+                Margin:{' '}
+                <strong className="font-mono text-amber-600">
+                  {formatCurrency(gridMarginLocked, { usdDecimals: 2, inrDecimals: 2 })}
+                </strong>
               </span>
               <span
                 className={`font-bold ${
                   gridUnrealizedPnL >= 0 ? 'text-emerald-600' : 'text-rose-600'
                 }`}
               >
-                PnL: {gridUnrealizedPnL >= 0 ? '+' : ''}${gridUnrealizedPnL.toFixed(2)}
-                {showInr && <span className="text-[10px] ml-1">({formatInr(gridUnrealizedPnL, { signed: true })})</span>}
+                Return: {formatCurrency(gridUnrealizedPnL, { signed: true, usdDecimals: 2, inrDecimals: 2 })}
               </span>
             </div>
           </div>
@@ -786,8 +780,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   2. Trailing SL in Start (-{slStartFactor}*G = -{slStartPts} pts):
                 </span>
                 <strong className="text-rose-600">
-                  ${formatPrice(startSlPrice)} (-${slStartRiskUsd.toFixed(2)}
-                  {showInr ? ` / ${formatInr(-slStartRiskUsd, { signed: true })}` : ''})
+                  ${formatPrice(startSlPrice)} ({formatCurrency(-slStartRiskUsd, { signed: true, usdDecimals: 2, inrDecimals: 2 })})
                 </strong>
               </div>
               <div className="flex items-center justify-between">
@@ -795,8 +788,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   3. Winning Condition (&gt;+{winConditionFactor}*G = +{winConditionPts} pts):
                 </span>
                 <strong className="text-amber-600">
-                  &gt; ${formatPrice(winTriggerPrice)} (+${winCondProfitUsd.toFixed(2)}
-                  {showInr ? ` / ${formatInr(winCondProfitUsd, { signed: true })}` : ''})
+                  &gt; ${formatPrice(winTriggerPrice)} ({formatCurrency(winCondProfitUsd, { signed: true, usdDecimals: 2, inrDecimals: 2 })})
                 </strong>
               </div>
               <div className="flex items-center justify-between">
@@ -804,8 +796,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   4. Tight Trailing SL After Win (-{slAfterFactor}*G = -{slAfterPts} pts):
                 </span>
                 <strong className="text-emerald-600">
-                  ${formatPrice(tightSlAtWinPrice)}+ (Locks +${lockedProfitUsd.toFixed(2)}
-                  {showInr ? ` / ${formatInr(lockedProfitUsd, { signed: true })}` : ''})
+                  ${formatPrice(tightSlAtWinPrice)}+ (Locks {formatCurrency(lockedProfitUsd, { signed: true, usdDecimals: 2, inrDecimals: 2 })})
                 </strong>
               </div>
             </div>
@@ -815,12 +806,17 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-1">
               <span className="text-xs font-bold text-[var(--theme-text-primary)]">
-                04. Order Sizing, Leverage &amp; Anchor
+                04. Order Sizing, Leverage &amp; Anchor ({currencyLabel})
               </span>
               <span className="text-[11px] font-mono text-[var(--theme-text-muted)]">
-                Trade Val: <strong className="text-[var(--theme-text-primary)]">${tradeValue.toFixed(2)}</strong>
-                {showInr && <span className="text-emerald-700 font-bold"> ({formatInr(tradeValue)})</span>} &middot; Margin: <strong className="text-amber-600">${requiredMargin.toFixed(4)}</strong>
-                {showInr && <span className="text-amber-700 font-bold"> ({formatInr(requiredMargin)})</span>}
+                Trade Val:{' '}
+                <strong className="text-[var(--theme-text-primary)]">
+                  {formatCurrency(tradeValue, { usdDecimals: 2, inrDecimals: 2 })}
+                </strong>{' '}
+                &middot; Margin:{' '}
+                <strong className="text-amber-600">
+                  {formatCurrency(requiredMargin, { usdDecimals: 4, inrDecimals: 2 })}
+                </strong>
               </span>
             </div>
 
@@ -840,8 +836,10 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold focus:outline-none focus:border-emerald-600"
                 />
                 <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
-                  Maker (0.016%): <strong className="text-emerald-600">${makerFee.toFixed(4)}</strong>
-                  {showInr && <span className="text-emerald-700 font-bold"> ({formatInr(makerFee)})</span>}
+                  Maker (0.016%):{' '}
+                  <strong className="text-emerald-600">
+                    {formatCurrency(makerFee, { usdDecimals: 4, inrDecimals: 2 })}
+                  </strong>
                 </div>
               </div>
 
@@ -861,8 +859,10 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   className="w-full px-2.5 py-1.5 rounded-lg border border-[var(--theme-border)] bg-[var(--theme-bg-input)] text-[var(--theme-text-primary)] font-bold focus:outline-none focus:border-emerald-600"
                 />
                 <div className="text-[10px] text-[var(--theme-text-muted)] mt-1">
-                  Taker (0.064%): <strong className="text-amber-600">${takerFee.toFixed(4)}</strong>
-                  {showInr && <span className="text-amber-700 font-bold"> ({formatInr(takerFee)})</span>}
+                  Taker (0.064%):{' '}
+                  <strong className="text-amber-600">
+                    {formatCurrency(takerFee, { usdDecimals: 4, inrDecimals: 2 })}
+                  </strong>
                 </div>
               </div>
 
@@ -887,7 +887,7 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                     <button
                       type="button"
                       onClick={() => {
-                        const snapped = snapToBaseMultiple(curPrice, gValue, asset.symbol);
+                        const snapped = snapToBaseMultiple(curPrice, asset.symbol, gValue);
                         setCustomAnchorInput(snapped.toString());
                         onUpdateConfig({ basePriceAnchor: snapped });
                       }}
@@ -956,37 +956,30 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-sans text-[var(--theme-text-muted)]">
-                  Trade Value (Entry &rarr; Current)
+                  Trade Value (Entry &rarr; Current &middot; {currencyLabel})
                 </span>
                 <div className="text-right">
                   <span className="text-[var(--theme-text-primary)] block">
-                    ${entryTradeValue.toFixed(2)} &rarr; <strong>${tradeValue.toFixed(2)}</strong>
+                    {formatCurrency(entryTradeValue, { usdDecimals: 2, inrDecimals: 2 })} &rarr;{' '}
+                    <strong>{formatCurrency(tradeValue, { usdDecimals: 2, inrDecimals: 2 })}</strong>
                   </span>
-                  {showInr && (
-                    <span className="text-[10px] font-bold text-emerald-700 block">
-                      {formatInr(entryTradeValue)} &rarr; {formatInr(tradeValue)}
-                    </span>
-                  )}
                 </div>
               </div>
               <div className="flex items-center justify-between">
                 <span className="font-sans text-[var(--theme-text-muted)]">
-                  Fees (Maker 0.016% / Taker 0.064%)
+                  Margin ({gridConfig.leverage}x) &amp; Fees (M 0.016% / T 0.064%)
                 </span>
                 <div className="text-right">
                   <span className="text-[var(--theme-text-primary)] block">
-                    M: <strong className="text-emerald-600">${makerFee.toFixed(4)}</strong> &middot; T: <strong className="text-amber-600">${takerFee.toFixed(4)}</strong>
+                    Mrg: <strong className="text-amber-600">{formatCurrency(requiredMargin, { usdDecimals: 4, inrDecimals: 2 })}</strong>{' '}
+                    &middot; M: <strong className="text-emerald-600">{formatCurrency(makerFee, { usdDecimals: 4, inrDecimals: 2 })}</strong>{' '}
+                    &middot; T: <strong className="text-amber-600">{formatCurrency(takerFee, { usdDecimals: 4, inrDecimals: 2 })}</strong>
                   </span>
-                  {showInr && (
-                    <span className="text-[10px] font-bold text-[var(--theme-text-secondary)] block">
-                      M: {formatInr(makerFee)} &middot; T: {formatInr(takerFee)}
-                    </span>
-                  )}
                 </div>
               </div>
               <div className="flex items-center justify-between pt-1 border-t border-[var(--theme-border-subtle)]">
                 <span className="font-sans font-bold text-[var(--theme-text-secondary)]">
-                  Return (&Delta; Price &times; Lot)
+                  Return (&Delta; Price &times; Lot &middot; {currencyLabel})
                 </span>
                 <div className="text-right">
                   <span
@@ -994,21 +987,12 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                       liveNetReturn >= 0 ? 'text-emerald-600' : 'text-rose-600'
                     }`}
                   >
-                    {liveNetReturn >= 0 ? '+' : ''}${liveNetReturn.toFixed(4)} USDT (
+                    {formatCurrency(liveNetReturn, { signed: true, usdDecimals: 4, inrDecimals: 2 })} (
                     {requiredMargin > 0
                       ? `${liveNetReturn >= 0 ? '+' : ''}${((liveNetReturn / requiredMargin) * 100).toFixed(1)}% ROE`
                       : '0.0%'}
-                    )
+                    ) &middot; Net: {formatCurrency(liveNetAfterMakerFee, { signed: true, usdDecimals: 4, inrDecimals: 2 })}
                   </span>
-                  {showInr && (
-                    <span
-                      className={`text-[10px] font-bold block ${
-                        liveNetReturn >= 0 ? 'text-emerald-700' : 'text-rose-600'
-                      }`}
-                    >
-                      {formatInr(liveNetReturn, { signed: true })} &middot; Net After Fee: {formatInr(liveNetAfterMakerFee, { signed: true })}
-                    </span>
-                  )}
                 </div>
               </div>
             </div>
@@ -1035,14 +1019,11 @@ export const AutoGridPanel: React.FC<AutoGridPanelProps> = ({
                   <div>
                     {pointsGain >= 0 ? '+' : ''}
                     {pointsGain.toFixed(2)} pts &times; {gridConfig.lotSize} ={' '}
-                    {liveNetReturn >= 0 ? '+' : ''}${liveNetReturn.toFixed(4)} USDT (
-                    {entryTradeValue > 0 ? `$${entryTradeValue.toFixed(2)} \u2192 $${tradeValue.toFixed(2)}` : ''})
+                    {formatCurrency(liveNetReturn, { signed: true, usdDecimals: 4, inrDecimals: 2 })} (
+                    {entryTradeValue > 0
+                      ? `${formatCurrency(entryTradeValue, { usdDecimals: 2, inrDecimals: 2 })} \u2192 ${formatCurrency(tradeValue, { usdDecimals: 2, inrDecimals: 2 })}`
+                      : ''}) &middot; Fee: {formatCurrency(makerFee, { usdDecimals: 4, inrDecimals: 2 })}
                   </div>
-                  {showInr && (
-                    <div className="text-[11px] font-bold">
-                      Return: {formatInr(liveNetReturn, { signed: true })} &middot; Val: {formatInr(entryTradeValue)} &rarr; {formatInr(tradeValue)} &middot; Fee: {formatInr(makerFee)}
-                    </div>
-                  )}
                 </div>
               </div>
 
